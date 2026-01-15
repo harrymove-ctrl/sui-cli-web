@@ -209,7 +209,9 @@ const TX_DIGEST_BASE58_REGEX = /^[1-9A-HJ-NP-Za-km-z]{43,44}$/;
 const TX_DIGEST_HEX_REGEX = /^0x[a-fA-F0-9]{64}$/;
 
 // Shell metacharacters to block in args
-const SHELL_METACHAR_REGEX = /[;&|`$(){}[\]\\'"<>!#~*?]/;
+// Allow: [] for vector args, ' for strings, " for strings
+// Block: ; & | ` $ ( ) { } \ < > ! # ~ * ?
+const SHELL_METACHAR_REGEX = /[;&|`$(){}\\<>!#~*?]/;
 
 export function isValidModuleName(name: string): boolean {
   return typeof name === 'string' && MODULE_NAME_REGEX.test(name);

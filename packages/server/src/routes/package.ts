@@ -224,6 +224,7 @@ export async function packageRoutes(fastify: FastifyInstance) {
           effects: result.effects!,
           events: result.events!,
           gasUsed: result.gasUsed,
+          objectChanges: result.objectChanges,
         },
       };
     } catch (error) {

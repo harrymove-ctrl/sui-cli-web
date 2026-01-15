@@ -74,6 +74,7 @@ export async function callPackageFunction(
     effects?: any;
     events?: any[];
     gasUsed?: string;
+    objectChanges?: any[];
   }>(`/packages/${packageId}/call`, {
     method: 'POST',
     body: JSON.stringify({

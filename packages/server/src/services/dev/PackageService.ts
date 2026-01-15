@@ -34,6 +34,7 @@ export interface CallFunctionResult {
     effects?: any;
     events?: any[];
     gasUsed?: string;
+    objectChanges?: any[];
     error?: string;
 }
 
@@ -289,6 +290,7 @@ export class PackageService {
                 effects: data.effects,
                 events: data.events || [],
                 gasUsed: gasUsed ? String(gasUsed) : undefined,
+                objectChanges: data.objectChanges || [],
             };
         } catch (error: any) {
             console.error('[PackageService] Call function failed:', error);

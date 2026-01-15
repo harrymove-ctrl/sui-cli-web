@@ -185,14 +185,19 @@ export class InspectorService {
                         // Pattern handles both regular functions and generic functions like:
                         // - public function_name(Arg0: type): return_type {
                         // - public function_name<Ty0>(Arg0: type): return_type {
-                        // - public function_name<Ty0, Ty1>(Arg0: type): return_type {
+                        // - entry function_name(Arg0: type): return_type {
+                        // - entry public function_name(Arg0: type): return_type {
+                        // Uses alternation to require at least entry or public
                         const functionSignatureMatches = moduleData.matchAll(
-                            /(entry\s+)?public\s+(\w+)(?:<[^>]+>)?\s*\((.*?)\)\s*(?::\s*(.+?))?\s*\{/gs
+                            /(entry\s+public|public\s+entry|entry|public)\s+(\w+)(?:<[^>]+>)?\s*\((.*?)\)\s*(?::\s*(.+?))?\s*\{/gs
                         );
 
                         for (const match of functionSignatureMatches) {
-                            const isEntry = !!match[1];
+                            const visibilityStr = match[1].toLowerCase();
+                            const isEntry = visibilityStr.includes('entry');
+                            const isPublic = visibilityStr.includes('public');
                             const functionName = match[2];
+
                             const paramsStr = match[3] || '';
                             const returnType = match[4]?.trim();
 
@@ -221,9 +226,17 @@ export class InspectorService {
                                 }
                             }
 
+                            // Determine visibility label
+                            let visibility = 'public';
+                            if (isEntry && isPublic) {
+                                visibility = 'public entry';
+                            } else if (isEntry) {
+                                visibility = 'entry';
+                            }
+
                             functions.push({
                                 name: functionName,
-                                visibility: isEntry ? 'public(entry)' : 'public',
+                                visibility,
                                 parameters,
                                 returnTypes: returnType ? [returnType] : [],
                                 typeParameters: [], // Type parameters are harder to parse from bytecode

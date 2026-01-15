@@ -1332,10 +1332,20 @@ export function MoveDeploy() {
                           suggestions={['Check parameters', 'Verify type args', 'Check gas', 'Ensure entry/public']} />
                       ) : (
                         <TerminalSuccessDisplay title="EXECUTED"
-                          command={`sui client call --package ${targetPackageId} --module ${selectedModuleName} --function ${selectedFunction?.name}`}
+                          command={`sui client call --package ${targetPackageId} --module ${selectedModuleName} --function ${selectedFunction?.name}${functionTypeArgs.filter(t => t.trim()).length > 0 ? ` --type-args ${functionTypeArgs.filter(t => t.trim()).join(' ')}` : ''}${functionArgs.filter(a => a.trim()).length > 0 ? ` --args ${functionArgs.filter(a => a.trim()).join(' ')}` : ''} --gas-budget ${gasBudget}`}
                           fields={[
                             ...(callResult.digest ? [{ label: 'TX_DIGEST', value: callResult.digest, copyable: true }] : []),
-                            ...(callResult.gasUsed ? [{ label: 'GAS_USED', value: `${callResult.gasUsed} MIST`, copyable: false }] : [])
+                            ...(callResult.gasUsed ? [{ label: 'GAS_USED', value: `${callResult.gasUsed} MIST`, copyable: false }] : []),
+                            ...(callResult.objectChanges?.filter((c: any) => c.type === 'created').map((obj: any) => ({
+                              label: `CREATED (${obj.objectType?.split('::').pop() || 'Object'})`,
+                              value: obj.objectId,
+                              copyable: true
+                            })) || []),
+                            ...(callResult.objectChanges?.filter((c: any) => c.type === 'mutated').map((obj: any) => ({
+                              label: `MUTATED (${obj.objectType?.split('::').pop() || 'Object'})`,
+                              value: obj.objectId,
+                              copyable: true
+                            })) || [])
                           ]}
                           message="Function executed successfully"
                         />

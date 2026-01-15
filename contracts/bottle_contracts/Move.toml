@@ -1,0 +1,12 @@
+[package]
+name = "bottle_contracts"
+edition = "2024.beta"
+
+[dependencies]
+
+[addresses]
+bottle_contracts = "0x0"
+
+[environments]
+local = "609df6d6"
+testnet = "4c78adac"
