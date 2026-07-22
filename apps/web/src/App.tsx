@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useEffect, lazy, Suspense } from 'react';
 import { AppGuard } from './components/guards/AppGuard';
+import { useTheme } from './contexts/ThemeContext';
 import { trackPageView } from './lib/analytics';
 
 // Lazy load ALL route components for better initial load and code splitting
@@ -45,11 +46,14 @@ const LoadingFallback = () => (
 
 export function App() {
   const location = useLocation();
+  const { theme } = useTheme();
 
   // Determine if we're in app routes
   const isAppRoute = location.pathname.startsWith('/app');
   const isMoveDevStudio = location.pathname === '/app/move';
   const isSetupRoute = location.pathname === '/setup';
+  // Landing + setup are the monochrome surfaces; the app keeps its blue.
+  const isMonochromeRoute = isSetupRoute || location.pathname === '/';
   const isKnownRoute = ['/', '/setup'].includes(location.pathname) || location.pathname.startsWith('/app');
   const is404Page = !isKnownRoute;
 
@@ -68,12 +72,18 @@ export function App() {
   return (
     <>
       {/* Dynamic background - only on landing page for performance */}
-      <div className="fixed inset-0 z-0 pointer-events-none">
+      <div
+        className="fixed inset-0 z-0 pointer-events-none"
+        // The shader only knows how to paint a dark field. Inverting the whole
+        // layer in light mode turns it into dark glyphs on white — the same
+        // texture, read the other way round.
+        style={isMonochromeRoute && theme === 'light' ? { filter: 'invert(1)' } : undefined}
+      >
         {showAnimatedBackground ? (
           <Suspense fallback={<div className="w-full h-full bg-gradient-to-br from-[#0a1929] via-[#0d2137] to-[#0a1929]" />}>
             <FaultyTerminal
-              tint={is404Page ? "#ef4444" : isMoveDevStudio ? "#22c55e" : isAppRoute ? "#4da2ff" : isSetupRoute ? "#ffffff" : "#ff0000"}
-              brightness={is404Page ? 0.35 : isMoveDevStudio ? 0.2 : isAppRoute ? 0.3 : isSetupRoute ? 0.18 : 0.25}
+              tint={isMoveDevStudio ? "#22c55e" : isAppRoute ? "#4da2ff" : "#ffffff"}
+              brightness={is404Page ? 0.35 : isMoveDevStudio ? 0.2 : isAppRoute ? 0.3 : 0.18}
               scale={is404Page ? 1.5 : isMoveDevStudio ? 0.5 : isAppRoute ? 1.0 : 1.9}
               gridMul={isMoveDevStudio ? [4, 2] : [2, 1]}
               digitSize={isMoveDevStudio ? 1.2 : 1.3}

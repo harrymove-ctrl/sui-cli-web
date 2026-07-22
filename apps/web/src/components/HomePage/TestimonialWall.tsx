@@ -1,18 +1,5 @@
-import type { CSSProperties } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Testimonial, Testimonials } from "@/components/ui/testimonials";
-
-/**
- * The landing page is dark-on-dark regardless of the app theme (which defaults
- * to light), so the shadcn tokens the testimonial component reads are pinned to
- * their dark values for this section only.
- */
-const DARK_TOKENS = {
-  "--foreground": "0 0% 98%",
-  "--muted-foreground": "0 0% 45%",
-  "--muted": "0 0% 100% / 0.06",
-  "--border": "0 0% 100% / 0.14",
-} as CSSProperties;
 
 export function TestimonialWall() {
   const prefersReducedMotion = useReducedMotion();
@@ -30,7 +17,6 @@ export function TestimonialWall() {
             <span className="text-foreground">$</span> who&apos;s shipping with it
           </p>
 
-          <div style={DARK_TOKENS}>
             <Testimonials blur={4} dimOpacity={0.18}>
               <Testimonial name="Harry Phan" title="Smart Contract Engineer">
                 Publishing a package used to be four terminal tabs and a prayer.
@@ -57,7 +43,6 @@ export function TestimonialWall() {
                 past the demo.
               </Testimonial>
             </Testimonials>
-          </div>
         </motion.div>
       </div>
     </section>

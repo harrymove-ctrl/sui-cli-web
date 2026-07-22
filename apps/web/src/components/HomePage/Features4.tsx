@@ -126,7 +126,7 @@ export function Features4({ autoPlay = true, autoPlayDelay = 5000 }: Features4Pr
                   <div
                     className={`shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center transition-colors duration-200 ${
                       isActive
-                        ? 'bg-foreground text-foreground'
+                        ? 'bg-foreground text-background'
                         : 'bg-foreground/5 text-foreground/70 border border-foreground/10'
                     }`}
                   >
@@ -193,7 +193,7 @@ export function Features4({ autoPlay = true, autoPlayDelay = 5000 }: Features4Pr
                     className="flex items-start gap-3 p-3 sm:p-4 rounded-lg sm:rounded-xl bg-foreground/5 border border-foreground/5"
                   >
                     <div className="shrink-0 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-foreground flex items-center justify-center mt-0.5">
-                      <Check className="w-3 h-3 sm:w-4 sm:h-4 text-foreground" strokeWidth={3} />
+                      <Check className="w-3 h-3 sm:w-4 sm:h-4 text-background" strokeWidth={3} />
                     </div>
                     <span className="text-xs sm:text-sm md:text-base text-foreground/70 font-medium">
                       {feature}

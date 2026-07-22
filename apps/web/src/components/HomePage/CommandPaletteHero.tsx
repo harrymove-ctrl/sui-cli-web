@@ -93,7 +93,7 @@ export function CommandPaletteHero() {
           variants={item}
           className="inline-flex items-center gap-2.5 rounded-full border border-foreground/40 bg-foreground/10 py-1.5 pl-1.5 pr-4 shadow-sm backdrop-blur"
         >
-          <span className="inline-flex items-center rounded-full bg-foreground px-2.5 py-0.5 text-[11px] font-medium text-foreground">
+          <span className="inline-flex items-center rounded-full bg-foreground px-2.5 py-0.5 text-[11px] font-medium text-background">
             ⌘K
           </span>
           <span className="text-xs font-medium text-foreground sm:text-sm">
@@ -107,7 +107,7 @@ export function CommandPaletteHero() {
         >
           Your whole Sui stack,
           <br />
-          <span className="bg-gradient-to-r from-foreground via-foreground to-foreground bg-clip-text text-transparent">
+          <span className="text-muted-foreground">
             one keystroke away.
           </span>
         </motion.h1>
@@ -226,7 +226,7 @@ export function CommandPaletteHero() {
         >
           <button
             onClick={() => navigate('/app')}
-            className="group inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full bg-foreground px-6 py-3 text-sm font-bold text-foreground shadow-lg shadow-background/20 transition-colors duration-200 hover:bg-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-black sm:w-auto sm:px-7"
+            className="group inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full bg-foreground px-6 py-3 text-sm font-bold text-background shadow-lg shadow-background/20 transition-colors duration-200 hover:bg-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-black sm:w-auto sm:px-7"
           >
             <Zap className="h-4 w-4" />
             Open sui-cli-web

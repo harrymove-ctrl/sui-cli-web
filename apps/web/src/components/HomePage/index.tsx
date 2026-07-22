@@ -14,12 +14,16 @@ import {
   ChevronRight,
   ExternalLink,
   Menu,
+  Moon,
+  Sun,
   X,
 } from 'lucide-react';
+import { useTheme } from '@/contexts/ThemeContext';
 import { APP_VERSION } from '@/config/version';
 
 export function HomePage() {
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const prefersReducedMotion = useReducedMotion();
@@ -69,7 +73,7 @@ export function HomePage() {
               <div className="hidden md:flex items-center gap-2">
                 <button
                   onClick={() => navigate('/setup')}
-                  className="group px-4 py-2.5 bg-foreground/30 hover:bg-foreground/50 active:bg-foreground/60 border border-foreground/60 hover:border-foreground text-foreground hover:text-foreground font-bold rounded-lg transition-all text-sm shadow-lg shadow-background/20 min-h-[44px]"
+                  className="group px-4 py-2.5 bg-foreground hover:bg-foreground/90 active:bg-foreground/80 border border-foreground text-background font-bold rounded-lg transition-all text-sm shadow-lg shadow-background/20 min-h-[44px]"
                 >
                   <span className="flex items-center gap-1.5">
                     <Terminal className="w-4 h-4" />
@@ -127,6 +131,14 @@ export function HomePage() {
                     <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                   </span>
                 </a>
+
+                <button
+                  onClick={toggleTheme}
+                  aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                  className="px-3 py-2.5 bg-foreground/10 hover:bg-foreground/20 text-foreground/80 hover:text-foreground rounded-lg transition-all border border-foreground/20 hover:border-foreground/40 min-h-[44px] flex items-center"
+                >
+                  {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                </button>
               </div>
 
               {/* Right: Mobile menu button */}
@@ -154,7 +166,7 @@ export function HomePage() {
                       navigate('/setup');
                       setMobileMenuOpen(false);
                     }}
-                    className="w-full text-left px-4 py-3.5 bg-foreground/30 hover:bg-foreground/50 active:bg-foreground/60 border border-foreground/60 text-foreground font-bold rounded-lg transition-all min-h-[44px]"
+                    className="w-full text-left px-4 py-3.5 bg-foreground hover:bg-foreground/90 active:bg-foreground/80 border border-foreground text-background font-bold rounded-lg transition-all min-h-[44px]"
                   >
                     <span className="flex items-center gap-2">
                       <Terminal className="w-5 h-5" />
@@ -212,6 +224,14 @@ export function HomePage() {
                     <ChevronRight className="w-4 h-4 ml-auto" />
                   </a>
 
+                  <button
+                    onClick={toggleTheme}
+                    className="w-full text-left px-4 py-3.5 bg-foreground/10 hover:bg-foreground/20 text-foreground rounded-lg transition-all border border-foreground/20 min-h-[44px] flex items-center gap-2"
+                  >
+                    {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                    <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+                  </button>
+
                   {/* Mobile Stats */}
                   <div className="flex items-center justify-around pt-2 mt-2 border-t border-foreground/10 text-xs text-foreground/60">
                     <div className="flex items-center gap-1.5">
@@ -250,7 +270,7 @@ export function HomePage() {
 
               <button
                 onClick={() => navigate('/setup')}
-                className="group w-full sm:w-auto px-6 sm:px-10 py-4 sm:py-5 bg-foreground hover:bg-foreground active:bg-foreground text-foreground font-bold rounded-lg transition-all text-base sm:text-lg shadow-lg shadow-background/20 min-h-[56px]"
+                className="group w-full sm:w-auto px-6 sm:px-10 py-4 sm:py-5 bg-foreground hover:bg-foreground/90 active:bg-foreground/80 text-background font-bold rounded-lg transition-all text-base sm:text-lg shadow-lg shadow-background/20 min-h-[56px]"
               >
                 <span className="flex items-center justify-center gap-2 sm:gap-3">
                   <Terminal className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />

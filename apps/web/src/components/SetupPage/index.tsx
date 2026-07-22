@@ -62,7 +62,7 @@ export function SetupPage() {
       <StructuredData type="setup" />
       {/* Black scrim over the animated background: the transcript needs a calm
           surface to read against, and the chat supplies all of the contrast. */}
-      <div className="relative h-screen w-full overflow-hidden bg-black/70">
+      <div className="relative h-screen w-full overflow-hidden bg-background/70">
         <SetupChat
           connectedPort={connectedPort}
           connectionError={connectionError}

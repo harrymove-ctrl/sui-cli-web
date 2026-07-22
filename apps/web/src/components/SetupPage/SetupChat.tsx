@@ -4,7 +4,6 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type CSSProperties,
   type ReactNode,
 } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
@@ -26,16 +25,17 @@ interface SetupChatProps {
 }
 
 /**
- * The whole screen is white-on-black regardless of the app theme (which
- * defaults to light). Words settle just under full white so the pure-white
- * ink of a freshly streamed word still reads as brighter than the text
- * around it — that difference is the whole effect.
+ * The magic-ink effect needs the fresh word to out-contrast the settled text,
+ * which in monochrome has to come from lightness alone. So the wrapper stashes
+ * the real foreground in --ink, then rebinds --foreground to the muted token
+ * for everything inside: words stream in at full ink and settle to muted.
+ * Both ends are theme tokens, so it reads correctly in light and dark.
  */
-const IN_TOKENS = { '--foreground': '0 0% 100% / 0.82' } as CSSProperties;
+const INK_SCOPE = '[--ink:hsl(var(--foreground))]';
+const SETTLE_SCOPE = '[--foreground:var(--muted-foreground)]';
 
-/** Monochrome ink: a fresh word arrives bright white and dims as it settles. */
-const INK = 'bg-gradient-to-r from-foreground via-foreground to-foreground/55 bg-clip-text text-transparent';
-const CURSOR = 'bg-foreground shadow-[0_0_0.7em_rgba(255,255,255,0.55)]';
+const INK = 'text-[var(--ink)]';
+const CURSOR = 'bg-[var(--ink)]';
 
 const OS_LABEL: Record<OS, string> = {
   mac: 'macOS',
@@ -130,15 +130,14 @@ function Say({
   speed?: number;
 }) {
   return (
-    <Bubble from="agent">
+    <Bubble className={INK_SCOPE} from="agent">
       <StreamingText
-        className="block"
+        className={cn('block', SETTLE_SCOPE)}
         cursorClassName={CURSOR}
         gradientClassName={INK}
         onComplete={onDone}
         settleDelay={280}
         speed={speed}
-        style={IN_TOKENS}
         text={text}
       />
     </Bubble>
@@ -221,7 +220,7 @@ export function SetupChat({
   const steps = os ? STEPS[os] : [];
 
   return (
-    <div className="relative z-10 flex h-screen flex-col" style={IN_TOKENS}>
+    <div className="relative z-10 flex h-screen flex-col">
       {/* Header */}
       <header className="shrink-0 border-b border-foreground/[0.08] px-4 py-3 backdrop-blur-sm sm:px-6">
         <div className="mx-auto flex max-w-2xl items-center justify-between">
