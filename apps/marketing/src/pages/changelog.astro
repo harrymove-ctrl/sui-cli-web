@@ -34,6 +34,9 @@ const releases: Array<{
   sections: Array<{ id?: string; heading: string; content: string }>;
   /** Smaller enhancements - one line each, no headings. */
   improvements?: string[];
+  /** Figure above the Improvements list, for when the week's small work is
+   *  easier to show than to describe. Same flush treatment as the hero. */
+  improvementsImage?: { src: string; alt: string };
   /** Resolved defects - one line each, stating the symptom then the cause. */
   bugFixes?: string[];
   /** Extra id on the Improvements block, so older deep links still resolve. */
@@ -71,6 +74,10 @@ const releases: Array<{
       }
     ],
     legacyAnchorId: 'v1.3.3-monochrome-and-hosted-setup',
+    improvementsImage: {
+      src: '/blog/images/changelog/v1.3.3-agent-setup.webp',
+      alt: 'The Sui CLI Web setup screen: numbered install steps with copyable cargo and npx commands, then a "Prompt for your agent" block telling a coding agent to detect the OS, install Node.js and the Sui CLI, and ask which port to run the local server on.',
+    },
     improvements: [
       'Monochrome interface: the landing page and setup flow read their colours from the theme tokens instead of hard-coded accents.',
       'Setup is a single transcript rather than two full-screen states, so a machine that connects mid-setup is told about it instead of having the screen swapped out.',
@@ -306,6 +313,17 @@ const releases: Array<{
             -->
             {release.improvements && release.improvements.length > 0 && (
               <div id={release.legacyAnchorId} class="mt-10 scroll-mt-24">
+                {release.improvementsImage && (
+                  <img
+                    src={release.improvementsImage.src}
+                    alt={release.improvementsImage.alt}
+                    width="1920"
+                    height="1080"
+                    loading="lazy"
+                    decoding="async"
+                    class="mb-8 w-full h-auto"
+                  />
+                )}
                 <h3 class="text-xs font-mono text-white/40 uppercase tracking-[0.14em]">Improvements</h3>
                 <ul class="mt-3 space-y-2 text-sm md:text-base text-white/70">
                   {release.improvements.map((item) => (
