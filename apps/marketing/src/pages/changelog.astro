@@ -218,39 +218,50 @@ const releases = [
               the version number is metadata about the date, not the other way
               round. The anchor makes every release directly linkable.
             -->
-            <a href={`#${release.id}`} class="group inline-flex items-baseline gap-2.5">
-              <time
-                datetime={release.dateTime}
-                class="text-sm font-mono text-white/60 group-hover:text-white transition-colors"
-              >
-                {release.date}
-              </time>
-              <span
-                class="text-sm font-mono text-white/0 group-hover:text-white/40 transition-colors"
-                aria-hidden="true"
-              >#</span>
-            </a>
+            <!--
+              Date, version and PR refs all sit on one meta line above the title.
+              They were previously split across the date line and a second row
+              *between* the title and the body, which interrupted the read from
+              headline into content with bookkeeping.
+            -->
+            <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-sm">
+              <a href={`#${release.id}`} class="group inline-flex items-baseline gap-2">
+                <time
+                  datetime={release.dateTime}
+                  class="text-white/60 group-hover:text-white transition-colors"
+                >
+                  {release.date}
+                </time>
+                <!--
+                  select-none keeps the anchor marker out of copied text. Hiding
+                  it with opacity alone still leaves it selectable, so copying a
+                  release pasted a stray "#" on its own line.
+                -->
+                <span
+                  class="select-none text-white/0 group-hover:text-white/40 transition-colors"
+                  aria-hidden="true"
+                >#</span>
+              </a>
 
-            <h2 class="text-2xl md:text-[2rem] font-bold text-white leading-tight tracking-tight mt-2">
-              {release.title}
-            </h2>
+              <span class="select-none text-white/20" aria-hidden="true">·</span>
 
-            <!-- Version and PR references, demoted to a quiet meta row. -->
-            <div class="flex flex-wrap items-center gap-2 mt-3">
-              <span class="px-2 py-0.5 rounded text-xs font-mono bg-white/10 text-white/80 border border-white/15">
-                {release.version}
-              </span>
+              <span class="text-white/50">{release.version}</span>
+
               {release.prLinks.map((pr) => (
                 <a
                   href={pr.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="text-xs font-mono text-white/40 hover:text-white transition-colors"
+                  class="text-white/30 hover:text-white transition-colors"
                 >
                   #{pr.pr}
                 </a>
               ))}
             </div>
+
+            <h2 class="text-2xl md:text-[2rem] font-bold text-white leading-tight tracking-tight mt-2">
+              {release.title}
+            </h2>
 
             <!-- Highlights -->
             <div class="mt-8">

@@ -5,13 +5,12 @@ interface Props {
 
 const { currentPath = '' } = Astro.props;
 
-const navItems = [
-  { href: '/blog', label: 'Blog', icon: '📝' },
-  { href: '/blog/changelog', label: 'Changelog', icon: '⚡' },
-  { href: '/blog/category/tutorial', label: 'Tutorials', icon: '📚' },
-  { href: '/blog/category/announcement', label: 'News', icon: '📢' },
-  { href: 'https://cli.firstmovers.io', label: 'App', icon: '🚀', external: true },
-  { href: 'https://github.com/hien-p/raycast-sui-cli', label: 'GitHub', icon: '⭐', external: true },
+// Changelog is the only page published from this site right now, so the nav
+// links to nothing else. Blog, Tutorials, News, App and GitHub entries are
+// deliberately absent rather than hidden with CSS - the deploy step only ships
+// the changelog output, so those routes do not exist to link to.
+const navItems: Array<{ href: string; label: string; icon: string; external?: boolean }> = [
+  { href: '/blog/changelog/', label: 'Changelog', icon: '⚡' },
 ];
 ---
 
@@ -19,7 +18,7 @@ const navItems = [
   <nav class="max-w-4xl mx-auto px-4 py-3">
     <div class="flex items-center justify-between">
       <!-- Logo / Brand -->
-      <a href="/blog" class="flex items-center gap-2.5 group">
+      <a href="/blog/changelog/" class="flex items-center gap-2.5 group">
         <div class="flex gap-1">
           <span class="w-2.5 h-2.5 rounded-full bg-red-500"></span>
           <span class="w-2.5 h-2.5 rounded-full bg-yellow-500"></span>
