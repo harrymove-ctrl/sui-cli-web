@@ -10,6 +10,16 @@ import { ScrollIndicator } from '../components/react/ScrollIndicator';
  * and set `image` to the public path; entries without one simply render none,
  * so nothing has to be invented to fill the slot.
  */
+/**
+ * One entry per release *week*, not per version tag - the changelog ships on a
+ * weekly cadence, so patches that land mid-week belong inside that week's entry.
+ * Only work big enough to carry the week gets a title, Highlights and prose
+ * sections; everything else is a line in `improvements` or `bugFixes`. A commit
+ * does not earn a headline just by existing.
+ *
+ * `legacyAnchorId` keeps a URL that was shared while a change still had its own
+ * entry pointing at wherever that work now lives.
+ */
 const releases: Array<{
   id: string;
   version: string;
@@ -21,40 +31,14 @@ const releases: Array<{
   image?: { src: string; alt: string };
   tldr: Array<{ bold: string; text: string }>;
   metricsTable?: { headers: string[]; rows: string[][] };
-  sections: Array<{ heading: string; content: string }>;
+  sections: Array<{ id?: string; heading: string; content: string }>;
+  /** Smaller enhancements - one line each, no headings. */
+  improvements?: string[];
+  /** Resolved defects - one line each, stating the symptom then the cause. */
+  bugFixes?: string[];
+  /** Extra id on the Improvements block, so older deep links still resolve. */
+  legacyAnchorId?: string;
 }> = [
-  {
-    id: 'v1.3.3-monochrome-and-hosted-setup',
-    version: 'v1.3.3',
-    date: 'July 23, 2026',
-    dateTime: '2026-07-23',
-    title: 'Monochrome interface, agent-assisted setup, and a working hosted deploy',
-    prLinks: [],
-    tldr: [
-      {
-        bold: 'One monochrome system:',
-        text: 'The landing page and setup flow drop every accent hue and read from the theme tokens, so light and dark both render correctly instead of white-on-white.'
-      },
-      {
-        bold: 'Setup you can hand to an agent:',
-        text: 'A copyable prompt installs the prerequisites, asks which port to use, starts the server and verifies it - alongside the manual commands.'
-      },
-      {
-        bold: 'Failures that say what happened:',
-        text: 'A boot error now renders an error with a reload button instead of a silent blank page, and a failed connection check answers in the transcript.'
-      }
-    ],
-    sections: [
-      {
-        heading: 'Setup as a conversation',
-        content: `Setup used to be two full-screen states swapping on a boolean, so a machine that was already connected never saw the instructions and a machine that connected mid-setup had the screen pulled out from under it. It is now a single transcript: the agent asks which platform you are on, hands over the commands, and announces the connection as a new message when it lands. Pressing "Check again" with nothing listening now gets a reply that escalates across attempts rather than repeating one line.`
-      },
-      {
-        heading: 'Hosted deployment fixes',
-        content: `The hosted build served its own bundle but rejected it: the CORS allowlist did not include the domain the server itself runs on, and module scripts marked crossorigin send an Origin header even same-origin, so every asset came back 500. The origin is now read from the platform environment. A refused origin also stops being reported as a 500 - an access decision is not a server fault, and the stack traces were flooding the log pipeline.`
-      }
-    ]
-  },
   {
     id: 'v1.0.0-initial-release',
     version: 'v1.0.0',
@@ -85,6 +69,20 @@ const releases: Array<{
         heading: 'Welcome to Sui CLI Web',
         content: `We launched Sui CLI Web to give Sui developers the interface the CLI deserves - the raw power of the Sui CLI behind a dense, keyboard-driven Web UI. Nothing is hosted on your behalf: the browser talks to a server running on your own machine, and your private keys stay in your local Sui config.`
       }
+    ],
+    legacyAnchorId: 'v1.3.3-monochrome-and-hosted-setup',
+    improvements: [
+      'Monochrome interface: the landing page and setup flow read their colours from the theme tokens instead of hard-coded accents.',
+      'Setup is a single transcript rather than two full-screen states, so a machine that connects mid-setup is told about it instead of having the screen swapped out.',
+      'A copyable agent prompt installs the prerequisites, asks which port to use, starts the server and verifies it - alongside the manual commands.',
+      'Pressing "Check again" with nothing listening replies with guidance that escalates across attempts, instead of repeating one line.',
+      'A boot error renders an error state with a reload button rather than a silent blank page.',
+      'The hosted origin is read from the platform environment, so the deployed build no longer needs its own domain hard-coded into the allowlist.'
+    ],
+    bugFixes: [
+      'Every asset on the hosted build came back 500: the CORS allowlist did not include the domain the server itself runs on, and module scripts marked crossorigin send an Origin header even same-origin.',
+      'A refused origin was reported as a 500. An access decision is not a server fault, and the stack traces were flooding the log pipeline.',
+      'Light mode rendered white-on-white across the landing page and setup flow.'
     ]
   }
 ];
@@ -156,7 +154,17 @@ const releases: Array<{
     <div class="hidden xl:block fixed right-8 top-1/2 -translate-y-1/2 h-[60vh] z-30">
       <ScrollIndicator
         client:idle
-        sections={releases.map((r) => ({ id: r.id, title: r.version, level: 2 }))}
+        sections={releases.flatMap((r) => [
+          { id: r.id, title: r.version, level: 2 },
+          // Anchored sub-blocks within a week's entry are the real navigation
+          // targets now that a single entry covers a whole week.
+          ...r.sections
+            .filter((s): s is { id: string; heading: string; content: string } => Boolean(s.id))
+            .map((s) => ({ id: s.id, title: s.heading, level: 3 })),
+          ...(r.legacyAnchorId
+            ? [{ id: r.legacyAnchorId, title: 'Improvements', level: 3 }]
+            : []),
+        ])}
         topOffset={96}
       />
     </div>
@@ -283,12 +291,46 @@ const releases: Array<{
             <!-- Article Sections -->
             <div class="mt-8 space-y-7 text-white/70 leading-relaxed text-sm md:text-base">
               {release.sections.map((sec) => (
-                <div>
+                <div id={sec.id} class:list={[sec.id && 'scroll-mt-24']}>
                   <h3 class="text-base font-semibold text-white mb-2">{sec.heading}</h3>
                   <p>{sec.content}</p>
                 </div>
               ))}
             </div>
+
+            <!--
+              Improvements and bug fixes: the tail of the entry, deliberately
+              plainer than the sections above. Same label treatment as
+              "Highlights" so the entry reads as three tiers - what matters, what
+              is explained, what merely happened.
+            -->
+            {release.improvements && release.improvements.length > 0 && (
+              <div id={release.legacyAnchorId} class="mt-10 scroll-mt-24">
+                <h3 class="text-xs font-mono text-white/40 uppercase tracking-[0.14em]">Improvements</h3>
+                <ul class="mt-3 space-y-2 text-sm md:text-base text-white/70">
+                  {release.improvements.map((item) => (
+                    <li class="flex items-start gap-3">
+                      <span class="text-white/25 mt-[0.45em] shrink-0 w-3 h-px bg-current" aria-hidden="true"></span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {release.bugFixes && release.bugFixes.length > 0 && (
+              <div class="mt-8">
+                <h3 class="text-xs font-mono text-white/40 uppercase tracking-[0.14em]">Bug fixes</h3>
+                <ul class="mt-3 space-y-2 text-sm md:text-base text-white/70">
+                  {release.bugFixes.map((item) => (
+                    <li class="flex items-start gap-3">
+                      <span class="text-white/25 mt-[0.45em] shrink-0 w-3 h-px bg-current" aria-hidden="true"></span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </article>
         ))}
       </div>
