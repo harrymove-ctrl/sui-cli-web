@@ -1,5 +1,19 @@
 // Shared types for Sui CLI Web
 
+/**
+ * Ports a client scans to find the local server, in order.
+ *
+ * This is the contract between "where the server listens" and "where clients
+ * look". A server started outside this list is invisible to every client and
+ * presents exactly like one that failed to start, which is the least
+ * debuggable outcome there is - so the list lives here, imported by the web
+ * UI and the MCP server alike, rather than being copied into each.
+ */
+export const COMMON_SERVER_PORTS = [3001, 3002, 3003, 3004, 3005, 4001, 4002, 8001, 8080] as const;
+
+/** Default port the server binds when PORT is unset. */
+export const DEFAULT_SERVER_PORT = 3001;
+
 export interface SuiAddress {
   address: string;
   alias?: string;
@@ -263,7 +277,7 @@ export interface FaucetSource {
   description: string;
   networks: ('devnet' | 'testnet')[];
   type: 'api' | 'web' | 'discord';
-  url?: string;  // For web/discord types
+  url?: string; // For web/discord types
   apiUrl?: string; // For api types
   apiFormat?: 'sui-official' | 'mysten'; // API request format
   dailyLimit?: string;

@@ -43,7 +43,7 @@ raw shell commands and hoping the model "asks nicely" first.
 It runs as its own process, talking plain HTTP to the already-running local
 server, rather than being embedded inside it:
 
-- `sui-cli-web-server` is built to be started once (`npx sui-cli-web`) and
+- `sui-cli-web-server` is built to be started once (`npx sui-cli-web-server`) and
   stay running for the browser UI. MCP clients launch tool servers over
   **stdio** as a subprocess they own the lifecycle of — a different process
   model entirely.
@@ -96,9 +96,27 @@ even registered unless the human launched the server with the opt-in flag.
 
 ## Requirements
 
-`sui-cli-web-server` must already be running (`npx sui-cli-web`, or however
-you normally start it) — this package only talks HTTP to it, on
-`http://127.0.0.1:3001` by default.
+`sui-cli-web-server` must already be running (`npx sui-cli-web-server`, or
+however you normally start it) — this package only talks HTTP to it.
+
+It finds the server itself: on first use it probes `127.0.0.1` on ports
+3001–3005, 4001, 4002, 8001 and 8080 in that order — the same list the web UI
+scans — and takes the first one whose `/health` identifies itself as
+`sui-cli-web-server`. Checking that field, rather than settling for any
+`{"status":"ok"}`, is what stops it from attaching to an unrelated app that
+happens to hold one of those ports.
+
+The result is cached for the life of the process, so the scan runs once.
+
+To pin it instead, set either of these and discovery is skipped entirely:
+
+| Variable | Example | Use when |
+|---|---|---|
+| `SUI_CLI_WEB_PORT` | `4002` | the server is on your machine, on a known port |
+| `SUI_CLI_WEB_SERVER_URL` | `http://127.0.0.1:4002` | it is on another host, or behind a path |
+
+Pinning is worth doing when more than one server is running: discovery takes
+the first match in list order, which may not be the one you meant.
 
 ## Configuring in an MCP client
 
@@ -122,8 +140,9 @@ Desktop/Claude Code's `mcpServers` config:
 }
 ```
 
-If `sui-cli-web-server` runs on a non-default host/port, set
-`SUI_CLI_WEB_SERVER_URL` in the same config entry's `env`:
+Discovery covers the usual ports, so this is usually all you need. To pin a
+specific server — say you run more than one — set `SUI_CLI_WEB_PORT` (or
+`SUI_CLI_WEB_SERVER_URL` for another host) in the same entry's `env`:
 
 ```json
 {
@@ -131,7 +150,7 @@ If `sui-cli-web-server` runs on a non-default host/port, set
     "sui-cli-web": {
       "command": "node",
       "args": ["/absolute/path/to/raycast-sui-cli/packages/mcp/dist/server.js"],
-      "env": { "SUI_CLI_WEB_SERVER_URL": "http://127.0.0.1:4001" }
+      "env": { "SUI_CLI_WEB_PORT": "4002" }
     }
   }
 }
