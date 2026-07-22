@@ -137,8 +137,7 @@ async function main() {
     },
   });
 
-  // Register CORS - allow localhost and deployed UI domains only
-  // Security: Only allow specific Vercel deployments, not all *.vercel.app
+  // Register CORS - allow localhost and the one hosted UI origin
   await fastify.register(cors, {
     origin: (origin, cb) => {
       // Allow requests with no origin (like mobile apps, curl, etc.)
@@ -165,16 +164,16 @@ async function main() {
         .map((host) => (host.startsWith('http') ? host : `https://${host}`));
 
       const allowedOrigins = [
-        // The hosted UI. selfOrigins below only covers the copy of this server
-        // running on the platform; a user's own `npx sui-cli-web-server` has no
-        // RAILWAY_* variables, so the hosted UI's origin has to be listed here
-        // or every local install rejects the very UI it exists to serve.
+        // The one hosted UI. selfOrigins below only covers the copy of this
+        // server running on the platform; a user's own `npx sui-cli-web-server`
+        // has no RAILWAY_* variables, so the hosted UI's origin has to be listed
+        // here or every local install rejects the very UI it exists to serve.
+        //
+        // The previous hosts (cli.firstmovers.io, harriweb3.dev, the Vercel
+        // previews) were removed deliberately. Any local server that is driven
+        // by one of those pages will now refuse it; set ALLOWED_ORIGINS to add
+        // an origin back without a code change.
         'https://sui-cli-web-production.up.railway.app',
-        // Previous hosted UI. Still listed because local servers already in the
-        // wild are talked to by it; dropping this cuts those users off.
-        'https://cli.firstmovers.io',
-        'https://www.harriweb3.dev',
-        'https://harriweb3.dev',
         // The deployment's own domain(s)
         ...selfOrigins,
         // Additional origins from environment
@@ -186,9 +185,6 @@ async function main() {
         // Local development (allow any localhost port)
         /^http:\/\/localhost(:\d+)?$/,
         /^http:\/\/127\.0\.0\.1(:\d+)?$/,
-        // Specific Vercel preview deployments (project-specific patterns only)
-        /^https:\/\/raycast-sui-cli(-[a-z0-9]+)*\.vercel\.app$/,
-        /^https:\/\/sui-cli-web(-[a-z0-9]+)*\.vercel\.app$/,
       ];
 
       // Check exact match

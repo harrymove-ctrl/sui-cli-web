@@ -27,8 +27,6 @@ function getGAId(): string {
   // Map domains to their GA IDs (fallback if env var not set)
   const gaIds: Record<string, string> = {
     'sui-cli-web-production.up.railway.app': 'G-Z37RHCYYX6', // Primary domain
-    'harriweb3.dev': 'G-Z37RHCYYX6', // Legacy domain (redirects to primary)
-    'raycast-sui-cli.vercel.app': 'G-CQXKRXBW5J',
     localhost: 'G-Z37RHCYYX6', // Use primary GA for local development
   };
 
