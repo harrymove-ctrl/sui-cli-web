@@ -1,0 +1,34 @@
+{
+  "name": "@sui-cli-web/mcp",
+  "version": "0.1.0",
+  "description": "MCP server letting AI agents (Claude Desktop, Claude Code, any MCP client) read Sui environment/wallet state through sui-cli-web's local API - no shell access to `sui`, no private keys in the model's context.",
+  "type": "module",
+  "main": "./dist/server.js",
+  "bin": {
+    "sui-cli-web-mcp": "./dist/server.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsup src/server.ts --format esm --dts",
+    "start": "node dist/server.js"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.24.1",
+    "@sui-cli-web/shared": "1.0.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "tsup": "^8.0.2",
+    "tsx": "^4.7.1",
+    "typescript": "^5.4.5"
+  }
+}
