@@ -3,143 +3,82 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import Header from '../components/astro/Header.astro';
 import AnimatedGradientBackground from '../components/ui/animated-gradient-background';
 
-const releases = [
+/**
+ * Hero images follow superset.sh: full content width, landscape, flush - no
+ * border, no rounded corners, no shadow. Put files in `public/images/changelog/`
+ * and set `image` to the public path; entries without one simply render none,
+ * so nothing has to be invented to fill the slot.
+ */
+const releases: Array<{
+  id: string;
+  version: string;
+  date: string;
+  dateTime: string;
+  title: string;
+  prLinks: Array<{ pr: string; url: string }>;
+  /** Optional hero image, rendered full-width and unstyled under the title. */
+  image?: { src: string; alt: string };
+  tldr: Array<{ bold: string; text: string }>;
+  metricsTable?: { headers: string[]; rows: string[][] };
+  sections: Array<{ heading: string; content: string }>;
+}> = [
   {
-    id: 'v1.3.3-performance-gas-profiler',
+    id: 'v1.3.3-monochrome-and-hosted-setup',
     version: 'v1.3.3',
-    date: 'July 22, 2026',
-    dateTime: '2026-07-22',
-    title: 'Performance: Real-time Gas Profiler, Multi-Coin Splitting & Batch Transfer',
-    prLinks: [
-      { pr: '142', url: 'https://github.com/hien-p/raycast-sui-cli/pull/142' },
-      { pr: '145', url: 'https://github.com/hien-p/raycast-sui-cli/pull/145' }
-    ],
+    date: 'July 23, 2026',
+    dateTime: '2026-07-23',
+    title: 'Monochrome interface, agent-assisted setup, and a working hosted deploy',
+    prLinks: [],
     tldr: [
       {
-        bold: 'Real-time Gas Analytics:',
-        text: 'Live breakdown of computation vs storage gas units with 45% faster execution tracing.'
+        bold: 'One monochrome system:',
+        text: 'The landing page and setup flow drop every accent hue and read from the theme tokens, so light and dark both render correctly instead of white-on-white.'
       },
       {
-        bold: 'Multi-Coin Merging & Splitting:',
-        text: 'Zero-friction coin management with instant balance preview across all active addresses.'
+        bold: 'Setup you can hand to an agent:',
+        text: 'A copyable prompt installs the prerequisites, asks which port to use, starts the server and verifies it - alongside the manual commands.'
       },
       {
-        bold: 'Optimized Background Syncing:',
-        text: '5x fewer RPC calls when idle; instant updates upon Sui CLI state mutation.'
-      }
-    ],
-    metricsTable: {
-      headers: ['Metric', 'Before (v1.2.0)', 'After (v1.3.3)'],
-      rows: [
-        ['Gas Estimation Latency', '420 ms', '95 ms (-77%)'],
-        ['RPC Idle Request Cadence', 'Every 2.5s', 'Every 15s (6x fewer)'],
-        ['Multi-Coin Batch Max', '10 objects', '100 objects (10x larger)'],
-        ['Client JS Memory Footprint', '142 MB', '86 MB (-39%)']
-      ]
-    },
-    sections: [
-      {
-        heading: 'Interactive Gas Breakdown & Analytics',
-        content: `Understanding Sui gas fees is crucial when optimizing Move smart contracts. The new Gas Analysis view isolates Computation Cost, Storage Cost, and Storage Rebate with microsecond precision. You can inspect exact cost spikes per transaction block before broadcasting to testnet or mainnet.`
-      },
-      {
-        heading: 'Multi-Coin Merging & Automated Splits',
-        content: `Managing gas coins in Sui can quickly become messy. With v1.3.3, you can auto-consolidate dozens of small SUI coin objects into a single primary gas coin with a single shortcut, or split one coin into multiple specified amounts for parallel transactions.`
-      }
-    ]
-  },
-  {
-    id: 'v1.3.0-move-dev-studio',
-    version: 'v1.3.0',
-    date: 'July 10, 2026',
-    dateTime: '2026-07-10',
-    title: 'Move Dev Studio: Live Package Publisher & Bytecode Inspector',
-    prLinks: [
-      { pr: '128', url: 'https://github.com/hien-p/raycast-sui-cli/pull/128' },
-      { pr: '131', url: 'https://github.com/hien-p/raycast-sui-cli/pull/131' }
-    ],
-    tldr: [
-      {
-        bold: 'One-Click Package Build & Publish:',
-        text: 'Compile, test, and publish Sui Move packages directly from the web interface.'
-      },
-      {
-        bold: 'Dynamic Field Explorer:',
-        text: 'Inspect nested dynamic fields and object ownership trees with real-time JSON breakdown.'
-      },
-      {
-        bold: 'Faucet Automation:',
-        text: 'Automated testnet & devnet SUI faucet requests with instant balance updates.'
-      }
-    ],
-    metricsTable: {
-      headers: ['Feature', 'CLI Only', 'Sui CLI Web Studio'],
-      rows: [
-        ['Package Deployment', 'Manual CLI terminal commands', '1-Click GUI with pre-flight dry run'],
-        ['Dynamic Field Visualizer', 'Raw JSON strings', 'Interactive expandable tree view'],
-        ['Network Switching', 'Edit client.yaml manually', 'Instant UI dropdown switch']
-      ]
-    },
-    sections: [
-      {
-        heading: 'Complete Move Development Lifecycle',
-        content: `Move Dev Studio bridges the gap between your local Move codebase and Sui networks. Run \`sui move test\`, verify gas requirements, and deploy package bytecode without ever typing complex CLI flags.`
-      }
-    ]
-  },
-  {
-    id: 'v1.2.0-keytool-manager',
-    version: 'v1.2.0',
-    date: 'June 24, 2026',
-    dateTime: '2026-07-24',
-    title: 'Multi-Account Keytool Manager & Active Address Switcher',
-    prLinks: [
-      { pr: '110', url: 'https://github.com/hien-p/raycast-sui-cli/pull/110' }
-    ],
-    tldr: [
-      {
-        bold: 'Zero Local Key Leakage:',
-        text: 'Keys remain safely inside local Sui CLI configuration (~/.sui/sui_config/client.yaml).'
-      },
-      {
-        bold: 'Fast Address Switching:',
-        text: 'Switch active developer address instantly across Mainnet, Testnet, Devnet, and Localnet.'
-      },
-      {
-        bold: 'Key Scheme Support:',
-        text: 'Full support for Ed25519, Secp256k1, and Secp256r1 key pairs.'
+        bold: 'Failures that say what happened:',
+        text: 'A boot error now renders an error with a reload button instead of a silent blank page, and a failed connection check answers in the transcript.'
       }
     ],
     sections: [
       {
-        heading: 'Air-Gapped Security Architecture',
-        content: `Sui CLI Web operates on a local-first paradigm. Your private keys never leave your machine or get transmitted to any external server. The web UI communicates solely with your local Fastify daemon on localhost.`
+        heading: 'Setup as a conversation',
+        content: `Setup used to be two full-screen states swapping on a boolean, so a machine that was already connected never saw the instructions and a machine that connected mid-setup had the screen pulled out from under it. It is now a single transcript: the agent asks which platform you are on, hands over the commands, and announces the connection as a new message when it lands. Pressing "Check again" with nothing listening now gets a reply that escalates across attempts rather than repeating one line.`
+      },
+      {
+        heading: 'Hosted deployment fixes',
+        content: `The hosted build served its own bundle but rejected it: the CORS allowlist did not include the domain the server itself runs on, and module scripts marked crossorigin send an Origin header even same-origin, so every asset came back 500. The origin is now read from the platform environment. A refused origin also stops being reported as a 500 - an access decision is not a server fault, and the stack traces were flooding the log pipeline.`
       }
     ]
   },
   {
     id: 'v1.0.0-initial-release',
     version: 'v1.0.0',
-    date: 'May 15, 2026',
-    dateTime: '2026-05-15',
+    date: 'July 22, 2026',
+    dateTime: '2026-07-22',
     title: 'Initial Release: Sui CLI Web - Built for First Movers',
-    prLinks: [
-      { pr: '1', url: 'https://github.com/hien-p/raycast-sui-cli/releases/tag/v1.0.0' }
-    ],
+    prLinks: [],
     tldr: [
       {
         bold: 'Keyboard-First Interface:',
-        text: 'Built for speed with command palette navigation and dark terminal aesthetic.'
+        text: 'Built for speed with command palette navigation and a dense terminal aesthetic.'
       },
       {
         bold: 'Full Sui CLI Parity:',
         text: 'Address management, SUI transfers, coin splitting, and Move package execution.'
+      },
+      {
+        bold: 'Keys Never Leave Your Machine:',
+        text: 'The UI talks to a local server that shells out to the Sui CLI you already trust.'
       }
     ],
     sections: [
       {
         heading: 'Welcome to Sui CLI Web',
-        content: `We launched Sui CLI Web to give Sui developers the ultimate developer interface—combining the raw power of the Sui CLI with a stunning, high-density Web UI.`
+        content: `We launched Sui CLI Web to give Sui developers the interface the CLI deserves - the raw power of the Sui CLI behind a dense, keyboard-driven Web UI. Nothing is hosted on your behalf: the browser talks to a server running on your own machine, and your private keys stay in your local Sui config.`
       }
     ]
   }
@@ -262,6 +201,25 @@ const releases = [
             <h2 class="text-2xl md:text-[2rem] font-bold text-white leading-tight tracking-tight mt-2">
               {release.title}
             </h2>
+
+            <!--
+              Hero image, superset.sh treatment: straight below the title, full
+              content width, landscape, and completely unstyled - no frame,
+              radius or shadow, so a product screenshot reads as the product
+              rather than as an illustration sitting on the page. Entries
+              without an image render nothing here.
+            -->
+            {release.image && (
+              <img
+                src={release.image.src}
+                alt={release.image.alt}
+                width="1536"
+                height="864"
+                loading="lazy"
+                decoding="async"
+                class="mt-8 w-full h-auto"
+              />
+            )}
 
             <!-- Highlights -->
             <div class="mt-8">
