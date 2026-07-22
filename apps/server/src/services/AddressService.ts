@@ -549,6 +549,41 @@ export class AddressService {
   }
 
   public async getObject(objectId: string): Promise<any> {
+    // RPC first - only path that can return Display-standard metadata (`display.data`),
+    // which the CLI's `client object` output never includes. Falls back to the CLI when
+    // there's no active RPC URL (e.g. localnet) or the RPC call fails outright.
+    const rpcUrl = await this.getActiveRpcUrl();
+    if (rpcUrl) {
+      try {
+        const response = await fetchWithTimeout(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'sui_getObject',
+            params: [
+              objectId,
+              {
+                showType: true,
+                showContent: true,
+                showOwner: true,
+                showDisplay: true,
+                showPreviousTransaction: true,
+                showStorageRebate: true,
+              },
+            ],
+          }),
+        });
+        if (response.ok) {
+          const result = (await response.json()) as { result?: { data?: unknown } };
+          if (result.result?.data) return result.result.data;
+        }
+      } catch {
+        // fall through to CLI
+      }
+    }
+
     const output = await this.executor.execute(['client', 'object', objectId], { json: true });
 
     // Handle "Object does not exist" case - CLI returns plain text instead of JSON

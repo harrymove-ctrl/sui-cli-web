@@ -522,23 +522,24 @@ export function ObjectList() {
     }
   };
 
-  // Copy the selected objects as a plain-text block - full object IDs + types +
-  // versions with wallet/network context, formatted to paste straight into an AI
-  // coding agent (or anywhere else).
+  // Copy the selected objects as JSON - full object IDs + types + versions with
+  // wallet/network context, formatted to paste straight into an AI coding agent
+  // (or anywhere else that wants structured data).
   const handleCopySelected = async () => {
     if (selectedObjects.length === 0) return;
-    const walletCtx = activeAddress
-      ? `${activeAddress.alias || 'wallet'} (${activeAddress.address})`
-      : 'unknown wallet';
-    const body = selectedObjects
-      .map((obj, i) => {
-        const objectId = ((obj.objectId as string) || (obj.data as any)?.objectId || '') as string;
-        const type = ((obj.type as string) || (obj.data as any)?.type || '') as string;
-        const version = (obj.version as number) ?? (obj.data as any)?.version ?? '';
-        return `${i + 1}. ${objectId}\n   type: ${type}\n   version: ${version}`;
-      })
-      .join('\n\n');
-    const text = `${selectedObjects.length} Sui object${selectedObjects.length === 1 ? '' : 's'} — wallet ${walletCtx}:\n\n${body}`;
+    const objects = selectedObjects.map((obj) => {
+      const objectId = ((obj.objectId as string) || (obj.data as any)?.objectId || '') as string;
+      const type = ((obj.type as string) || (obj.data as any)?.type || '') as string;
+      const version = (obj.version as number) ?? (obj.data as any)?.version ?? '';
+      return { objectId, type, version };
+    });
+    const payload = {
+      wallet: activeAddress
+        ? { alias: activeAddress.alias || null, address: activeAddress.address }
+        : null,
+      objects,
+    };
+    const text = JSON.stringify(payload, null, 2);
     try {
       await navigator.clipboard.writeText(text);
       toast.success(`Copied ${selectedObjects.length} object${selectedObjects.length === 1 ? '' : 's'}`);
@@ -683,7 +684,12 @@ export function ObjectList() {
         header: '',
         accessor: () => null,
         sortable: false,
-        size: 140,
+        // Two "icon + label" ghost buttons (Send, Split) need more than 140px or their
+        // labels get hard-clipped by the cell's `truncate` wrapper (data-table.tsx) -
+        // each button alone is ~75px (px-3 padding + icon + gap + text). minSize matches
+        // size so the column-resize handle can't be dragged back below the usable width.
+        size: 200,
+        minSize: 200,
         cell: (obj) => {
           const type = ((obj.type as string) || (obj.data as any)?.type || '') as string;
           const objectId = ((obj.objectId as string) || (obj.data as any)?.objectId || '') as string;
@@ -1144,7 +1150,7 @@ export function ObjectList() {
                   <button
                     className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
                     onClick={handleCopySelected}
-                    title="Copy selected objects as text (for pasting into an AI agent)"
+                    title="Copy selected objects as JSON (for pasting into an AI agent)"
                   >
                     <ClipboardCopy className="w-3.5 h-3.5" />
                     Copy

@@ -32,6 +32,7 @@ interface SuiObjectData {
   };
   storageRebate?: string;
   data?: SuiObjectData;
+  display?: { data?: Record<string, string> | null; error?: unknown };
 }
 
 interface ObjectDetailProps {
@@ -55,7 +56,29 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
   const activeEnv = environments.find((e) => e.isActive);
   const currentNetwork: NetworkType = detectNetwork(activeEnv?.alias, activeEnv?.rpc);
 
-  const data = object.data || object;
+  // The list's row-click path hands over a bare gRPC summary (objectId/type/version/
+  // owner only - no content, no display, no storageRebate); only the direct-URL/search
+  // lookup path already calls `getObject`. Re-fetch here unconditionally so this page
+  // always ends up with full data regardless of which path opened it - it renders
+  // instantly with whatever it was handed, then silently upgrades once this lands.
+  const [enriched, setEnriched] = useState<SuiObjectData | null>(null);
+  const initialData = object.data || object;
+  const objectIdForFetch = initialData.objectId || '';
+  useEffect(() => {
+    if (!objectIdForFetch) return;
+    let cancelled = false;
+    api
+      .getObject(objectIdForFetch)
+      .then((full) => {
+        if (!cancelled) setEnriched(full as SuiObjectData);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [objectIdForFetch]);
+
+  const data = enriched ?? initialData;
   const objectId = data.objectId || '';
   const type = data.type || '';
   const version = data.version || '';
@@ -94,11 +117,20 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
   // Walrus Memory "memory" - see walrus::blob::Blob for the on-chain struct).
   const isWalrusBlob = type.toLowerCase().includes('::blob::blob');
 
+  // A `0x2::display::Display<T>` object is the Display *template* itself (its own
+  // fields are the raw, unsubstituted "{name}"-style strings a collection registered)
+  // - not an NFT instance. It used to match the bare `.includes('display')` check below
+  // and get the same (broken) NFT preview treatment as a real NFT.
+  const isDisplayConfigObject = outerType.endsWith('::display::Display');
+  // Real Sui Display-standard metadata, already `{field}`-substituted server-side by
+  // the fullnode - present only when `getObject` resolved via RPC (see AddressService).
+  const hasResolvedDisplay = Boolean(data.display?.data);
   // NFT preview - image when the collection carries one, else a generated tile.
-  const isNft = type.toLowerCase().includes('nft') || type.toLowerCase().includes('display');
+  const isNft = !isDisplayConfigObject && (hasResolvedDisplay || type.toLowerCase().includes('nft'));
   const [nftMeta, setNftMeta] = useState<NftMetadata | null>(null);
   useEffect(() => {
-    if (!isNft || !objectId) return;
+    // Skip the heuristic guess entirely once real Display-standard data is in hand.
+    if (!isNft || !objectId || hasResolvedDisplay) return;
     let cancelled = false;
     getNftMetadata([objectId])
       .then((res) => {
@@ -108,27 +140,23 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
     return () => {
       cancelled = true;
     };
-  }, [isNft, objectId]);
+  }, [isNft, objectId, hasResolvedDisplay]);
 
-  // Check if object can have dynamic fields
-  // Objects with 'id' field (UID) can have dynamic fields attached
-  // Also include container types like Table, Bag, ObjectTable, etc.
-  const canHaveDynamicFields = (() => {
-    // Container types that store dynamic fields
+  // A dedicated container type (Table, Bag, ...) is a strong signal dynamic fields are
+  // the whole point of the object - worth showing/fetching even if currently empty.
+  const isKnownContainerType = (() => {
     const containerTypes = ['Table', 'Bag', 'ObjectBag', 'ObjectTable', 'LinkedTable', 'VecSet', 'VecMap'];
-    if (containerTypes.some(t => type.includes(`::${t.toLowerCase()}::`) || structName === t)) {
-      return true;
-    }
-    // Objects with 'id' field (UID) - most custom Move objects
-    if (fields.id) {
-      return true;
-    }
-    // Game objects that typically have inventory/dynamic storage
-    if (type.toLowerCase().includes('character') || type.toLowerCase().includes('inventory')) {
-      return true;
-    }
-    return false;
+    return (
+      containerTypes.some(t => type.includes(`::${t.toLowerCase()}::`) || structName === t) ||
+      type.toLowerCase().includes('character') ||
+      type.toLowerCase().includes('inventory')
+    );
   })();
+  // Nearly every Sui object has an `id` (UID) field - it's required for the `key`
+  // ability - so that alone can't gate whether to *show* the button (it used to,
+  // and a plain SUI Coin matched it every time even though coins never have any).
+  // Still worth querying for anything with an id, cheaply, to find the real count.
+  const mightHaveDynamicFields = isKnownContainerType || Boolean(fields.id);
 
   // Format coin balance
   const formatCoinBalance = (balance: string | undefined, decimals: number = 9) => {
@@ -184,6 +212,23 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
     }
   }, [activeTab, previousTransaction, txBlock]);
 
+  // Cheap heads-up next to "Explore Dynamic Fields" - a bounded page is enough to tell
+  // the user whether the button is worth clicking at all, without a dedicated count endpoint.
+  const [dynamicFieldCount, setDynamicFieldCount] = useState<{ count: number; hasMore: boolean } | null>(null);
+  useEffect(() => {
+    if (!mightHaveDynamicFields || !objectId) return;
+    let cancelled = false;
+    api
+      .getDynamicFields(objectId, undefined, 50)
+      .then((res) => {
+        if (!cancelled) setDynamicFieldCount({ count: res.data.length, hasMore: res.hasNextPage });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [mightHaveDynamicFields, objectId]);
+
   // Load full blob content when the Walrus Memory tab is selected. The object
   // list only has `sui client objects --json`'s raw BCS bytes (no decoded
   // struct fields at all), so blob_id/size/certified_epoch/storage have to
@@ -204,13 +249,23 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
       return { type: 'Address', value: owner.AddressOwner };
     }
     if (owner.ObjectOwner) {
-      return { type: 'Object', value: owner.ObjectOwner };
+      // "Transfer to Object" - this object is owned by another object, not a wallet
+      // address. Surface the parent id as a link to that object's own detail view
+      // rather than an inert string.
+      return { type: 'Object', value: owner.ObjectOwner, linkObjectId: owner.ObjectOwner as string };
     }
     if (owner.Shared) {
       return { type: 'Shared', value: `Initial version: ${owner.Shared.initial_shared_version}` };
     }
     if (owner === 'Immutable') {
       return { type: 'Immutable', value: 'Cannot be modified' };
+    }
+    if (owner.ConsensusAddressOwner) {
+      // "Party" objects (Sui's fast-path single-writer ownership) - only ever appear
+      // pre-flattened into `AddressOwner` on the list/gRPC path (suiGrpcClient.ts); a
+      // raw ConsensusAddressOwner can still reach here via the single-object CLI/RPC path.
+      const party = owner.ConsensusAddressOwner as Record<string, unknown>;
+      return { type: 'Party', value: (party.owner as string) ?? JSON.stringify(party) };
     }
     return { type: 'Unknown', value: JSON.stringify(owner) };
   };
@@ -281,42 +336,101 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
       <div className="px-2">
         {activeTab === 'overview' && (
           <div className="space-y-3">
-            {/* NFT preview - big image when the NFT carries one, else a generated
-                tile + name + attributes so stat-only NFTs still read visually. */}
-            {isNft && (
-              <div className="p-4 border border-border rounded-lg flex gap-4 items-start">
-                {nftMeta?.imageUrl ? (
-                  <img
-                    src={nftMeta.imageUrl}
-                    alt={(nftMeta?.name || 'NFT').trim()}
-                    className="w-28 h-28 rounded-lg object-cover flex-shrink-0 bg-muted"
-                    loading="lazy"
-                  />
-                ) : (
-                  // No on-chain image - generative dither-kit pixel avatar seeded by the object id.
-                  <DitherAvatar name={objectId || type} size={112} className="rounded-lg flex-shrink-0" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="text-base font-semibold text-foreground truncate">
-                    {nftMeta?.name || structName || 'NFT'}
+            {/* Display<T> config object - the template a collection registered, not an
+                instance. Show the raw {field}-style template strings so a developer can
+                see what it defines, instead of the misleading "empty NFT" this used to be. */}
+            {isDisplayConfigObject && (() => {
+              // The template is a VecMap<String,String>, decoded with different nesting
+              // depth depending on which fetch path answered: the CLI flattens it to
+              // `fields.contents: [{key, value}]`, while RPC's showContent wraps every
+              // level in its own `{type, fields}` struct envelope, landing the same
+              // entries at `fields.fields.fields.contents: [{fields: {key, value}}]`.
+              const vecMap = (fields as any)?.fields?.fields ?? fields;
+              const contents = (vecMap as any)?.contents;
+              const entries: { key: string; value: string }[] = Array.isArray(contents)
+                ? contents
+                    .map((entry: any) => {
+                      const kv = entry?.fields ?? entry;
+                      return { key: String(kv?.key ?? ''), value: String(kv?.value ?? '') };
+                    })
+                    .filter((e: { key: string }) => e.key)
+                : [];
+              return (
+                <div className="p-4 border border-border rounded-lg space-y-2">
+                  <div className="text-base font-semibold text-foreground">Display configuration</div>
+                  <div className="text-xs text-tertiary font-mono truncate">
+                    for {type.slice(type.indexOf('<') + 1, -1).split('::').slice(-2).join('::') || 'unknown type'}
                   </div>
-                  <div className="text-xs text-tertiary font-mono truncate mb-2">{type.split('::').slice(-2).join('::')}</div>
-                  {nftMeta && nftMeta.attributes.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {nftMeta.attributes.map((a) => (
-                        <span key={a.label} className="text-[11px] px-2 py-0.5 rounded bg-muted text-muted-foreground">
-                          {a.label} <span className="text-foreground font-medium">{a.value}</span>
-                        </span>
+                  {entries.length > 0 ? (
+                    <div className="space-y-1 pt-1">
+                      {entries.map((e) => (
+                        <div key={e.key} className="text-xs font-mono">
+                          <span className="text-muted-foreground">{e.key}:</span>{' '}
+                          <span className="text-foreground break-all">{e.value}</span>
+                        </div>
                       ))}
                     </div>
-                  )}
-                  {!nftMeta && <div className="text-xs text-muted-foreground">Loading preview…</div>}
-                  {nftMeta && !nftMeta.imageUrl && nftMeta.attributes.length === 0 && (
-                    <div className="text-xs text-muted-foreground">This NFT has no on-chain image or attributes.</div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">No template fields on this object.</div>
                   )}
                 </div>
-              </div>
-            )}
+              );
+            })()}
+            {/* NFT preview - big image when the NFT carries one, else a generated
+                tile + name + attributes so stat-only NFTs still read visually.
+                Prefers real Sui Display-standard data (already {field}-substituted
+                server-side) over the heuristic content.fields guess when present. */}
+            {isNft && (() => {
+              const resolvedDisplay = data.display?.data ?? null;
+              const previewName = resolvedDisplay?.name || nftMeta?.name || structName || 'NFT';
+              const previewImageUrl = resolvedDisplay?.image_url || nftMeta?.imageUrl || null;
+              const extraRows = [
+                { label: 'Description', value: resolvedDisplay?.description },
+                { label: 'Link', value: resolvedDisplay?.link },
+                { label: 'Project', value: resolvedDisplay?.project_url },
+                { label: 'Creator', value: resolvedDisplay?.creator },
+              ].filter((r) => r.value);
+              const stillLoading = !hasResolvedDisplay && !nftMeta;
+              const hasNothing =
+                !previewImageUrl && extraRows.length === 0 && (!nftMeta || nftMeta.attributes.length === 0);
+              return (
+                <div className="p-4 border border-border rounded-lg flex gap-4 items-start">
+                  {previewImageUrl ? (
+                    <img
+                      src={previewImageUrl}
+                      alt={previewName.trim()}
+                      className="w-28 h-28 rounded-lg object-cover flex-shrink-0 bg-muted"
+                      loading="lazy"
+                    />
+                  ) : (
+                    // No on-chain image - generative dither-kit pixel avatar seeded by the object id.
+                    <DitherAvatar name={objectId || type} size={112} className="rounded-lg flex-shrink-0" />
+                  )}
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <div className="text-base font-semibold text-foreground truncate">{previewName}</div>
+                    <div className="text-xs text-tertiary font-mono truncate">{type.split('::').slice(-2).join('::')}</div>
+                    {extraRows.map((r) => (
+                      <div key={r.label} className="text-xs text-muted-foreground truncate">
+                        {r.label}: <span className="text-foreground">{r.value}</span>
+                      </div>
+                    ))}
+                    {nftMeta && nftMeta.attributes.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {nftMeta.attributes.map((a) => (
+                          <span key={a.label} className="text-[11px] px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                            {a.label} <span className="text-foreground font-medium">{a.value}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {stillLoading && <div className="text-xs text-muted-foreground">Loading preview…</div>}
+                    {!stillLoading && hasNothing && (
+                      <div className="text-xs text-muted-foreground">This NFT has no on-chain image or attributes.</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
             {/* Coin Actions Panel - shown only for Coin objects */}
             {isCoin && coinType && (
               <div className="p-4 bg-card border border-border rounded-lg">
@@ -399,6 +513,14 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
                   Copy address
                 </button>
               )}
+              {ownerInfo.linkObjectId && (
+                <button
+                  onClick={() => navigate(`/app/objects/${ownerInfo.linkObjectId}`)}
+                  className="mt-2 text-xs text-primary hover:underline transition-colors"
+                >
+                  View parent object
+                </button>
+              )}
             </div>
 
             {/* Storage & Transfer */}
@@ -430,8 +552,11 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
               </div>
             </div>
 
-            {/* Explore Dynamic Fields - only show for objects with UID (id field) */}
-            {canHaveDynamicFields && (
+            {/* Explore Dynamic Fields - a real parent-child relationship, not just "has a
+                UID" (nearly every object does). Show for known container types even at 0
+                (an empty Table/Bag is still the point of the object), otherwise only once
+                the real fetched count confirms there's actually something attached. */}
+            {(isKnownContainerType || (dynamicFieldCount?.count ?? 0) > 0) && (
               <button
                 onClick={() => navigate(`/app/dynamic-fields?objectId=${objectId}`)}
                 className="w-full p-3 bg-card border border-border rounded-lg hover:bg-accent transition-colors group"
@@ -441,8 +566,14 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
                     <Link2 className="w-5 h-5 text-muted-foreground" />
                   </div>
                   <div className="flex-1 text-left">
-                    <div className="text-sm font-medium text-foreground">
+                    <div className="text-sm font-medium text-foreground flex items-center gap-1.5">
                       Explore Dynamic Fields
+                      {dynamicFieldCount && (
+                        <span className="text-xs font-normal px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                          {dynamicFieldCount.count}
+                          {dynamicFieldCount.hasMore ? '+' : ''}
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-muted-foreground">
                       View attached key-value data (Table, Bag, etc.)

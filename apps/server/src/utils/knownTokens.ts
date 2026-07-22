@@ -21,6 +21,11 @@ export const KNOWN_TOKENS_MAINNET: Record<string, KnownToken> = {
     priority: 1,
     verified: true,
     description: 'Native token of the Sui network',
+    // The native coin's own on-chain metadata has an empty `iconUrl` on every network
+    // (confirmed via suix_getCoinMetadata) - client falls back to this registry entry,
+    // which previously had none either, so SUI rendered a generic Droplet placeholder
+    // instead of the real logo. `public/sui-logo.svg` already exists in the client app.
+    iconUrl: '/sui-logo.svg',
   },
   '0x356a26eb9e012a68958082340d4c4116e7f55615cf27affcff209cf0ae544f59::wal::WAL': {
     name: 'WAL Token',
@@ -63,14 +68,18 @@ export const KNOWN_TOKENS_TESTNET: Record<string, KnownToken> = {
     priority: 1,
     verified: true,
     description: 'Native token of the Sui network',
+    iconUrl: '/sui-logo.svg',
   },
-  // Testnet WAL (if available)
+  // Testnet WAL (if available) - same static icon as mainnet WAL; testnet's on-chain
+  // CoinMetadata for this coin type doesn't exist (suix_getCoinMetadata returns null),
+  // so without this the client fell back to a generic coin placeholder.
   '0x9f992cc2430a1f442ca7a5ca7638169f5d5c00e0ebc3977a65e9ac6e497fe5ef::wal::WAL': {
     name: 'WAL Token',
     symbol: 'WAL',
     priority: 2,
     verified: true,
     description: 'The native token for the Walrus Protocol (Testnet)',
+    iconUrl: 'https://www.walrus.xyz/wal-icon.svg',
   },
 };
 
@@ -81,6 +90,7 @@ export const KNOWN_TOKENS_DEVNET: Record<string, KnownToken> = {
     priority: 1,
     verified: true,
     description: 'Native token of the Sui network',
+    iconUrl: '/sui-logo.svg',
   },
 };
 
