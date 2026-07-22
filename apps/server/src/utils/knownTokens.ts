@@ -32,11 +32,8 @@ export const KNOWN_TOKENS_MAINNET: Record<string, KnownToken> = {
     priority: 2,
     verified: true,
     description: 'The native token for the Walrus Protocol',
-    // CoinGecko id "walrus-2" (coins/images/54914) - the official full-color Walrus mark,
-    // verified against their public API. The walrus.xyz domain's own icon asset (used here
-    // previously) rendered as a generic dark "W" monogram, not the actual brand logo.
     iconUrl:
-      'https://coin-images.coingecko.com/coins/images/54914/large/Walrus_Token_Full_Color_200x200.png',
+      'https://asset-metadata-service-production.s3.amazonaws.com/asset_icons/5cc095da7044399e3bb69880a1c9f94432dfe219a70d9960a899385bac5d78d8.png',
   },
   // USDC on Sui (Circle official)
   '0x5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN': {
@@ -82,11 +79,8 @@ export const KNOWN_TOKENS_TESTNET: Record<string, KnownToken> = {
     priority: 2,
     verified: true,
     description: 'The native token for the Walrus Protocol (Testnet)',
-    // CoinGecko id "walrus-2" (coins/images/54914) - the official full-color Walrus mark,
-    // verified against their public API. The walrus.xyz domain's own icon asset (used here
-    // previously) rendered as a generic dark "W" monogram, not the actual brand logo.
     iconUrl:
-      'https://coin-images.coingecko.com/coins/images/54914/large/Walrus_Token_Full_Color_200x200.png',
+      'https://asset-metadata-service-production.s3.amazonaws.com/asset_icons/5cc095da7044399e3bb69880a1c9f94432dfe219a70d9960a899385bac5d78d8.png',
   },
 };
 

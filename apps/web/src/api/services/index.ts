@@ -5,6 +5,7 @@
 
 export * from './addresses';
 export * from './coins';
+export * from './derivedObjects';
 export * from './devtools';
 export * from './environments';
 export * from './faucet';

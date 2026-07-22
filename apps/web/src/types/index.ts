@@ -143,7 +143,17 @@ export const DEFAULT_COMMANDS: Command[] = [
     subtitle: 'Build, test, publish & upgrade packages',
     icon: '📦',
     category: CATEGORIES.DEVELOPMENT,
-    keywords: ['move', 'smart contract', 'build', 'test', 'publish', 'upgrade', 'package', 'deploy', 'development'],
+    keywords: [
+      'move',
+      'smart contract',
+      'build',
+      'test',
+      'publish',
+      'upgrade',
+      'package',
+      'deploy',
+      'development',
+    ],
     action: 'move',
   },
   {
@@ -163,6 +173,15 @@ export const DEFAULT_COMMANDS: Command[] = [
     category: CATEGORIES.DEVELOPMENT,
     keywords: ['coverage', 'disassemble', 'summary', 'bytecode', 'test', 'debug'],
     action: 'devtools',
+  },
+  {
+    id: 'derived-objects',
+    title: 'Derived Address Calculator',
+    subtitle: "Compute a derived object's address from a parent + key",
+    icon: '🧮',
+    category: CATEGORIES.DEVELOPMENT,
+    keywords: ['derived', 'derive', 'address', 'calculator', 'parent', 'key', 'deterministic'],
+    action: 'derived-objects',
   },
   // Security - keys and verification
   {

@@ -1,38 +1,81 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
-import { useEffect, lazy, Suspense } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AppGuard } from './components/guards/AppGuard';
 import { useTheme } from './contexts/ThemeContext';
 import { trackPageView } from './lib/analytics';
 
 // Lazy load ALL route components for better initial load and code splitting
-const HomePage = lazy(() => import('./components/HomePage').then(m => ({ default: m.HomePage })));
-const SetupPage = lazy(() => import('./components/SetupPage').then(m => ({ default: m.SetupPage })));
-const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
-const AddressList = lazy(() => import('./components/AddressList').then(m => ({ default: m.AddressList })));
-const EnvironmentList = lazy(() => import('./components/EnvironmentList').then(m => ({ default: m.EnvironmentList })));
-const ObjectList = lazy(() => import('./components/ObjectList').then(m => ({ default: m.ObjectList })));
+const HomePage = lazy(() => import('./components/HomePage').then((m) => ({ default: m.HomePage })));
+const SetupPage = lazy(() =>
+  import('./components/SetupPage').then((m) => ({ default: m.SetupPage }))
+);
+const Dashboard = lazy(() =>
+  import('./components/Dashboard').then((m) => ({ default: m.Dashboard }))
+);
+const AddressList = lazy(() =>
+  import('./components/AddressList').then((m) => ({ default: m.AddressList }))
+);
+const EnvironmentList = lazy(() =>
+  import('./components/EnvironmentList').then((m) => ({ default: m.EnvironmentList }))
+);
+const ObjectList = lazy(() =>
+  import('./components/ObjectList').then((m) => ({ default: m.ObjectList }))
+);
 // GasList removed - redirecting to CoinList instead
-const FaucetForm = lazy(() => import('./components/FaucetForm').then(m => ({ default: m.FaucetForm })));
-const TransferSui = lazy(() => import('./components/TransferSui').then(m => ({ default: m.TransferSui })));
-const MoveDeploy = lazy(() => import('./components/MoveDeploy').then(m => ({ default: m.MoveDeploy })));
-const TransactionBuilder = lazy(() => import('./components/TransactionBuilder').then(m => ({ default: m.TransactionBuilder })));
-const DynamicFieldExplorer = lazy(() => import('./components/DynamicFieldExplorer').then(m => ({ default: m.DynamicFieldExplorer })));
-const DevTools = lazy(() => import('./components/DevTools').then(m => ({ default: m.DevTools })));
-const SecurityTools = lazy(() => import('./components/SecurityTools').then(m => ({ default: m.SecurityTools })));
-const KeytoolManager = lazy(() => import('./components/KeytoolManager').then(m => ({ default: m.KeytoolManager })));
-const CoinList = lazy(() => import('./components/CoinList').then(m => ({ default: m.CoinList })));
-const CoinSplit = lazy(() => import('./components/CoinSplit').then(m => ({ default: m.CoinSplit })));
-const CoinMerge = lazy(() => import('./components/CoinMerge').then(m => ({ default: m.CoinMerge })));
-const CoinTransfer = lazy(() => import('./components/CoinTransfer').then(m => ({ default: m.CoinTransfer })));
+const FaucetForm = lazy(() =>
+  import('./components/FaucetForm').then((m) => ({ default: m.FaucetForm }))
+);
+const TransferSui = lazy(() =>
+  import('./components/TransferSui').then((m) => ({ default: m.TransferSui }))
+);
+const MoveDeploy = lazy(() =>
+  import('./components/MoveDeploy').then((m) => ({ default: m.MoveDeploy }))
+);
+const TransactionBuilder = lazy(() =>
+  import('./components/TransactionBuilder').then((m) => ({ default: m.TransactionBuilder }))
+);
+const DynamicFieldExplorer = lazy(() =>
+  import('./components/DynamicFieldExplorer').then((m) => ({ default: m.DynamicFieldExplorer }))
+);
+const DevTools = lazy(() => import('./components/DevTools').then((m) => ({ default: m.DevTools })));
+const DerivedObjectCalculator = lazy(() =>
+  import('./components/DerivedObjectCalculator').then((m) => ({
+    default: m.DerivedObjectCalculator,
+  }))
+);
+const SecurityTools = lazy(() =>
+  import('./components/SecurityTools').then((m) => ({ default: m.SecurityTools }))
+);
+const KeytoolManager = lazy(() =>
+  import('./components/KeytoolManager').then((m) => ({ default: m.KeytoolManager }))
+);
+const CoinList = lazy(() => import('./components/CoinList').then((m) => ({ default: m.CoinList })));
+const CoinSplit = lazy(() =>
+  import('./components/CoinSplit').then((m) => ({ default: m.CoinSplit }))
+);
+const CoinMerge = lazy(() =>
+  import('./components/CoinMerge').then((m) => ({ default: m.CoinMerge }))
+);
+const CoinTransfer = lazy(() =>
+  import('./components/CoinTransfer').then((m) => ({ default: m.CoinTransfer }))
+);
 
 // New feature components
-const GasAnalysis = lazy(() => import('./components/GasAnalysis').then(m => ({ default: m.GasAnalysis })));
-const EventExplorer = lazy(() => import('./components/EventExplorer').then(m => ({ default: m.EventExplorer })));
-const LocalNetwork = lazy(() => import('./components/LocalNetwork').then(m => ({ default: m.LocalNetwork })));
-const MoveMigrate = lazy(() => import('./components/MoveMigrate').then(m => ({ default: m.MoveMigrate })));
-const MultiPay = lazy(() => import('./components/MultiPay').then(m => ({ default: m.MultiPay })));
-const NotFound = lazy(() => import('./components/NotFound').then(m => ({ default: m.NotFound })));
+const GasAnalysis = lazy(() =>
+  import('./components/GasAnalysis').then((m) => ({ default: m.GasAnalysis }))
+);
+const EventExplorer = lazy(() =>
+  import('./components/EventExplorer').then((m) => ({ default: m.EventExplorer }))
+);
+const LocalNetwork = lazy(() =>
+  import('./components/LocalNetwork').then((m) => ({ default: m.LocalNetwork }))
+);
+const MoveMigrate = lazy(() =>
+  import('./components/MoveMigrate').then((m) => ({ default: m.MoveMigrate }))
+);
+const MultiPay = lazy(() => import('./components/MultiPay').then((m) => ({ default: m.MultiPay })));
+const NotFound = lazy(() => import('./components/NotFound').then((m) => ({ default: m.NotFound })));
 
 // Lazy load heavy background component
 const FaultyTerminal = lazy(() => import('./components/backgrounds/FaultyTerminal'));
@@ -54,7 +97,8 @@ export function App() {
   const isSetupRoute = location.pathname === '/setup';
   // Landing + setup are the monochrome surfaces; the app keeps its blue.
   const isMonochromeRoute = isSetupRoute || location.pathname === '/';
-  const isKnownRoute = ['/', '/setup'].includes(location.pathname) || location.pathname.startsWith('/app');
+  const isKnownRoute =
+    ['/', '/setup'].includes(location.pathname) || location.pathname.startsWith('/app');
   const is404Page = !isKnownRoute;
 
   // Show animated background on all pages
@@ -62,10 +106,16 @@ export function App() {
 
   // Track page views on route change
   useEffect(() => {
-    const pageName = location.pathname === '/' ? 'Home Page' :
-                     location.pathname === '/setup' ? 'Setup Page' :
-                     location.pathname === '/app' ? 'Dashboard' :
-                     location.pathname.includes('/app/') ? location.pathname.replace('/app/', '') : 'Unknown';
+    const pageName =
+      location.pathname === '/'
+        ? 'Home Page'
+        : location.pathname === '/setup'
+          ? 'Setup Page'
+          : location.pathname === '/app'
+            ? 'Dashboard'
+            : location.pathname.includes('/app/')
+              ? location.pathname.replace('/app/', '')
+              : 'Unknown';
     trackPageView(pageName);
   }, [location.pathname]);
 
@@ -80,9 +130,13 @@ export function App() {
         style={isMonochromeRoute && theme === 'light' ? { filter: 'invert(1)' } : undefined}
       >
         {showAnimatedBackground ? (
-          <Suspense fallback={<div className="w-full h-full bg-gradient-to-br from-[#0a1929] via-[#0d2137] to-[#0a1929]" />}>
+          <Suspense
+            fallback={
+              <div className="w-full h-full bg-gradient-to-br from-[#0a1929] via-[#0d2137] to-[#0a1929]" />
+            }
+          >
             <FaultyTerminal
-              tint={isMoveDevStudio ? "#22c55e" : isAppRoute ? "#4da2ff" : "#ffffff"}
+              tint={isMoveDevStudio ? '#22c55e' : isAppRoute ? '#4da2ff' : '#ffffff'}
               brightness={is404Page ? 0.35 : isMoveDevStudio ? 0.2 : isAppRoute ? 0.3 : 0.18}
               scale={is404Page ? 1.5 : isMoveDevStudio ? 0.5 : isAppRoute ? 1.0 : 1.9}
               gridMul={isMoveDevStudio ? [4, 2] : [2, 1]}
@@ -98,8 +152,8 @@ export function App() {
               className="curved-panel"
               dpr={1} // Lower DPR for better performance
               style={{
-                transformStyle: "preserve-3d",
-                perspective: "2000px",
+                transformStyle: 'preserve-3d',
+                perspective: '2000px',
               }}
             />
           </Suspense>
@@ -109,9 +163,7 @@ export function App() {
         )}
 
         {/* Subtle blur overlay for app routes - makes terminal stand out more */}
-        {isAppRoute && (
-          <div className="absolute inset-0 bg-black/20 backdrop-blur-[2px]" />
-        )}
+        {isAppRoute && <div className="absolute inset-0 bg-black/20 backdrop-blur-[2px]" />}
       </div>
 
       {/* Content */}
@@ -141,6 +193,7 @@ export function App() {
               <Route path="transfer" element={<TransferSui />} />
               <Route path="move" element={<MoveDeploy />} />
               <Route path="devtools" element={<DevTools />} />
+              <Route path="derived-objects" element={<DerivedObjectCalculator />} />
               <Route path="security" element={<SecurityTools />} />
               <Route path="keytool" element={<KeytoolManager />} />
               <Route path="inspector" element={<TransactionBuilder />} />

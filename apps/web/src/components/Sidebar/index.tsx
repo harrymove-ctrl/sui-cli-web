@@ -1,12 +1,13 @@
 import {
   Coins,
   Droplet,
+  Fingerprint,
   Globe,
   Hammer,
   Key,
+  LayoutDashboard,
   Link2,
   type LucideIcon,
-  LayoutDashboard,
   Package,
   PanelLeft,
   PanelLeftClose,
@@ -18,12 +19,12 @@ import {
 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { FileTree, type FileTreeElement } from '@/components/unlumen-ui/file-tree';
-import { Tooltip } from '@/components/ui/tooltip';
 import { Avatar } from '@/components/ui/avatar';
+import { Tooltip } from '@/components/ui/tooltip';
+import { FileTree, type FileTreeElement } from '@/components/unlumen-ui/file-tree';
+import { CATEGORY_ORDER, VIEW_TO_ROUTE } from '@/lib/routes';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/stores/useAppStore';
-import { CATEGORY_ORDER, VIEW_TO_ROUTE } from '@/lib/routes';
 import { DEFAULT_COMMANDS } from '@/types';
 import { WalletCard } from './WalletCard';
 
@@ -38,6 +39,7 @@ const NAV_ICON_MAP: Record<string, LucideIcon> = {
   move: Hammer,
   inspector: Search,
   devtools: Wrench,
+  'derived-objects': Fingerprint,
   keytool: Key,
   security: ShieldCheck,
 };
@@ -138,7 +140,7 @@ export function Sidebar({ onSearchClick, collapsed = false, onToggleCollapse }: 
     };
 
     return [dashboardElement, ...categories];
-  }, [location.pathname, location.search, navigate, activeAddress?.alias]);
+  }, [location.pathname, location.search, navigate]);
 
   // ---- Collapsed icon rail ----
   if (collapsed) {
@@ -147,6 +149,7 @@ export function Sidebar({ onSearchClick, collapsed = false, onToggleCollapse }: 
         {/* Expand toggle */}
         <Tooltip content="Expand sidebar" side="right">
           <button
+            type="button"
             onClick={onToggleCollapse}
             className="w-10 h-10 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
             aria-label="Expand sidebar"
@@ -163,6 +166,7 @@ export function Sidebar({ onSearchClick, collapsed = false, onToggleCollapse }: 
         {/* Search */}
         <Tooltip content="Search  ⌘K" side="right">
           <button
+            type="button"
             onClick={onSearchClick}
             className="w-10 h-10 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
             aria-label="Search"
@@ -174,19 +178,27 @@ export function Sidebar({ onSearchClick, collapsed = false, onToggleCollapse }: 
         <div className="w-8 h-px my-1 bg-border" />
 
         {/* Nav icons */}
-        <nav className="flex-1 flex flex-col items-center gap-1 overflow-y-auto" aria-label="Primary navigation">
+        <nav
+          className="flex-1 flex flex-col items-center gap-1 overflow-y-auto"
+          aria-label="Primary navigation"
+        >
           {flatNav.map((item) => {
             const active = location.pathname === item.to;
             const Icon = item.icon;
             return (
               <Tooltip key={item.id} content={item.title} side="right">
                 <button
+                  type="button"
                   onClick={() => navigate(item.to)}
                   aria-label={item.title}
                   aria-current={active ? 'page' : undefined}
                   // Match the expanded FileTree active style exactly (pink text on a
                   // 10%-opacity tint), so the highlight is uniform across both modes.
-                  style={active ? { color: NAV_HIGHLIGHT, backgroundColor: `${NAV_HIGHLIGHT}1a` } : undefined}
+                  style={
+                    active
+                      ? { color: NAV_HIGHLIGHT, backgroundColor: `${NAV_HIGHLIGHT}1a` }
+                      : undefined
+                  }
                   className={cn(
                     'w-10 h-10 rounded-lg flex items-center justify-center transition-colors',
                     !active && 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
@@ -203,6 +215,7 @@ export function Sidebar({ onSearchClick, collapsed = false, onToggleCollapse }: 
         {activeAddress && (
           <Tooltip content={activeAddress.alias || activeAddress.address} side="right">
             <button
+              type="button"
               onClick={() => navigate('/app/addresses')}
               className="mt-1 flex-shrink-0"
               aria-label="Active wallet"
@@ -227,6 +240,7 @@ export function Sidebar({ onSearchClick, collapsed = false, onToggleCollapse }: 
         {onToggleCollapse && (
           <Tooltip content="Collapse sidebar" side="bottom">
             <button
+              type="button"
               onClick={onToggleCollapse}
               className="p-1.5 -mr-1 rounded-md text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
               aria-label="Collapse sidebar"
@@ -240,6 +254,7 @@ export function Sidebar({ onSearchClick, collapsed = false, onToggleCollapse }: 
       {/* Search - opens the Cmd+K quick-switcher */}
       <div className="mb-4 px-2">
         <button
+          type="button"
           onClick={onSearchClick}
           className="flex items-center gap-2 h-9 w-full px-3 rounded-lg border border-border bg-card text-muted-foreground text-sm hover:text-foreground transition-colors"
         >

@@ -12,6 +12,7 @@ export const VIEW_TO_ROUTE: Record<string, string> = {
   move: '/app/move',
   inspector: '/app/inspector',
   devtools: '/app/devtools',
+  'derived-objects': '/app/derived-objects',
   security: '/app/security',
   keytool: '/app/keytool',
 };

@@ -1,24 +1,25 @@
+import type { ApiResponse, GasCoin, SuiAddress, WalletSummary } from '@sui-cli-web/shared';
 import { FastifyInstance } from 'fastify';
 import { AddressService } from '../services/AddressService';
-import { ParameterHelperService } from '../services/ParameterHelperService';
 import { CoinService } from '../services/CoinService';
 import { PackageService } from '../services/dev/PackageService';
-import type { ApiResponse, SuiAddress, GasCoin, WalletSummary } from '@sui-cli-web/shared';
+import { ParameterHelperService } from '../services/ParameterHelperService';
+import { handleRouteError } from '../utils/errorHandler';
 import {
+  ValidationException,
   validateAddress,
-  validateObjectId,
-  validateOptionalAlias,
-  validateKeyScheme,
   validateAmounts,
   validateCoinIds,
-  validateOptionalGasBudget,
-  validateModuleName,
   validateFunctionName,
-  validateTypeArgs,
+  validateKeyScheme,
+  validateModuleName,
   validateMoveArgs,
+  validateObjectId,
+  validateOptionalAlias,
+  validateOptionalGasBudget,
   validateTxDigest,
+  validateTypeArgs,
 } from '../utils/validation';
-import { handleRouteError } from '../utils/errorHandler';
 
 const addressService = new AddressService();
 const parameterHelperService = new ParameterHelperService();
@@ -30,7 +31,7 @@ const handleError = handleRouteError;
 
 export async function addressRoutes(fastify: FastifyInstance) {
   // Get all addresses with balances
-  fastify.get<{ Reply: ApiResponse<SuiAddress[]> }>('/addresses', async (request, reply) => {
+  fastify.get<{ Reply: ApiResponse<SuiAddress[]> }>('/addresses', async (_request, reply) => {
     try {
       // getAddresses already includes balance fetching by default
       const addresses = await addressService.getAddresses(true);
@@ -41,14 +42,17 @@ export async function addressRoutes(fastify: FastifyInstance) {
   });
 
   // Get active address
-  fastify.get<{ Reply: ApiResponse<{ address: string }> }>('/addresses/active', async (request, reply) => {
-    try {
-      const address = await addressService.getActiveAddress();
-      return { success: true, data: { address } };
-    } catch (error) {
-      return handleError(error, reply);
+  fastify.get<{ Reply: ApiResponse<{ address: string }> }>(
+    '/addresses/active',
+    async (_request, reply) => {
+      try {
+        const address = await addressService.getActiveAddress();
+        return { success: true, data: { address } };
+      } catch (error) {
+        return handleError(error, reply);
+      }
     }
-  });
+  );
 
   // Switch active address
   fastify.post<{
@@ -238,6 +242,30 @@ export async function addressRoutes(fastify: FastifyInstance) {
       const objectId = validateObjectId(request.params.objectId);
       const object = await addressService.getObject(objectId);
       return { success: true, data: object };
+    } catch (error) {
+      return handleError(error, reply);
+    }
+  });
+
+  // Walk an object backward through its version chain (GraphQL/indexer-only - see
+  // AddressService.getObjectVersionHistory for why there's no CLI/RPC fallback).
+  fastify.get<{
+    Params: { objectId: string };
+    Querystring: { version?: string; previousTx?: string };
+    Reply: ApiResponse<any>;
+  }>('/objects/:objectId/version-history', async (request, reply) => {
+    try {
+      const objectId = validateObjectId(request.params.objectId);
+      if (!request.query.version) {
+        throw new ValidationException([{ field: 'version', message: 'version is required' }]);
+      }
+      const previousTx = validateTxDigest(request.query.previousTx);
+      const history = await addressService.getObjectVersionHistory(
+        objectId,
+        request.query.version,
+        previousTx
+      );
+      return { success: true, data: history };
     } catch (error) {
       return handleError(error, reply);
     }

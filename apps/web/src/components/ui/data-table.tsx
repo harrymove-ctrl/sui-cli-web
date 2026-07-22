@@ -1,15 +1,15 @@
 import {
+  closestCenter,
   DndContext,
   type DragEndEvent,
   PointerSensor,
-  closestCenter,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
 import {
-  SortableContext,
   arrayMove,
   horizontalListSortingStrategy,
+  SortableContext,
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -17,11 +17,11 @@ import {
   type ColumnDef,
   type ColumnOrderState,
   type ColumnSizingState,
-  type Header,
-  type SortingState,
   flexRender,
   getCoreRowModel,
   getSortedRowModel,
+  type Header,
+  type SortingState,
   useReactTable,
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -31,6 +31,7 @@ import { type ReactNode, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { DataTableCheckbox } from './data-table-checkbox';
 import { ScrollArea } from './scroll-area';
+import { ScrollProgress } from './scroll-progress';
 
 export interface DataTableColumn<T> {
   id: string;
@@ -112,7 +113,9 @@ function HeaderCell<T>({
           {...listeners}
           className="cursor-grab active:cursor-grabbing text-tertiary hover:text-muted-foreground flex-shrink-0"
           aria-label={`Reorder ${
-            typeof header.column.columnDef.header === 'string' ? header.column.columnDef.header : header.id
+            typeof header.column.columnDef.header === 'string'
+              ? header.column.columnDef.header
+              : header.id
           } column`}
         >
           <GripVertical className="w-3 h-3" />
@@ -123,7 +126,9 @@ function HeaderCell<T>({
         onClick={sortable ? onSortClick : undefined}
         className={cn(
           'flex items-center gap-1 flex-1 min-w-0 truncate',
-          alignClass((header.column.columnDef.meta as { align?: 'left' | 'right' | 'center' })?.align),
+          alignClass(
+            (header.column.columnDef.meta as { align?: 'left' | 'right' | 'center' })?.align
+          ),
           sortable && 'hover:text-foreground cursor-pointer'
         )}
         disabled={!sortable}
@@ -143,6 +148,9 @@ function HeaderCell<T>({
           ))}
       </button>
       {header.column.getCanResize() && (
+        // Column-resize drag handle - inherently pointer/touch-only (dragging a column
+        // edge), same as native OS window/column resize handles; no keyboard equivalent to add.
+        // biome-ignore lint/a11y/noStaticElementInteractions: see comment above
         <div
           onMouseDown={header.getResizeHandler()}
           onTouchStart={header.getResizeHandler()}
@@ -190,7 +198,7 @@ export function DataTable<T>({
         id: SELECT_COL_ID,
         header: () => {
           const allIds = data.map(getRowId);
-          const selectedCount = allIds.filter((id) => selectedIds!.has(id)).length;
+          const selectedCount = allIds.filter((id) => selectedIds?.has(id)).length;
           const state: boolean | 'indeterminate' =
             selectedCount === 0 ? false : selectedCount === allIds.length ? true : 'indeterminate';
           return (
@@ -198,7 +206,7 @@ export function DataTable<T>({
               checked={state}
               aria-label="Select all rows"
               onChange={(checked) => {
-                onSelectionChange!(checked ? new Set(allIds) : new Set());
+                onSelectionChange?.(checked ? new Set(allIds) : new Set());
               }}
             />
           );
@@ -207,13 +215,13 @@ export function DataTable<T>({
           const id = getRowId(row.original, row.index);
           return (
             <DataTableCheckbox
-              checked={selectedIds!.has(id)}
+              checked={selectedIds?.has(id) ?? false}
               aria-label="Select row"
               onChange={(checked) => {
                 const next = new Set(selectedIds);
                 if (checked) next.add(id);
                 else next.delete(id);
-                onSelectionChange!(next);
+                onSelectionChange?.(next);
               }}
             />
           );
@@ -286,81 +294,116 @@ export function DataTable<T>({
   }
 
   return (
-    <ScrollArea
-      className={cn('relative', className)}
-      viewportRef={scrollRef}
-      viewportClassName="scroll-fade"
-    >
-      <div style={{ width: Math.max(totalWidth, 1), minWidth: '100%' }}>
-        {/* Sticky header */}
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext
-            items={headerGroup.headers.map((h) => h.id)}
-            strategy={horizontalListSortingStrategy}
+    // `ScrollArea`'s own root clips overflow (needed for its rounded corners/fade), so
+    // the tick-mark scroll indicator lives one level up, as a sibling - otherwise it'd
+    // get cut off any time the fill approaches 0%/100%.
+    <div className={cn('relative', className)}>
+      <ScrollArea className="h-full w-full" viewportRef={scrollRef} viewportClassName="scroll-fade">
+        <div style={{ width: Math.max(totalWidth, 1), minWidth: '100%' }}>
+          {/* Sticky header */}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
           >
-            <div
-              className="sticky top-0 z-20 flex bg-background border-b border-border"
-              role="row"
+            <SortableContext
+              items={headerGroup.headers.map((h) => h.id)}
+              strategy={horizontalListSortingStrategy}
             >
-              {headerGroup.headers.map((header) => (
-                <HeaderCell
-                  key={header.id}
-                  header={header}
-                  sortable={header.column.getCanSort()}
-                  sortDirection={header.column.getIsSorted()}
-                  onSortClick={() => header.column.toggleSorting()}
-                  reduceMotion={reduceMotion}
-                />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-
-        {/* Virtualized body */}
-        <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
-          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-            const row = rows[virtualRow.index];
-            const id = getRowId(row.original, row.index);
-            const isSelected = selectionEnabled && selectedIds!.has(id);
-            return (
+              {/* Virtualized rows are absolutely-positioned divs (translateY), which can't be
+                  real <tr>/<td> inside a <table> layout - role="row"/"cell" (below) preserve
+                  the a11y tree without breaking virtualization. This header row is static
+                  (no click/sort handler on the row itself - sorting is per-column-button
+                  inside), so it has nothing to focus. */}
+              {/* biome-ignore lint/a11y/useSemanticElements: see comment above */}
+              {/* biome-ignore lint/a11y/useFocusableInteractive: see comment above */}
               <div
-                key={row.id}
+                className="sticky top-0 z-20 flex bg-background border-b border-border"
                 role="row"
-                onClick={() => onRowClick?.(row.original)}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: virtualRow.size,
-                  transform: `translateY(${virtualRow.start}px)`,
-                }}
-                className={cn(
-                  'flex items-center border-b border-border/50 transition-colors',
-                  onRowClick && 'cursor-pointer hover:bg-accent/50',
-                  isSelected && 'bg-accent'
-                )}
               >
-                {row.getVisibleCells().map((cell) => (
-                  <div
-                    key={cell.id}
-                    role="cell"
-                    style={{ width: cell.column.getSize() }}
-                    className={cn(
-                      'flex items-center px-3 text-sm text-foreground min-w-0 flex-shrink-0',
-                      alignClass((cell.column.columnDef.meta as { align?: 'left' | 'right' | 'center' })?.align)
-                    )}
-                  >
-                    <div className="truncate min-w-0">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </div>
-                  </div>
+                {headerGroup.headers.map((header) => (
+                  <HeaderCell
+                    key={header.id}
+                    header={header}
+                    sortable={header.column.getCanSort()}
+                    sortDirection={header.column.getIsSorted()}
+                    onSortClick={() => header.column.toggleSorting()}
+                    reduceMotion={reduceMotion}
+                  />
                 ))}
               </div>
-            );
-          })}
+            </SortableContext>
+          </DndContext>
+
+          {/* Virtualized body */}
+          <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const row = rows[virtualRow.index];
+              const id = getRowId(row.original, row.index);
+              const isSelected = selectionEnabled && selectedIds?.has(id);
+              return (
+                // biome-ignore lint/a11y/useSemanticElements: see the header row's comment above
+                <div
+                  key={row.id}
+                  role="row"
+                  tabIndex={onRowClick ? 0 : undefined}
+                  onClick={() => onRowClick?.(row.original)}
+                  onKeyDown={(e) => {
+                    if (onRowClick && (e.key === 'Enter' || e.key === ' ')) {
+                      e.preventDefault();
+                      onRowClick(row.original);
+                    }
+                  }}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: virtualRow.size,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                  className={cn(
+                    'flex items-center border-b border-border/50 transition-colors',
+                    onRowClick &&
+                      'cursor-pointer hover:bg-accent/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2',
+                    isSelected && 'bg-accent'
+                  )}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    // biome-ignore lint/a11y/useSemanticElements: see the header row's comment above
+                    <div
+                      key={cell.id}
+                      role="cell"
+                      style={{ width: cell.column.getSize() }}
+                      className={cn(
+                        'flex items-center px-3 text-sm text-foreground min-w-0 flex-shrink-0',
+                        alignClass(
+                          (cell.column.columnDef.meta as { align?: 'left' | 'right' | 'center' })
+                            ?.align
+                        )
+                      )}
+                    >
+                      <div className="truncate min-w-0">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
-    </ScrollArea>
+      </ScrollArea>
+      {/* Nudged left of Radix's own scrollbar track (~14px) so the two don't overlap. */}
+      <ScrollProgress
+        container={scrollRef}
+        position="right"
+        tickCount={28}
+        height={120}
+        width={8}
+        showLabel={false}
+        className="right-4"
+      />
+    </div>
   );
 }

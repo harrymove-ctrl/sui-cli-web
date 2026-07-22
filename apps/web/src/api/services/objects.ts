@@ -30,6 +30,24 @@ export async function getObjectMetadata(objectId: string) {
   return fetchApi<Record<string, unknown>>(`/inspector/object/${objectId}/metadata`);
 }
 
+export interface VersionHistoryEntry {
+  version: string;
+  txDigest: string;
+  timestampMs: number | null;
+}
+
+/** GraphQL/indexer-only (see server's `GraphQLService.getObjectVersionHistory`) - a
+ * bounded backward walk through the object's version chain, not a full history. */
+export async function getObjectVersionHistory(
+  objectId: string,
+  version: string,
+  previousTx: string
+) {
+  return fetchApi<VersionHistoryEntry[] | null>(
+    `/objects/${objectId}/version-history?version=${encodeURIComponent(version)}&previousTx=${encodeURIComponent(previousTx)}`
+  );
+}
+
 export interface BlobSummary {
   objectId: string;
   blobId: string | null;

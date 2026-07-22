@@ -1,23 +1,28 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Spinner } from '../shared/Spinner';
-import * as api from '@/api/client';
-import { getNftMetadata, type NftMetadata } from '@/api/services/objects';
-import { DitherAvatar } from '@/components/dither-kit/avatar';
-import { useAppStore } from '@/stores/useAppStore';
-import { detectNetwork, openInExplorer, EXPLORERS, type NetworkType } from '@/lib/explorer';
 import { extractCoinType, isCoinType } from '@sui-cli-web/shared';
 import { Link2 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import * as api from '@/api/client';
+import { getNftMetadata, type NftMetadata } from '@/api/services/objects';
 import {
-  getWalrusMemoryAccount,
-  decryptWalrusMemoryBlob,
   addWalrusMemoryDelegateKey,
-  removeWalrusMemoryDelegateKey,
-  type MemwalAccountSummary,
   type DecryptResult,
+  decryptWalrusMemoryBlob,
+  getWalrusMemoryAccount,
+  type MemwalAccountSummary,
+  removeWalrusMemoryDelegateKey,
 } from '@/api/services/walrusMemory';
+import { DitherAvatar } from '@/components/dither-kit/avatar';
+import { detectNetwork, EXPLORERS, type NetworkType, openInExplorer } from '@/lib/explorer';
+import { useAppStore } from '@/stores/useAppStore';
+import { Spinner } from '../shared/Spinner';
 
 type Tab = 'overview' | 'fields' | 'package' | 'memory' | 'transaction';
+
+// Walrus `Blob` objects ship a Display `image_url` that doesn't resolve, so the
+// preview renders as a broken image. Fall back to the Walrus logo instead.
+const WALRUS_BLOB_IMAGE_URL =
+  'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQhfLxI-vz1Kvll1aKZXOUKBl5-SPzA6uP4F63bSrcE7fgtfjbl_vHJS0Sb&s=10';
 
 interface SuiObjectData {
   objectId?: string;
@@ -39,6 +44,28 @@ interface ObjectDetailProps {
   object: SuiObjectData;
   onBack: () => void;
   onCopy: (text: string, label: string) => void;
+}
+
+/** Decode a Move `VecMap`/`VecSet`-shaped field into a flat entry list. Both decode as
+ * `{ type, fields: { contents: [...] } }`, where each entry is either `{key, value}`
+ * (VecMap) or a bare value/`{name}` (VecSet<TypeName>, used by TransferPolicy.rules) -
+ * or, if the field itself happens to share its struct's own field name (as Display's
+ * `fields: VecMap<...>` does), one extra `.fields` layer wraps all of the above. */
+function extractVecEntries(fieldValue: unknown): { key: string; value: string }[] {
+  const vecMap = (fieldValue as any)?.fields?.fields ?? (fieldValue as any)?.fields ?? fieldValue;
+  const contents = (vecMap as any)?.contents;
+  if (!Array.isArray(contents)) return [];
+  return contents
+    .map((entry: any) => {
+      const kv = entry?.fields ?? entry;
+      if (kv && typeof kv === 'object' && 'key' in kv) {
+        return { key: String(kv.key ?? ''), value: String(kv.value ?? '') };
+      }
+      // VecSet<TypeName> entries have no key, just a `name` (the rule's full type string).
+      const value = typeof kv === 'string' ? kv : String(kv?.name ?? JSON.stringify(kv));
+      return { key: value, value };
+    })
+    .filter((e) => e.key);
 }
 
 export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
@@ -88,10 +115,12 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
   const content = data.content || {};
   const fields = content.fields || {};
   const storageRebate = data.storageRebate || '0';
-  // `hasPublicTransfer` is never actually populated anywhere in this codebase (checked both
-  // client and server) - it silently defaulted to `false`, so this always read "No" regardless
-  // of the object's real abilities. Distinguish "confirmed false" from "we never fetched this"
-  // so the UI says "Unknown" instead of confidently lying.
+  // `hasPublicTransfer` is genuinely populated now that `getObject` is RPC-first (RPC's
+  // `content.hasPublicTransfer` is a real ability check - true iff the type has Move's
+  // `store` ability, which is exactly Sui's "Custom Transfer Rules": no `store` means
+  // only the defining module can transfer the object). The CLI fallback path's shape for
+  // this field is unverified, so still distinguish "confirmed" from "never fetched" and
+  // say "Unknown" rather than assume.
   const knowsPublicTransfer = 'hasPublicTransfer' in content;
   const hasPublicTransfer = content.hasPublicTransfer ?? false;
 
@@ -107,6 +136,14 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
   // Check if this is an UpgradeCap
   const isUpgradeCap = type.includes('::package::UpgradeCap');
   const linkedPackageId = isUpgradeCap ? (fields.package as string | null) : null;
+
+  // Sui's Kiosk/TransferPolicy system - falls through to the generic Overview card
+  // like anything else today, same "unhandled system type" gap the Display<T> config
+  // object had before it got its own card.
+  const isTransferPolicy = outerType.endsWith('::transfer_policy::TransferPolicy');
+  const isTransferPolicyCap = outerType.endsWith('::transfer_policy::TransferPolicyCap');
+  const isKiosk = outerType.endsWith('::kiosk::Kiosk');
+  const isKioskOwnerCap = outerType.endsWith('::kiosk::KioskOwnerCap');
 
   // Check if this is a Coin type
   const isCoin = isCoinType(type);
@@ -126,7 +163,12 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
   // the fullnode - present only when `getObject` resolved via RPC (see AddressService).
   const hasResolvedDisplay = Boolean(data.display?.data);
   // NFT preview - image when the collection carries one, else a generated tile.
-  const isNft = !isDisplayConfigObject && (hasResolvedDisplay || type.toLowerCase().includes('nft'));
+  // A known system/capability type (e.g. `TransferPolicyCap<...badge_nft::Badge>`) gets
+  // its own dedicated card below and should never *also* match the loose "nft" substring
+  // fallback just because its generic type argument happens to mention an NFT collection.
+  const isKnownSystemType =
+    isDisplayConfigObject || isTransferPolicy || isTransferPolicyCap || isKiosk || isKioskOwnerCap;
+  const isNft = !isKnownSystemType && (hasResolvedDisplay || type.toLowerCase().includes('nft'));
   const [nftMeta, setNftMeta] = useState<NftMetadata | null>(null);
   useEffect(() => {
     // Skip the heuristic guess entirely once real Display-standard data is in hand.
@@ -145,9 +187,17 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
   // A dedicated container type (Table, Bag, ...) is a strong signal dynamic fields are
   // the whole point of the object - worth showing/fetching even if currently empty.
   const isKnownContainerType = (() => {
-    const containerTypes = ['Table', 'Bag', 'ObjectBag', 'ObjectTable', 'LinkedTable', 'VecSet', 'VecMap'];
+    const containerTypes = [
+      'Table',
+      'Bag',
+      'ObjectBag',
+      'ObjectTable',
+      'LinkedTable',
+      'VecSet',
+      'VecMap',
+    ];
     return (
-      containerTypes.some(t => type.includes(`::${t.toLowerCase()}::`) || structName === t) ||
+      containerTypes.some((t) => type.includes(`::${t.toLowerCase()}::`) || structName === t) ||
       type.toLowerCase().includes('character') ||
       type.toLowerCase().includes('inventory')
     );
@@ -194,7 +244,8 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
   useEffect(() => {
     if (activeTab === 'package' && linkedPackageId && !packageSummary) {
       setIsLoadingPackage(true);
-      api.getPackageSummary(linkedPackageId)
+      api
+        .getPackageSummary(linkedPackageId)
         .then(setPackageSummary)
         .catch(console.error)
         .finally(() => setIsLoadingPackage(false));
@@ -205,7 +256,8 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
   useEffect(() => {
     if (activeTab === 'transaction' && previousTransaction && !txBlock) {
       setIsLoadingTx(true);
-      api.getTransactionBlock(previousTransaction)
+      api
+        .getTransactionBlock(previousTransaction)
         .then(setTxBlock)
         .catch(console.error)
         .finally(() => setIsLoadingTx(false));
@@ -214,7 +266,10 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
 
   // Cheap heads-up next to "Explore Dynamic Fields" - a bounded page is enough to tell
   // the user whether the button is worth clicking at all, without a dedicated count endpoint.
-  const [dynamicFieldCount, setDynamicFieldCount] = useState<{ count: number; hasMore: boolean } | null>(null);
+  const [dynamicFieldCount, setDynamicFieldCount] = useState<{
+    count: number;
+    hasMore: boolean;
+  } | null>(null);
   useEffect(() => {
     if (!mightHaveDynamicFields || !objectId) return;
     let cancelled = false;
@@ -229,6 +284,22 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
     };
   }, [mightHaveDynamicFields, objectId]);
 
+  // Version history - lazy (click to load, not eager) since each hop costs two GraphQL
+  // round trips server-side. `null` = not loaded yet, `[]` = loaded but empty/unavailable.
+  const [versionHistory, setVersionHistory] = useState<
+    { version: string; txDigest: string; timestampMs: number | null }[] | null
+  >(null);
+  const [isLoadingVersionHistory, setIsLoadingVersionHistory] = useState(false);
+  const loadVersionHistory = () => {
+    if (!version || !previousTransaction || versionHistory) return;
+    setIsLoadingVersionHistory(true);
+    api
+      .getObjectVersionHistory(objectId, version, previousTransaction)
+      .then((res) => setVersionHistory(res ?? []))
+      .catch(() => setVersionHistory([]))
+      .finally(() => setIsLoadingVersionHistory(false));
+  };
+
   // Load full blob content when the Walrus Memory tab is selected. The object
   // list only has `sui client objects --json`'s raw BCS bytes (no decoded
   // struct fields at all), so blob_id/size/certified_epoch/storage have to
@@ -237,8 +308,11 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
   useEffect(() => {
     if (activeTab === 'memory' && isWalrusBlob && objectId && !blobContent) {
       setIsLoadingBlob(true);
-      api.getObject(objectId)
-        .then((res) => setBlobContent((res as { content?: Record<string, unknown> })?.content ?? {}))
+      api
+        .getObject(objectId)
+        .then((res) =>
+          setBlobContent((res as { content?: Record<string, unknown> })?.content ?? {})
+        )
         .catch(console.error)
         .finally(() => setIsLoadingBlob(false));
     }
@@ -252,7 +326,11 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
       // "Transfer to Object" - this object is owned by another object, not a wallet
       // address. Surface the parent id as a link to that object's own detail view
       // rather than an inert string.
-      return { type: 'Object', value: owner.ObjectOwner, linkObjectId: owner.ObjectOwner as string };
+      return {
+        type: 'Object',
+        value: owner.ObjectOwner,
+        linkObjectId: owner.ObjectOwner as string,
+      };
     }
     if (owner.Shared) {
       return { type: 'Shared', value: `Initial version: ${owner.Shared.initial_shared_version}` };
@@ -289,11 +367,23 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
       {/* Header */}
       <div className="flex items-center gap-2 px-2 mb-3">
         <button
+          type="button"
           onClick={onBack}
           className="p-1.5 hover:bg-secondary rounded-lg transition-colors"
         >
-          <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          <svg
+            aria-hidden="true"
+            className="w-4 h-4 text-muted-foreground"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 19l-7-7 7-7"
+            />
           </svg>
         </button>
         <div className="flex-1 min-w-0">
@@ -305,31 +395,46 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
           </div>
         </div>
         <button
+          type="button"
           onClick={() => onCopy(objectId, 'Object ID')}
           className="p-1.5 hover:bg-secondary rounded-lg transition-colors"
           title="Copy Object ID"
         >
-          <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          <svg
+            aria-hidden="true"
+            className="w-4 h-4 text-muted-foreground"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+            />
           </svg>
         </button>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-1 px-2 mb-3 border-b border-border pb-2">
-        {tabs.filter(t => t.show).map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-              activeTab === tab.id
-                ? 'bg-foreground text-background'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+        {tabs
+          .filter((t) => t.show)
+          .map((tab) => (
+            <button
+              type="button"
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                activeTab === tab.id
+                  ? 'bg-foreground text-background'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
       </div>
 
       {/* Tab Content */}
@@ -339,98 +444,212 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
             {/* Display<T> config object - the template a collection registered, not an
                 instance. Show the raw {field}-style template strings so a developer can
                 see what it defines, instead of the misleading "empty NFT" this used to be. */}
-            {isDisplayConfigObject && (() => {
-              // The template is a VecMap<String,String>, decoded with different nesting
-              // depth depending on which fetch path answered: the CLI flattens it to
-              // `fields.contents: [{key, value}]`, while RPC's showContent wraps every
-              // level in its own `{type, fields}` struct envelope, landing the same
-              // entries at `fields.fields.fields.contents: [{fields: {key, value}}]`.
-              const vecMap = (fields as any)?.fields?.fields ?? fields;
-              const contents = (vecMap as any)?.contents;
-              const entries: { key: string; value: string }[] = Array.isArray(contents)
-                ? contents
-                    .map((entry: any) => {
-                      const kv = entry?.fields ?? entry;
-                      return { key: String(kv?.key ?? ''), value: String(kv?.value ?? '') };
-                    })
-                    .filter((e: { key: string }) => e.key)
-                : [];
-              return (
-                <div className="p-4 border border-border rounded-lg space-y-2">
-                  <div className="text-base font-semibold text-foreground">Display configuration</div>
-                  <div className="text-xs text-tertiary font-mono truncate">
-                    for {type.slice(type.indexOf('<') + 1, -1).split('::').slice(-2).join('::') || 'unknown type'}
-                  </div>
-                  {entries.length > 0 ? (
-                    <div className="space-y-1 pt-1">
-                      {entries.map((e) => (
-                        <div key={e.key} className="text-xs font-mono">
-                          <span className="text-muted-foreground">{e.key}:</span>{' '}
-                          <span className="text-foreground break-all">{e.value}</span>
-                        </div>
-                      ))}
+            {isDisplayConfigObject &&
+              (() => {
+                const entries = extractVecEntries((fields as any)?.fields);
+                return (
+                  <div className="p-4 border border-border rounded-lg space-y-2">
+                    <div className="text-base font-semibold text-foreground">
+                      Display configuration
                     </div>
-                  ) : (
-                    <div className="text-xs text-muted-foreground">No template fields on this object.</div>
-                  )}
+                    <div className="text-xs text-tertiary font-mono truncate">
+                      for{' '}
+                      {type
+                        .slice(type.indexOf('<') + 1, -1)
+                        .split('::')
+                        .slice(-2)
+                        .join('::') || 'unknown type'}
+                    </div>
+                    {entries.length > 0 ? (
+                      <div className="space-y-1 pt-1">
+                        {entries.map((e) => (
+                          <div key={e.key} className="text-xs font-mono">
+                            <span className="text-muted-foreground">{e.key}:</span>{' '}
+                            <span className="text-foreground break-all">{e.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground">
+                        No template fields on this object.
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            {/* Sui's Kiosk/TransferPolicy system - same "give a known system type its own
+                card instead of the generic Overview" treatment as Display<T> above. See
+                https://docs.sui.io/develop/objects/transfers/transfer-policies */}
+            {isTransferPolicy &&
+              (() => {
+                const rules = extractVecEntries((fields as any)?.rules);
+                const balance = fields.balance as string | undefined;
+                return (
+                  <div className="p-4 border border-border rounded-lg space-y-2">
+                    <div className="text-base font-semibold text-foreground">Transfer policy</div>
+                    <div className="text-xs text-tertiary font-mono truncate">
+                      for{' '}
+                      {type
+                        .slice(type.indexOf('<') + 1, -1)
+                        .split('::')
+                        .slice(-2)
+                        .join('::') || 'unknown type'}
+                    </div>
+                    {balance !== undefined && (
+                      <div className="text-xs font-mono text-muted-foreground">
+                        Balance:{' '}
+                        <span className="text-foreground">{formatCoinBalance(balance)} SUI</span>
+                      </div>
+                    )}
+                    {rules.length > 0 ? (
+                      <div className="space-y-1 pt-1">
+                        {rules.map((r) => (
+                          <div key={r.key} className="text-xs font-mono text-foreground break-all">
+                            {r.value}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground">
+                        No rules attached - transfers complete unconditionally.
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            {isTransferPolicyCap && (
+              <div className="p-4 border border-border rounded-lg space-y-2">
+                <div className="text-base font-semibold text-foreground">Transfer policy cap</div>
+                <div className="text-xs text-muted-foreground">Controls the policy below.</div>
+                {fields.policy_id ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/app/objects/${fields.policy_id}`)}
+                    className="text-xs text-primary hover:underline font-mono break-all"
+                  >
+                    View policy
+                  </button>
+                ) : null}
+              </div>
+            )}
+            {isKiosk && (
+              <div className="p-4 border border-border rounded-lg space-y-2">
+                <div className="text-base font-semibold text-foreground">Kiosk</div>
+                <div className="grid grid-cols-3 gap-3 pt-1">
+                  <div>
+                    <div className="text-xs text-muted-foreground">Items</div>
+                    <div className="text-sm font-mono text-foreground">
+                      {String(fields.item_count ?? 0)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Profits</div>
+                    <div className="text-sm font-mono text-foreground">
+                      {formatCoinBalance(fields.profits as string | undefined)} SUI
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Extensions</div>
+                    <div className="text-sm font-mono text-foreground">
+                      {fields.allow_extensions ? 'Allowed' : 'Disabled'}
+                    </div>
+                  </div>
                 </div>
-              );
-            })()}
+              </div>
+            )}
+            {isKioskOwnerCap && (
+              <div className="p-4 border border-border rounded-lg space-y-2">
+                <div className="text-base font-semibold text-foreground">Kiosk owner cap</div>
+                <div className="text-xs text-muted-foreground">Controls the kiosk below.</div>
+                {fields.for ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/app/objects/${fields.for}`)}
+                    className="text-xs text-primary hover:underline font-mono break-all"
+                  >
+                    View kiosk
+                  </button>
+                ) : null}
+              </div>
+            )}
             {/* NFT preview - big image when the NFT carries one, else a generated
                 tile + name + attributes so stat-only NFTs still read visually.
                 Prefers real Sui Display-standard data (already {field}-substituted
                 server-side) over the heuristic content.fields guess when present. */}
-            {isNft && (() => {
-              const resolvedDisplay = data.display?.data ?? null;
-              const previewName = resolvedDisplay?.name || nftMeta?.name || structName || 'NFT';
-              const previewImageUrl = resolvedDisplay?.image_url || nftMeta?.imageUrl || null;
-              const extraRows = [
-                { label: 'Description', value: resolvedDisplay?.description },
-                { label: 'Link', value: resolvedDisplay?.link },
-                { label: 'Project', value: resolvedDisplay?.project_url },
-                { label: 'Creator', value: resolvedDisplay?.creator },
-              ].filter((r) => r.value);
-              const stillLoading = !hasResolvedDisplay && !nftMeta;
-              const hasNothing =
-                !previewImageUrl && extraRows.length === 0 && (!nftMeta || nftMeta.attributes.length === 0);
-              return (
-                <div className="p-4 border border-border rounded-lg flex gap-4 items-start">
-                  {previewImageUrl ? (
-                    <img
-                      src={previewImageUrl}
-                      alt={previewName.trim()}
-                      className="w-28 h-28 rounded-lg object-cover flex-shrink-0 bg-muted"
-                      loading="lazy"
-                    />
-                  ) : (
-                    // No on-chain image - generative dither-kit pixel avatar seeded by the object id.
-                    <DitherAvatar name={objectId || type} size={112} className="rounded-lg flex-shrink-0" />
-                  )}
-                  <div className="min-w-0 flex-1 space-y-1.5">
-                    <div className="text-base font-semibold text-foreground truncate">{previewName}</div>
-                    <div className="text-xs text-tertiary font-mono truncate">{type.split('::').slice(-2).join('::')}</div>
-                    {extraRows.map((r) => (
-                      <div key={r.label} className="text-xs text-muted-foreground truncate">
-                        {r.label}: <span className="text-foreground">{r.value}</span>
-                      </div>
-                    ))}
-                    {nftMeta && nftMeta.attributes.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pt-0.5">
-                        {nftMeta.attributes.map((a) => (
-                          <span key={a.label} className="text-[11px] px-2 py-0.5 rounded bg-muted text-muted-foreground">
-                            {a.label} <span className="text-foreground font-medium">{a.value}</span>
-                          </span>
-                        ))}
-                      </div>
+            {isNft &&
+              (() => {
+                const resolvedDisplay = data.display?.data ?? null;
+                const previewName = resolvedDisplay?.name || nftMeta?.name || structName || 'NFT';
+                const previewImageUrl = isWalrusBlob
+                  ? WALRUS_BLOB_IMAGE_URL
+                  : resolvedDisplay?.image_url || nftMeta?.imageUrl || null;
+                const extraRows = [
+                  { label: 'Description', value: resolvedDisplay?.description },
+                  { label: 'Link', value: resolvedDisplay?.link },
+                  { label: 'Project', value: resolvedDisplay?.project_url },
+                  { label: 'Creator', value: resolvedDisplay?.creator },
+                ].filter((r) => r.value);
+                const stillLoading = !hasResolvedDisplay && !nftMeta;
+                const hasNothing =
+                  !previewImageUrl &&
+                  extraRows.length === 0 &&
+                  (!nftMeta || nftMeta.attributes.length === 0);
+                return (
+                  <div className="p-4 border border-border rounded-lg flex gap-4 items-start">
+                    {previewImageUrl ? (
+                      <img
+                        src={previewImageUrl}
+                        alt={previewName.trim()}
+                        className={`w-28 h-28 rounded-lg flex-shrink-0 bg-muted ${
+                          isWalrusBlob ? 'object-contain p-2' : 'object-cover'
+                        }`}
+                        loading="lazy"
+                      />
+                    ) : (
+                      // No on-chain image - generative dither-kit pixel avatar seeded by the object id.
+                      <DitherAvatar
+                        name={objectId || type}
+                        size={112}
+                        className="rounded-lg flex-shrink-0"
+                      />
                     )}
-                    {stillLoading && <div className="text-xs text-muted-foreground">Loading preview…</div>}
-                    {!stillLoading && hasNothing && (
-                      <div className="text-xs text-muted-foreground">This NFT has no on-chain image or attributes.</div>
-                    )}
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <div className="text-base font-semibold text-foreground truncate">
+                        {previewName}
+                      </div>
+                      <div className="text-xs text-tertiary font-mono truncate">
+                        {type.split('::').slice(-2).join('::')}
+                      </div>
+                      {extraRows.map((r) => (
+                        <div key={r.label} className="text-xs text-muted-foreground truncate">
+                          {r.label}: <span className="text-foreground">{r.value}</span>
+                        </div>
+                      ))}
+                      {nftMeta && nftMeta.attributes.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-0.5">
+                          {nftMeta.attributes.map((a) => (
+                            <span
+                              key={a.label}
+                              className="text-[11px] px-2 py-0.5 rounded bg-muted text-muted-foreground"
+                            >
+                              {a.label}{' '}
+                              <span className="text-foreground font-medium">{a.value}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {stillLoading && (
+                        <div className="text-xs text-muted-foreground">Loading preview…</div>
+                      )}
+                      {!stillLoading && hasNothing && (
+                        <div className="text-xs text-muted-foreground">
+                          This NFT has no on-chain image or attributes.
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })()}
+                );
+              })()}
             {/* Coin Actions Panel - shown only for Coin objects */}
             {isCoin && coinType && (
               <div className="p-4 bg-card border border-border rounded-lg">
@@ -446,29 +665,65 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
                 <div className="text-xs text-muted-foreground mb-2">Quick Actions</div>
                 <div className="grid grid-cols-3 gap-2">
                   <button
+                    type="button"
                     onClick={handleCoinTransfer}
                     className="flex flex-col items-center gap-1.5 p-3 bg-muted/60 hover:bg-accent text-foreground rounded-lg border border-border transition-colors"
                   >
-                    <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    <svg
+                      aria-hidden="true"
+                      className="w-5 h-5 text-muted-foreground"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                      />
                     </svg>
                     <span className="text-xs font-medium">Transfer</span>
                   </button>
                   <button
+                    type="button"
                     onClick={handleCoinSplit}
                     className="flex flex-col items-center gap-1.5 p-3 bg-muted/60 hover:bg-accent text-foreground rounded-lg border border-border transition-colors"
                   >
-                    <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                    <svg
+                      aria-hidden="true"
+                      className="w-5 h-5 text-muted-foreground"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                      />
                     </svg>
                     <span className="text-xs font-medium">Split</span>
                   </button>
                   <button
+                    type="button"
                     onClick={handleCoinMerge}
                     className="flex flex-col items-center gap-1.5 p-3 bg-muted/60 hover:bg-accent text-foreground rounded-lg border border-border transition-colors"
                   >
-                    <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14v6m-3-3h6M6 10h2a4 4 0 004-4V4M6 10a4 4 0 01-4-4V4m4 6v6a4 4 0 004 4h2" />
+                    <svg
+                      aria-hidden="true"
+                      className="w-5 h-5 text-muted-foreground"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M17 14v6m-3-3h6M6 10h2a4 4 0 004-4V4M6 10a4 4 0 01-4-4V4m4 6v6a4 4 0 004 4h2"
+                      />
                     </svg>
                     <span className="text-xs font-medium">Merge</span>
                   </button>
@@ -477,12 +732,7 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
             )}
 
             {/* Type */}
-            <InfoRow
-              label="Type"
-              value={type}
-              onCopy={() => onCopy(type, 'Type')}
-              truncate
-            />
+            <InfoRow label="Type" value={type} onCopy={() => onCopy(type, 'Type')} truncate />
 
             {/* Version & Digest */}
             <div className="grid grid-cols-2 gap-3">
@@ -496,17 +746,68 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
               />
             </div>
 
+            {/* Version history - Sui's Lamport-timestamp version chain
+                (https://docs.sui.io/develop/objects/versioning). GraphQL/indexer-only, so
+                unavailable on networks with no public GraphQL endpoint (e.g. localnet) -
+                degrades to a quiet "unavailable" rather than erroring. */}
+            {previousTransaction && (
+              <div className="p-3 bg-muted/30 rounded-lg">
+                <button
+                  type="button"
+                  onClick={loadVersionHistory}
+                  disabled={isLoadingVersionHistory || Boolean(versionHistory)}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:cursor-default"
+                >
+                  {isLoadingVersionHistory
+                    ? 'Loading version history…'
+                    : versionHistory
+                      ? 'Version history'
+                      : 'View version history'}
+                </button>
+                {versionHistory &&
+                  (versionHistory.length > 0 ? (
+                    <div className="space-y-1.5 pt-2">
+                      {versionHistory.map((h, i) => (
+                        <div key={h.txDigest} className="text-xs font-mono flex items-center gap-2">
+                          <span className="text-tertiary">
+                            {i === 0 ? 'v' : '↑ v'}
+                            {h.version}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenExplorer('tx', h.txDigest)}
+                            className="text-primary hover:underline truncate"
+                          >
+                            {h.txDigest.slice(0, 12)}...
+                          </button>
+                          {h.timestampMs && (
+                            <span className="text-tertiary">
+                              {new Date(h.timestampMs).toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-tertiary pt-1">
+                      Unavailable - no GraphQL endpoint for this network, or history couldn't be
+                      walked back.
+                    </div>
+                  ))}
+              </div>
+            )}
+
             {/* Owner */}
             <div className="p-3 bg-muted/30 rounded-lg">
               <div className="text-xs text-muted-foreground mb-1">Owner ({ownerInfo.type})</div>
               <div className="text-sm font-mono text-foreground break-all">
                 {ownerInfo.value.length > 42
                   ? `${ownerInfo.value.slice(0, 20)}...${ownerInfo.value.slice(-8)}`
-                  : ownerInfo.value
-                }
+                  : ownerInfo.value}
               </div>
               {ownerInfo.type === 'Address' && (
                 <button
+                  type="button"
                   onClick={() => onCopy(ownerInfo.value, 'Owner address')}
                   className="mt-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
@@ -515,6 +816,7 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
               )}
               {ownerInfo.linkObjectId && (
                 <button
+                  type="button"
                   onClick={() => navigate(`/app/objects/${ownerInfo.linkObjectId}`)}
                   className="mt-2 text-xs text-primary hover:underline transition-colors"
                 >
@@ -528,7 +830,7 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
               <div className="p-3 bg-muted/30 rounded-lg">
                 <div className="text-xs text-muted-foreground mb-1">Storage Rebate</div>
                 <div className="text-sm font-mono text-foreground">
-                  {(parseInt(storageRebate) / 1_000_000_000).toFixed(6)} SUI
+                  {(parseInt(storageRebate, 10) / 1_000_000_000).toFixed(6)} SUI
                 </div>
               </div>
               <div className="p-3 bg-muted/30 rounded-lg">
@@ -544,11 +846,20 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
                   title={
                     knowsPublicTransfer
                       ? undefined
-                      : "Not reported by this object's fetch - not the same as \"No\""
+                      : 'Not reported by this object\'s fetch - not the same as "No"'
                   }
                 >
                   {knowsPublicTransfer ? (hasPublicTransfer ? 'Yes' : 'No') : 'Unknown'}
                 </div>
+                {/* This is Sui's "store" ability - i.e. Custom Transfer Rules:
+                    https://docs.sui.io/develop/objects/transfers/custom-rules */}
+                {knowsPublicTransfer && (
+                  <div className="text-[11px] text-tertiary mt-0.5">
+                    {hasPublicTransfer
+                      ? 'Anyone can transfer this (has store)'
+                      : "Only this object's module can transfer it - custom transfer rules"}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -558,6 +869,7 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
                 the real fetched count confirms there's actually something attached. */}
             {(isKnownContainerType || (dynamicFieldCount?.count ?? 0) > 0) && (
               <button
+                type="button"
                 onClick={() => navigate(`/app/dynamic-fields?objectId=${objectId}`)}
                 className="w-full p-3 bg-card border border-border rounded-lg hover:bg-accent transition-colors group"
               >
@@ -579,8 +891,19 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
                       View attached key-value data (Table, Bag, etc.)
                     </div>
                   </div>
-                  <svg className="w-4 h-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  <svg
+                    aria-hidden="true"
+                    className="w-4 h-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 5l7 7-7 7"
+                    />
                   </svg>
                 </div>
               </button>
@@ -608,21 +931,45 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
               {/* Quick Actions */}
               <div className="flex gap-2">
                 <button
+                  type="button"
                   onClick={() => handleOpenExplorer('object', objectId)}
                   className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-secondary hover:bg-secondary/80 rounded-lg text-sm font-medium transition-colors"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  <svg
+                    aria-hidden="true"
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                    />
                   </svg>
                   Object
                 </button>
                 {packageId && (
                   <button
+                    type="button"
                     onClick={() => handleOpenExplorer('package', packageId)}
                     className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-secondary hover:bg-secondary/80 rounded-lg text-sm font-medium transition-colors"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    <svg
+                      aria-hidden="true"
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                      />
                     </svg>
                     Package
                   </button>
@@ -632,8 +979,8 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
           </div>
         )}
 
-        {activeTab === 'memory' && (
-          isLoadingBlob ? (
+        {activeTab === 'memory' &&
+          (isLoadingBlob ? (
             <div className="flex items-center justify-center py-8">
               <Spinner />
             </div>
@@ -645,8 +992,7 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
               walletAddresses={addresses}
               onCopy={onCopy}
             />
-          )
-        )}
+          ))}
 
         {activeTab === 'fields' && (
           <div className="space-y-2">
@@ -679,7 +1025,12 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
                 <Spinner />
               </div>
             ) : txBlock ? (
-              <TransactionView tx={txBlock as TransactionBlock} onCopy={onCopy} network={currentNetwork} onOpenExplorer={handleOpenExplorer} />
+              <TransactionView
+                tx={txBlock as TransactionBlock}
+                onCopy={onCopy}
+                network={currentNetwork}
+                onOpenExplorer={handleOpenExplorer}
+              />
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 Failed to load transaction
@@ -719,6 +1070,7 @@ function InfoRow({
       </div>
       {onCopy && (
         <button
+          type="button"
           onClick={onCopy}
           className="mt-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
@@ -746,6 +1098,7 @@ function FieldItem({
       <div className="flex items-center justify-between mb-1">
         <span className="text-xs font-medium text-foreground">{name}</span>
         <button
+          type="button"
           onClick={() => onCopy(displayValue, name)}
           className="text-xs text-muted-foreground hover:text-foreground"
         >
@@ -757,9 +1110,7 @@ function FieldItem({
           {displayValue}
         </pre>
       ) : (
-        <div className="text-sm font-mono text-foreground break-all">
-          {displayValue}
-        </div>
+        <div className="text-sm font-mono text-foreground break-all">{displayValue}</div>
       )}
     </div>
   );
@@ -792,8 +1143,9 @@ function formatBytes(value: unknown): string {
 function extractOption(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   if (typeof value === 'object') {
-    const vec = (value as { vec?: unknown[]; fields?: { vec?: unknown[] } }).vec
-      ?? (value as { fields?: { vec?: unknown[] } }).fields?.vec;
+    const vec =
+      (value as { vec?: unknown[]; fields?: { vec?: unknown[] } }).vec ??
+      (value as { fields?: { vec?: unknown[] } }).fields?.vec;
     if (Array.isArray(vec)) return vec.length > 0 ? String(vec[0]) : null;
     return null;
   }
@@ -816,12 +1168,19 @@ function WalrusBlobView({
   const blobId = fields.blob_id !== undefined ? String(fields.blob_id) : null;
   const size = fields.size;
   const encodingType = Number(fields.encoding_type ?? -1);
-  const registeredEpoch = fields.registered_epoch !== undefined ? String(fields.registered_epoch) : null;
+  const registeredEpoch =
+    fields.registered_epoch !== undefined ? String(fields.registered_epoch) : null;
   const certifiedEpoch = extractOption(fields.certified_epoch);
   const deletable = Boolean(fields.deletable);
 
-  const storageRaw = fields.storage as { fields?: Record<string, unknown> } | Record<string, unknown> | undefined;
-  const storage = (storageRaw as { fields?: Record<string, unknown> })?.fields ?? (storageRaw as Record<string, unknown>) ?? {};
+  const storageRaw = fields.storage as
+    | { fields?: Record<string, unknown> }
+    | Record<string, unknown>
+    | undefined;
+  const storage =
+    (storageRaw as { fields?: Record<string, unknown> })?.fields ??
+    (storageRaw as Record<string, unknown>) ??
+    {};
 
   return (
     <div className="space-y-3">
@@ -837,6 +1196,7 @@ function WalrusBlobView({
           <div className="text-xs text-muted-foreground mb-1">Blob ID</div>
           <div className="text-sm font-mono text-foreground break-all">{blobId}</div>
           <button
+            type="button"
             onClick={() => onCopy(blobId, 'Blob ID')}
             className="mt-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
@@ -878,7 +1238,9 @@ function WalrusBlobView({
         </div>
         <div className="p-3 bg-muted/30 rounded-lg">
           <div className="text-xs text-muted-foreground mb-1">Deletable</div>
-          <div className="text-sm font-medium text-foreground">{deletable ? 'Yes' : 'No (permanent for storage period)'}</div>
+          <div className="text-sm font-medium text-foreground">
+            {deletable ? 'Yes' : 'No (permanent for storage period)'}
+          </div>
         </div>
       </div>
 
@@ -888,7 +1250,9 @@ function WalrusBlobView({
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
               <span className="text-muted-foreground">From epoch: </span>
-              <span className="font-mono text-foreground">{String(storage.start_epoch ?? '-')}</span>
+              <span className="font-mono text-foreground">
+                {String(storage.start_epoch ?? '-')}
+              </span>
             </div>
             <div>
               <span className="text-muted-foreground">Until epoch: </span>
@@ -897,7 +1261,9 @@ function WalrusBlobView({
             {storage.storage_size !== undefined && (
               <div className="col-span-2">
                 <span className="text-muted-foreground">Reserved space: </span>
-                <span className="font-mono text-foreground">{formatBytes(storage.storage_size)}</span>
+                <span className="font-mono text-foreground">
+                  {formatBytes(storage.storage_size)}
+                </span>
               </div>
             )}
           </div>
@@ -925,7 +1291,9 @@ function WalrusMemoryDecryptSection({
   walletAddresses: { address: string; alias?: string; isActive?: boolean }[];
   onCopy: (text: string, label: string) => void;
 }) {
-  const [accountInfo, setAccountInfo] = useState<MemwalAccountSummary | null | undefined>(undefined);
+  const [accountInfo, setAccountInfo] = useState<MemwalAccountSummary | null | undefined>(
+    undefined
+  );
   const [signerAddress, setSignerAddress] = useState('');
   const [isDecrypting, setIsDecrypting] = useState(false);
   const [decryptResult, setDecryptResult] = useState<DecryptResult | null>(null);
@@ -940,12 +1308,12 @@ function WalrusMemoryDecryptSection({
   const [removingDelegate, setRemovingDelegate] = useState<string | null>(null);
   const [removeDelegateError, setRemoveDelegateError] = useState<string | null>(null);
 
-  const refreshAccountInfo = (owner: string) => {
+  const refreshAccountInfo = useCallback((owner: string) => {
     setAccountInfo(undefined);
     return getWalrusMemoryAccount(owner)
       .then((res) => setAccountInfo(res.account))
       .catch(() => setAccountInfo(null));
-  };
+  }, []);
 
   useEffect(() => {
     // Reset so the owner-signer effect below re-evaluates against the new
@@ -956,8 +1324,7 @@ function WalrusMemoryDecryptSection({
       return;
     }
     refreshAccountInfo(ownerAddress);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ownerAddress]);
+  }, [ownerAddress, refreshAccountInfo]);
 
   useEffect(() => {
     if (!signerAddress && walletAddresses.length > 0) {
@@ -972,7 +1339,7 @@ function WalrusMemoryDecryptSection({
     // the real on-chain owner is known - see refreshAccountInfo above.
     if (ownerSignerAddress || walletAddresses.length === 0 || accountInfo === undefined) return;
     const ownerInWallet = accountInfo?.owner
-      ? walletAddresses.find((a) => a.address.toLowerCase() === accountInfo.owner!.toLowerCase())
+      ? walletAddresses.find((a) => a.address.toLowerCase() === accountInfo.owner?.toLowerCase())
       : undefined;
     const active = walletAddresses.find((a) => a.isActive);
     setOwnerSignerAddress(ownerInWallet?.address ?? active?.address ?? walletAddresses[0].address);
@@ -1021,7 +1388,11 @@ function WalrusMemoryDecryptSection({
     setRemovingDelegate(delegateToRemove);
     setRemoveDelegateError(null);
     try {
-      await removeWalrusMemoryDelegateKey(accountInfo.accountId, ownerSignerAddress, delegateToRemove);
+      await removeWalrusMemoryDelegateKey(
+        accountInfo.accountId,
+        ownerSignerAddress,
+        delegateToRemove
+      );
       if (ownerAddress) await refreshAccountInfo(ownerAddress);
     } catch (err) {
       setRemoveDelegateError(err instanceof Error ? err.message : String(err));
@@ -1040,6 +1411,7 @@ function WalrusMemoryDecryptSection({
           <div className="flex items-center justify-between gap-2">
             <span className="font-mono text-foreground break-all">{accountInfo.accountId}</span>
             <button
+              type="button"
               onClick={() => onCopy(accountInfo.accountId, 'Account ID')}
               className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
             >
@@ -1056,9 +1428,12 @@ function WalrusMemoryDecryptSection({
                 <div key={k.suiAddress} className="flex items-center justify-between gap-2 pl-2">
                   <span className="text-foreground truncate">
                     {k.label || k.suiAddress.slice(0, 10)}{' '}
-                    <span className="text-muted-foreground font-mono">({k.suiAddress.slice(0, 10)}…)</span>
+                    <span className="text-muted-foreground font-mono">
+                      ({k.suiAddress.slice(0, 10)}…)
+                    </span>
                   </span>
                   <button
+                    type="button"
                     onClick={() => handleRemoveDelegate(k.suiAddress)}
                     disabled={removingDelegate !== null || !ownerSignerAddress}
                     className="text-error hover:underline flex-shrink-0 disabled:opacity-50"
@@ -1079,7 +1454,9 @@ function WalrusMemoryDecryptSection({
         </div>
       ) : (
         <div className="text-xs text-muted-foreground">
-          {ownerAddress ? 'No Walrus Memory account found for this owner' : 'Owner address unavailable'}
+          {ownerAddress
+            ? 'No Walrus Memory account found for this owner'
+            : 'Owner address unavailable'}
         </div>
       )}
 
@@ -1099,6 +1476,7 @@ function WalrusMemoryDecryptSection({
           ))}
         </select>
         <button
+          type="button"
           onClick={handleDecrypt}
           disabled={isDecrypting || !signerAddress}
           className="w-full px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
@@ -1130,8 +1508,8 @@ function WalrusMemoryDecryptSection({
       {accountInfo && (
         <div className="border-t border-border pt-3 space-y-2">
           <div className="text-xs text-muted-foreground">
-            Add a delegate account (lets a second address decrypt this account's memories - must be signed by
-            the account owner, whose key must be in your local sui.keystore)
+            Add a delegate account (lets a second address decrypt this account's memories - must be
+            signed by the account owner, whose key must be in your local sui.keystore)
           </div>
           <select
             value={ownerSignerAddress}
@@ -1160,8 +1538,14 @@ function WalrusMemoryDecryptSection({
             className="w-full text-xs bg-secondary border-none rounded px-2 py-2 text-foreground placeholder:text-muted-foreground"
           />
           <button
+            type="button"
             onClick={handleAddDelegate}
-            disabled={isAddingDelegate || !ownerSignerAddress || !delegateAddress.trim() || !delegateLabel.trim()}
+            disabled={
+              isAddingDelegate ||
+              !ownerSignerAddress ||
+              !delegateAddress.trim() ||
+              !delegateLabel.trim()
+            }
             className="w-full px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
           >
             {isAddingDelegate ? 'Adding delegate…' : 'Add delegate account'}
@@ -1208,10 +1592,9 @@ function PackageSummaryView({
     <div className="space-y-3">
       <div className="p-3 bg-muted/30 rounded-lg">
         <div className="text-xs text-muted-foreground mb-1">Package ID</div>
-        <div className="text-sm font-mono text-foreground truncate">
-          {summary.packageId}
-        </div>
+        <div className="text-sm font-mono text-foreground truncate">{summary.packageId}</div>
         <button
+          type="button"
           onClick={() => onCopy(summary.packageId, 'Package ID')}
           className="mt-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
@@ -1226,6 +1609,7 @@ function PackageSummaryView({
       {summary.modules?.map((module) => (
         <div key={module.name} className="border border-border rounded-lg overflow-hidden">
           <button
+            type="button"
             onClick={() => setExpandedModule(expandedModule === module.name ? null : module.name)}
             className="w-full flex items-center justify-between p-3 bg-muted/20 hover:bg-muted/40 transition-colors"
           >
@@ -1235,6 +1619,7 @@ function PackageSummaryView({
                 {Object.keys(module.functions || {}).length} functions
               </span>
               <svg
+                aria-hidden="true"
                 className={`w-4 h-4 text-muted-foreground transition-transform ${
                   expandedModule === module.name ? 'rotate-180' : ''
                 }`}
@@ -1242,7 +1627,12 @@ function PackageSummaryView({
                 stroke="currentColor"
                 viewBox="0 0 24 24"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
               </svg>
             </div>
           </button>
@@ -1267,14 +1657,18 @@ function PackageSummaryView({
               {/* Functions */}
               {module.functions && Object.keys(module.functions).length > 0 && (
                 <div>
-                  <div className="text-xs font-medium text-muted-foreground mb-1 mt-2">Functions</div>
+                  <div className="text-xs font-medium text-muted-foreground mb-1 mt-2">
+                    Functions
+                  </div>
                   {Object.entries(module.functions).map(([name, func]) => (
                     <div key={name} className="text-xs font-mono py-1 flex items-center gap-2">
-                      <span className={`px-1.5 py-0.5 rounded text-xs ${
-                        func.visibility === 'Public'
-                          ? 'bg-success/20 text-success'
-                          : 'bg-muted text-muted-foreground'
-                      }`}>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-xs ${
+                          func.visibility === 'Public'
+                            ? 'bg-success/20 text-success'
+                            : 'bg-muted text-muted-foreground'
+                        }`}
+                      >
                         {func.visibility === 'Public' ? 'pub' : 'priv'}
                       </span>
                       <span className="text-foreground">{name}</span>
@@ -1331,7 +1725,9 @@ function TransactionView({
     <div className="space-y-3">
       {/* Status */}
       <div className="flex items-center gap-2 p-3 bg-muted/30 rounded-lg">
-        <div className={`w-2 h-2 rounded-full ${status === 'success' ? 'bg-success' : 'bg-error'}`} />
+        <div
+          className={`w-2 h-2 rounded-full ${status === 'success' ? 'bg-success' : 'bg-error'}`}
+        />
         <span className="text-sm font-medium text-foreground capitalize">{status}</span>
         <span className="text-xs text-muted-foreground ml-auto">
           Epoch {tx.effects?.executedEpoch}
@@ -1343,6 +1739,7 @@ function TransactionView({
         <div className="text-xs text-muted-foreground mb-1">Transaction Digest</div>
         <div className="text-sm font-mono text-foreground truncate">{tx.digest}</div>
         <button
+          type="button"
           onClick={() => onCopy(tx.digest, 'Tx Digest')}
           className="mt-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
@@ -1363,30 +1760,31 @@ function TransactionView({
           <div>
             <span className="text-muted-foreground">Computation: </span>
             <span className="font-mono text-foreground">
-              {(parseInt(gasUsed.computationCost || '0') / 1_000_000_000).toFixed(6)} SUI
+              {(parseInt(gasUsed.computationCost || '0', 10) / 1_000_000_000).toFixed(6)} SUI
             </span>
           </div>
           <div>
             <span className="text-muted-foreground">Storage: </span>
             <span className="font-mono text-foreground">
-              {(parseInt(gasUsed.storageCost || '0') / 1_000_000_000).toFixed(6)} SUI
+              {(parseInt(gasUsed.storageCost || '0', 10) / 1_000_000_000).toFixed(6)} SUI
             </span>
           </div>
           <div>
             <span className="text-muted-foreground">Rebate: </span>
             <span className="font-mono text-foreground">
-              {(parseInt(gasUsed.storageRebate || '0') / 1_000_000_000).toFixed(6)} SUI
+              {(parseInt(gasUsed.storageRebate || '0', 10) / 1_000_000_000).toFixed(6)} SUI
             </span>
           </div>
           <div>
             <span className="text-muted-foreground">Total: </span>
             <span className="font-mono text-foreground">
               {(
-                (parseInt(gasUsed.computationCost || '0') +
-                  parseInt(gasUsed.storageCost || '0') -
-                  parseInt(gasUsed.storageRebate || '0')) /
+                (parseInt(gasUsed.computationCost || '0', 10) +
+                  parseInt(gasUsed.storageCost || '0', 10) -
+                  parseInt(gasUsed.storageRebate || '0', 10)) /
                 1_000_000_000
-              ).toFixed(6)} SUI
+              ).toFixed(6)}{' '}
+              SUI
             </span>
           </div>
         </div>
@@ -1410,11 +1808,23 @@ function TransactionView({
 
       {/* View on Explorer */}
       <button
+        type="button"
         onClick={() => tx.digest && onOpenExplorer('tx', tx.digest)}
         className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-secondary hover:bg-secondary/80 rounded-lg text-sm font-medium transition-colors"
       >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        <svg
+          aria-hidden="true"
+          className="w-4 h-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+          />
         </svg>
         View on Explorer ({network})
       </button>

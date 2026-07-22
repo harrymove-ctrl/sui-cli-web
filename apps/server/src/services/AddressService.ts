@@ -1,10 +1,20 @@
-import { SuiCliExecutor } from '../cli/SuiCliExecutor';
+import type { GasCoin, SuiAddress } from '@sui-cli-web/shared';
 import { ConfigParser } from '../cli/ConfigParser';
-import type { SuiAddress, GasCoin } from '@sui-cli-web/shared';
-import { getBalanceViaGrpc, getTransactionBalanceEffectsViaGrpc } from '../utils/suiGrpcClient';
+import { SuiCliExecutor } from '../cli/SuiCliExecutor';
 import type { TransactionBalanceEffect } from '../utils/suiGrpcClient';
-import { getObjectsJsonViaGrpc, getOwnedObjectsViaGrpc, getTransactionTimestampsViaGrpc } from '../utils/suiGrpcClient';
-import { GraphQLService } from './GraphQLService';
+import {
+  getBalanceViaGrpc,
+  getObjectsJsonViaGrpc,
+  getOwnedObjectsViaGrpc,
+  getTransactionBalanceEffectsViaGrpc,
+  getTransactionTimestampsViaGrpc,
+} from '../utils/suiGrpcClient';
+import {
+  getAddressBalanceEffects,
+  getObjectVersionHistory,
+  getTransactionSummary,
+  getTransactionTimestamps,
+} from './GraphQLService';
 
 export interface BlobSummary {
   objectId: string;
@@ -20,14 +30,15 @@ export interface BlobSummary {
   /** Checkpoint timestamp (ms) of the transaction that last touched this object. */
   lastTouchedMs: number | null;
 }
-import { decodeRawObject, type DecodedRawObject } from '../utils/rawObjectDecode';
+
+import { type DecodedRawObject, decodeRawObject } from '../utils/rawObjectDecode';
 import {
-  validateModuleName,
   validateFunctionName,
-  validateTypeArgs,
+  validateModuleName,
   validateMoveArgs,
   validateObjectId,
   validateOptionalGasBudget,
+  validateTypeArgs,
 } from '../utils/validation';
 
 // Constants
@@ -41,7 +52,7 @@ interface AddressCache {
   data: SuiAddress[];
   timestamp: number;
 }
-let addressCache: AddressCache | null = null;
+const addressCache: AddressCache | null = null;
 const ADDRESS_CACHE_TTL_MS = 30_000; // 30 seconds
 
 // Cache for balances with stale-while-revalidate pattern
@@ -172,7 +183,9 @@ export class AddressService {
           .map((line) => {
             const parts = line.trim().split(/\s+/);
             const addr = parts.find((p) => p.startsWith('0x'));
-            const alias = parts.find((p) => !p.startsWith('0x') && p !== 'Active' && p !== 'Address');
+            const alias = parts.find(
+              (p) => !p.startsWith('0x') && p !== 'Active' && p !== 'Address'
+            );
             if (addr) {
               return {
                 address: addr,
@@ -193,7 +206,10 @@ export class AddressService {
     // OPTIMIZED: Batch fetch ALL balances in ONE RPC call
     if (addresses.length > 0 && rpcUrl) {
       const balanceMap = includeBalance
-        ? await this.fetchBalancesBatch(addresses.map((a) => a.address), rpcUrl)
+        ? await this.fetchBalancesBatch(
+            addresses.map((a) => a.address),
+            rpcUrl
+          )
         : new Map<string, string>();
 
       addresses = addresses.map((addr) => ({
@@ -292,11 +308,15 @@ export class AddressService {
     // Revalidate stale addresses in background (non-blocking)
     if (staleAddresses.length > 0) {
       // Mark as in progress to avoid duplicate revalidations
-      staleAddresses.forEach((addr) => BALANCE_REVALIDATION_IN_PROGRESS.add(addr));
+      staleAddresses.forEach((addr) => {
+        BALANCE_REVALIDATION_IN_PROGRESS.add(addr);
+      });
 
       // Don't await - let it run in background
       this.revalidateBalancesInBackground(staleAddresses, rpcUrl).finally(() => {
-        staleAddresses.forEach((addr) => BALANCE_REVALIDATION_IN_PROGRESS.delete(addr));
+        staleAddresses.forEach((addr) => {
+          BALANCE_REVALIDATION_IN_PROGRESS.delete(addr);
+        });
       });
     }
 
@@ -391,7 +411,7 @@ export class AddressService {
   private async fetchBalanceViaRpc(address: string, rpcUrl: string): Promise<string> {
     try {
       const mist = await getBalanceViaGrpc(address, rpcUrl, SUI_COIN_TYPE);
-      return (parseInt(mist) / MIST_PER_SUI).toFixed(4);
+      return (parseInt(mist, 10) / MIST_PER_SUI).toFixed(4);
     } catch {
       // Fall back to JSON-RPC below (e.g. node doesn't support gRPC-Web yet)
     }
@@ -417,7 +437,7 @@ export class AddressService {
 
     const totalBalance = data.result?.totalBalance;
     if (totalBalance) {
-      return (parseInt(totalBalance) / MIST_PER_SUI).toFixed(4);
+      return (parseInt(totalBalance, 10) / MIST_PER_SUI).toFixed(4);
     }
     return '0';
   }
@@ -446,7 +466,7 @@ export class AddressService {
             if (Array.isArray(coins)) {
               for (const coin of coins) {
                 if (coin.coinType === SUI_COIN_TYPE) {
-                  totalSui += parseInt(coin.balance || '0');
+                  totalSui += parseInt(coin.balance || '0', 10);
                 }
               }
             }
@@ -458,14 +478,18 @@ export class AddressService {
       if (Array.isArray(data) && data.length > 0) {
         const suiBalance = data.find((b: any) => b.coinType === SUI_COIN_TYPE);
         if (suiBalance?.totalBalance) {
-          return (parseInt(suiBalance.totalBalance) / MIST_PER_SUI).toFixed(4);
+          return (parseInt(suiBalance.totalBalance, 10) / MIST_PER_SUI).toFixed(4);
         }
       }
 
       return '0';
     } catch (e) {
       const errStr = String(e);
-      if (errStr.includes('No gas objects') || errStr.includes('No coins') || errStr.includes('not found')) {
+      if (
+        errStr.includes('No gas objects') ||
+        errStr.includes('No coins') ||
+        errStr.includes('not found')
+      ) {
         return '0';
       }
       throw e;
@@ -480,7 +504,7 @@ export class AddressService {
       if (Array.isArray(data)) {
         return data.map((coin: any) => ({
           coinObjectId: coin.gasCoinId || coin.gas_coin_id || coin.id?.id || '',
-          balance: String(coin.mistBalance || coin.mist_balance || parseInt(coin.balance) || 0),
+          balance: String(coin.mistBalance || coin.mist_balance || parseInt(coin.balance, 10) || 0),
           version: coin.version || '',
           digest: coin.digest || '',
         }));
@@ -496,7 +520,16 @@ export class AddressService {
     amounts: string[],
     gasBudget: string = '10000000'
   ): Promise<string> {
-    const args = ['client', 'split-coin', '--coin-id', coinId, '--amounts', ...amounts, '--gas-budget', gasBudget];
+    const args = [
+      'client',
+      'split-coin',
+      '--coin-id',
+      coinId,
+      '--amounts',
+      ...amounts,
+      '--gas-budget',
+      gasBudget,
+    ];
     return this.executor.execute(args, { json: true });
   }
 
@@ -603,7 +636,7 @@ export class AddressService {
   public async getTransactionBlock(digest: string): Promise<any> {
     const rpcUrl = await this.getActiveRpcUrl();
     if (rpcUrl) {
-      const summary = await GraphQLService.getTransactionSummary(digest, rpcUrl);
+      const summary = await getTransactionSummary(digest, rpcUrl);
       if (summary) return summary;
     }
 
@@ -611,10 +644,23 @@ export class AddressService {
     return JSON.parse(output);
   }
 
+  /** GraphQL-only (see `getObjectVersionHistory` in GraphQLService.ts for why there's no CLI
+   * fallback) - returns `null` when there's no active RPC / no GraphQL endpoint for this
+   * network, or `[]` when the walk found nothing (e.g. genesis reached immediately). */
+  public async getObjectVersionHistory(
+    objectId: string,
+    currentVersion: string,
+    currentPreviousTx: string
+  ): Promise<{ version: string; txDigest: string; timestampMs: number | null }[] | null> {
+    const rpcUrl = await this.getActiveRpcUrl();
+    if (!rpcUrl) return null;
+    return getObjectVersionHistory(objectId, currentVersion, currentPreviousTx, rpcUrl);
+  }
+
   public async getPackageSummary(packageId: string): Promise<any> {
-    const fs = await import('fs/promises');
-    const path = await import('path');
-    const os = await import('os');
+    const fs = await import('node:fs/promises');
+    const path = await import('node:path');
+    const os = await import('node:os');
 
     // Create temp directory for output
     const tempDir = path.join(os.tmpdir(), `sui-pkg-${Date.now()}`);
@@ -792,17 +838,20 @@ export class AddressService {
       { timestamp: Date.now(), balance: Number(currentBalanceMist) / MIST_PER_SUI },
     ];
 
-    let effects: TransactionBalanceEffect[] | null =
-      await GraphQLService.getAddressBalanceEffects(address, rpcUrl);
+    let effects: TransactionBalanceEffect[] | null = await getAddressBalanceEffects(
+      address,
+      rpcUrl
+    );
 
     if (effects === null) {
       const objects = await this.getObjects(address);
       const digests = objects
         .map((obj) => obj.previousTransaction)
         .filter((d): d is string => typeof d === 'string' && d.length > 0);
-      effects = digests.length > 0
-        ? await getTransactionBalanceEffectsViaGrpc(address, digests, rpcUrl)
-        : [];
+      effects =
+        digests.length > 0
+          ? await getTransactionBalanceEffectsViaGrpc(address, digests, rpcUrl)
+          : [];
     }
 
     if (effects.length === 0) {
@@ -853,7 +902,7 @@ export class AddressService {
     // activity. Fall back to gRPC only where GraphQL isn't available (localnet).
     let timestamps: Record<string, number> | null = null;
     if (digests.length > 0) {
-      timestamps = await GraphQLService.getTransactionTimestamps(digests, rpcUrl);
+      timestamps = await getTransactionTimestamps(digests, rpcUrl);
       if (timestamps === null) {
         timestamps = await getTransactionTimestampsViaGrpc(digests, rpcUrl);
       }
@@ -881,7 +930,9 @@ export class AddressService {
         storageStartEpoch: toNumber(storage.start_epoch),
         storageEndEpoch: toNumber(storage.end_epoch),
         storageSize: toNumber(storage.storage_size),
-        lastTouchedMs: obj.previousTransaction ? (timestamps[obj.previousTransaction] ?? null) : null,
+        lastTouchedMs: obj.previousTransaction
+          ? (timestamps[obj.previousTransaction] ?? null)
+          : null,
       };
     });
   }
@@ -925,14 +976,24 @@ export interface NftMetadata {
   attributes: { label: string; value: string }[];
 }
 
-const IMAGE_FIELD_KEYS = ['image_url', 'image', 'img_url', 'imageuri', 'image_uri', 'url', 'media_url', 'media'];
+const IMAGE_FIELD_KEYS = [
+  'image_url',
+  'image',
+  'img_url',
+  'imageuri',
+  'image_uri',
+  'url',
+  'media_url',
+  'media',
+];
 
 /** ipfs://CID and bare CIDs -> a public gateway; http(s)/data URIs pass through. */
 function normalizeImageUrl(raw: string): string | null {
   const v = raw.trim();
   if (!v) return null;
   if (v.startsWith('http://') || v.startsWith('https://') || v.startsWith('data:')) return v;
-  if (v.startsWith('ipfs://')) return `https://ipfs.io/ipfs/${v.slice('ipfs://'.length).replace(/^ipfs\//, '')}`;
+  if (v.startsWith('ipfs://'))
+    return `https://ipfs.io/ipfs/${v.slice('ipfs://'.length).replace(/^ipfs\//, '')}`;
   if (/^(Qm[1-9A-Za-z]{44}|baf[0-9a-z]+)/.test(v)) return `https://ipfs.io/ipfs/${v}`;
   return null;
 }
