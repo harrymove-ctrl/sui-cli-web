@@ -35,7 +35,7 @@
     "dev:client": "npm run dev -w @sui-cli-web/client",
     "dev:marketing": "npm run dev -w @sui-cli-web/marketing",
     "dev:blog": "npm run dev:marketing",
-    "build": "npm run build -w @sui-cli-web/shared && npm run build -w sui-cli-web-server && npm run build -w @sui-cli-web/client && npm run build -w @sui-cli-web/marketing && node -e \"const fs=require('fs');for(const p of ['_astro','changelog'])fs.cpSync('apps/marketing/dist/'+p,'apps/web/dist/blog/'+p,{recursive:true})\"",
+    "build": "npm run build -w @sui-cli-web/shared && npm run build -w sui-cli-web-server && npm run build -w @sui-cli-web/client && npm run build -w @sui-cli-web/marketing && node -e \"const fs=require('fs');for(const p of ['_astro','changelog','images/changelog'])fs.cpSync('apps/marketing/dist/'+p,'apps/web/dist/blog/'+p,{recursive:true})\"",
     "build:server": "npm run build -w sui-cli-web-server",
     "build:client": "npm run build -w @sui-cli-web/client",
     "build:marketing": "npm run build -w @sui-cli-web/marketing",
