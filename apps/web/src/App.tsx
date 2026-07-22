@@ -49,6 +49,7 @@ export function App() {
   // Determine if we're in app routes
   const isAppRoute = location.pathname.startsWith('/app');
   const isMoveDevStudio = location.pathname === '/app/move';
+  const isSetupRoute = location.pathname === '/setup';
   const isKnownRoute = ['/', '/setup'].includes(location.pathname) || location.pathname.startsWith('/app');
   const is404Page = !isKnownRoute;
 
@@ -71,8 +72,8 @@ export function App() {
         {showAnimatedBackground ? (
           <Suspense fallback={<div className="w-full h-full bg-gradient-to-br from-[#0a1929] via-[#0d2137] to-[#0a1929]" />}>
             <FaultyTerminal
-              tint={is404Page ? "#ef4444" : isMoveDevStudio ? "#22c55e" : isAppRoute ? "#4da2ff" : "#ff0000"}
-              brightness={is404Page ? 0.35 : isMoveDevStudio ? 0.2 : isAppRoute ? 0.3 : 0.25}
+              tint={is404Page ? "#ef4444" : isMoveDevStudio ? "#22c55e" : isAppRoute ? "#4da2ff" : isSetupRoute ? "#ffffff" : "#ff0000"}
+              brightness={is404Page ? 0.35 : isMoveDevStudio ? 0.2 : isAppRoute ? 0.3 : isSetupRoute ? 0.18 : 0.25}
               scale={is404Page ? 1.5 : isMoveDevStudio ? 0.5 : isAppRoute ? 1.0 : 1.9}
               gridMul={isMoveDevStudio ? [4, 2] : [2, 1]}
               digitSize={isMoveDevStudio ? 1.2 : 1.3}

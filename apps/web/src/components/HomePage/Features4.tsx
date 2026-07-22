@@ -87,20 +87,20 @@ export function Features4({ autoPlay = true, autoPlayDelay = 5000 }: Features4Pr
 
   return (
     <section
-      className="relative z-20 py-8 sm:py-10 lg:py-24 max-w-6xl mx-auto px-2 sm:px-4 font-mono"
+      className="relative z-20 py-8 sm:py-10 lg:py-24 max-w-6xl mx-auto px-2 sm:px-4"
       aria-labelledby="features4-heading"
     >
       <div className="mb-6 sm:mb-12 text-center">
-        <span className="text-rose-400 text-xs sm:text-sm tracking-wider uppercase" aria-hidden="true">
+        <span className="text-foreground text-xs sm:text-sm tracking-wider uppercase" aria-hidden="true">
           Features
         </span>
         <h2
           id="features4-heading"
-          className="text-2xl sm:text-3xl lg:text-5xl lg:leading-tight max-w-5xl mx-auto text-center tracking-tight font-bold text-white mt-1 sm:mt-2"
+          className="text-2xl sm:text-3xl lg:text-5xl lg:leading-tight max-w-5xl mx-auto text-center tracking-tight font-bold text-foreground mt-1 sm:mt-2"
         >
           Everything you need
         </h2>
-        <p className="text-xs sm:text-sm lg:text-base max-w-2xl my-2 sm:my-4 mx-auto text-white/50 text-center font-normal px-4">
+        <p className="text-xs sm:text-sm lg:text-base max-w-2xl my-2 sm:my-4 mx-auto text-foreground/50 text-center font-normal px-4">
           A complete toolkit for Sui blockchain. All operations run locally.
         </p>
       </div>
@@ -118,16 +118,16 @@ export function Features4({ autoPlay = true, autoPlayDelay = 5000 }: Features4Pr
                 onClick={() => handleTabClick(index)}
                 className={`w-full text-left p-4 md:p-5 rounded-xl border transition-colors duration-200 flex-1 flex items-start ${
                   isActive
-                    ? 'bg-rose-500/10 border-rose-500/40'
-                    : 'bg-black/30 border-white/10 hover:border-white/20'
+                    ? 'bg-foreground/10 border-foreground/40'
+                    : 'bg-background/30 border-foreground/10 hover:border-foreground/20'
                 }`}
               >
                 <div className="flex items-start gap-3 sm:gap-4">
                   <div
                     className={`shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center transition-colors duration-200 ${
                       isActive
-                        ? 'bg-rose-500 text-white'
-                        : 'bg-white/5 text-white/70 border border-white/10'
+                        ? 'bg-foreground text-foreground'
+                        : 'bg-foreground/5 text-foreground/70 border border-foreground/10'
                     }`}
                   >
                     <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -136,14 +136,14 @@ export function Features4({ autoPlay = true, autoPlayDelay = 5000 }: Features4Pr
                   <div className="flex-1 min-w-0">
                     <h3
                       className={`text-sm sm:text-base font-semibold mb-1 ${
-                        isActive ? 'text-white' : 'text-white/80'
+                        isActive ? 'text-foreground' : 'text-foreground/80'
                       }`}
                     >
                       {tab.title}
                     </h3>
                     <p
                       className={`text-xs sm:text-sm line-clamp-2 ${
-                        isActive ? 'text-white/60' : 'text-white/40'
+                        isActive ? 'text-foreground/60' : 'text-foreground/40'
                       }`}
                     >
                       {tab.description}
@@ -164,21 +164,21 @@ export function Features4({ autoPlay = true, autoPlayDelay = 5000 }: Features4Pr
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
-              className="rounded-xl sm:rounded-2xl border border-white/10 bg-black/30 backdrop-blur-sm p-6 md:p-8 lg:p-10 flex-1"
+              className="rounded-xl sm:rounded-2xl border border-foreground/10 bg-background/30 backdrop-blur-sm p-6 md:p-8 lg:p-10 flex-1"
             >
               <div className="mb-6 sm:mb-8">
-                <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-rose-500/10 border border-rose-500/30 mb-4 sm:mb-6">
+                <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-foreground/10 border border-foreground/30 mb-4 sm:mb-6">
                   {(() => {
                     const Icon = tabs[activeTab].icon;
-                    return <Icon className="w-6 h-6 sm:w-8 sm:h-8 text-rose-400" />;
+                    return <Icon className="w-6 h-6 sm:w-8 sm:h-8 text-foreground" />;
                   })()}
                 </div>
 
-                <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2 sm:mb-3">
+                <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground mb-2 sm:mb-3">
                   {tabs[activeTab].title}
                 </h3>
 
-                <p className="text-sm sm:text-base md:text-lg text-white/50 leading-relaxed">
+                <p className="text-sm sm:text-base md:text-lg text-foreground/50 leading-relaxed">
                   {tabs[activeTab].description}
                 </p>
               </div>
@@ -190,12 +190,12 @@ export function Features4({ autoPlay = true, autoPlayDelay = 5000 }: Features4Pr
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.3, delay: index * 0.1 }}
-                    className="flex items-start gap-3 p-3 sm:p-4 rounded-lg sm:rounded-xl bg-white/5 border border-white/5"
+                    className="flex items-start gap-3 p-3 sm:p-4 rounded-lg sm:rounded-xl bg-foreground/5 border border-foreground/5"
                   >
-                    <div className="shrink-0 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-rose-500 flex items-center justify-center mt-0.5">
-                      <Check className="w-3 h-3 sm:w-4 sm:h-4 text-white" strokeWidth={3} />
+                    <div className="shrink-0 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-foreground flex items-center justify-center mt-0.5">
+                      <Check className="w-3 h-3 sm:w-4 sm:h-4 text-foreground" strokeWidth={3} />
                     </div>
-                    <span className="text-xs sm:text-sm md:text-base text-white/70 font-medium">
+                    <span className="text-xs sm:text-sm md:text-base text-foreground/70 font-medium">
                       {feature}
                     </span>
                   </motion.div>

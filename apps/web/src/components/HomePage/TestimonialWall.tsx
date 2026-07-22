@@ -26,18 +26,18 @@ export function TestimonialWall() {
           viewport={{ once: true, margin: "-80px" }}
           transition={{ duration: prefersReducedMotion ? 0.2 : 0.6 }}
         >
-          <p className="mb-8 font-mono text-xs uppercase tracking-[0.2em] text-white/30 sm:mb-10">
-            <span className="text-rose-500">$</span> who&apos;s shipping with it
+          <p className="mb-8 font-mono text-xs uppercase tracking-[0.2em] text-foreground/30 sm:mb-10">
+            <span className="text-foreground">$</span> who&apos;s shipping with it
           </p>
 
           <div style={DARK_TOKENS}>
             <Testimonials blur={4} dimOpacity={0.18}>
-              <Testimonial name="Linh Tran" title="Move Engineer, Suiflow">
+              <Testimonial name="Harry Phan" title="Smart Contract Engineer">
                 Publishing a package used to be four terminal tabs and a prayer.
                 Now it&apos;s one keystroke and I can actually read the object
                 changes.
               </Testimonial>
-              <Testimonial name="Marcus Reed" title="Founder, Onchain Labs">
+              <Testimonial name="Hulk" title="Smart Contract Engineer">
                 The gas breakdown alone paid for itself — we caught a loop that
                 was burning 40% of our budget on a single entry function.
               </Testimonial>

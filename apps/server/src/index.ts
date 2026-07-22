@@ -520,8 +520,16 @@ async function main() {
   });
 
   // Serve static UI & blog assets if built (for deployment on Railway)
-  const webDistPath = path.resolve(process.cwd(), 'apps/web/dist');
-  if (fs.existsSync(webDistPath)) {
+  const candidatePaths = [
+    path.resolve(process.cwd(), 'apps/web/dist'),
+    path.resolve(process.cwd(), '../web/dist'),
+    path.resolve(process.cwd(), '../../apps/web/dist'),
+    '/app/apps/web/dist',
+  ];
+  const webDistPath = candidatePaths.find(p => fs.existsSync(p));
+
+  if (webDistPath) {
+    console.log(`[Static] Serving UI & Blog static files from: ${webDistPath}`);
     await fastify.register(fastifyStatic, {
       root: webDistPath,
       prefix: '/',
@@ -535,6 +543,8 @@ async function main() {
         reply.sendFile('index.html', webDistPath);
       }
     });
+  } else {
+    console.log('[Static] Warning: No static web dist folder found in candidates:', candidatePaths);
   }
 
   // Start server

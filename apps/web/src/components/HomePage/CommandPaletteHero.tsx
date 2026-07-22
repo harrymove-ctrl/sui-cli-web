@@ -64,7 +64,7 @@ const row: Variants = {
 
 function Key({ children }: { children: ReactNode }) {
   return (
-    <kbd className="inline-flex h-6 min-w-6 items-center justify-center rounded-md border border-white/15 bg-white/[0.06] px-1.5 text-[11px] font-medium text-white/60 shadow-sm">
+    <kbd className="inline-flex h-6 min-w-6 items-center justify-center rounded-md border border-foreground/15 bg-foreground/[0.06] px-1.5 text-[11px] font-medium text-foreground/60 shadow-sm">
       {children}
     </kbd>
   );
@@ -80,7 +80,7 @@ export function CommandPaletteHero() {
         <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(250,250,250,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(250,250,250,0.05)_1px,transparent_1px)] bg-[size:96px_96px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_38%,black,transparent)]" />
         <div className="absolute left-[6%] top-[38%] hidden h-56 w-36 bg-[radial-gradient(rgba(250,250,250,0.1)_1px,transparent_1px)] bg-[size:11px_11px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_72%)] lg:block" />
         <div className="absolute right-[6%] top-[24%] hidden h-56 w-36 bg-[radial-gradient(rgba(250,250,250,0.1)_1px,transparent_1px)] bg-[size:11px_11px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_72%)] lg:block" />
-        <div className="absolute left-1/2 top-1/3 h-[360px] w-[720px] max-w-[110vw] -translate-x-1/2 rounded-full bg-rose-500/10 blur-[110px]" />
+        <div className="absolute left-1/2 top-1/3 h-[360px] w-[720px] max-w-[110vw] -translate-x-1/2 rounded-full bg-foreground/10 blur-[110px]" />
       </div>
 
       <motion.div
@@ -91,30 +91,30 @@ export function CommandPaletteHero() {
       >
         <motion.div
           variants={item}
-          className="inline-flex items-center gap-2.5 rounded-full border border-rose-500/40 bg-rose-500/10 py-1.5 pl-1.5 pr-4 shadow-sm backdrop-blur"
+          className="inline-flex items-center gap-2.5 rounded-full border border-foreground/40 bg-foreground/10 py-1.5 pl-1.5 pr-4 shadow-sm backdrop-blur"
         >
-          <span className="inline-flex items-center rounded-full bg-rose-500 px-2.5 py-0.5 text-[11px] font-medium text-white">
+          <span className="inline-flex items-center rounded-full bg-foreground px-2.5 py-0.5 text-[11px] font-medium text-foreground">
             ⌘K
           </span>
-          <span className="text-xs font-medium text-rose-300 sm:text-sm">
+          <span className="text-xs font-medium text-foreground sm:text-sm">
             Every Sui action, one command bar
           </span>
         </motion.div>
 
         <motion.h1
           variants={headline}
-          className="mt-8 max-w-4xl text-4xl font-black leading-[1.02] tracking-tighter text-white sm:text-6xl md:text-7xl"
+          className="mt-8 max-w-4xl text-4xl font-normal leading-[1.06] tracking-tight text-foreground sm:text-6xl md:text-7xl"
         >
           Your whole Sui stack,
           <br />
-          <span className="bg-gradient-to-r from-rose-400 via-rose-500 to-pink-500 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-foreground via-foreground to-foreground bg-clip-text text-transparent">
             one keystroke away.
           </span>
         </motion.h1>
 
         <motion.p
           variants={item}
-          className="mt-6 max-w-xl text-base leading-relaxed text-white/60 sm:text-lg"
+          className="mt-6 max-w-xl text-base leading-relaxed text-foreground/60 sm:text-lg"
         >
           sui-cli-web indexes your wallets, objects, packages, and Move tooling into a single
           command bar that runs 100% locally — zero cloud, max security.
@@ -122,16 +122,16 @@ export function CommandPaletteHero() {
 
         <motion.div
           variants={panel}
-          className="mt-12 w-full max-w-2xl rounded-3xl border border-white/10 bg-black/70 text-left shadow-2xl shadow-black/50 backdrop-blur-md"
+          className="mt-12 w-full max-w-2xl rounded-3xl border border-foreground/10 bg-background/70 text-left shadow-2xl shadow-black/50 backdrop-blur-md"
         >
-          <div className="flex items-center gap-3 border-b border-white/10 px-5 py-4">
-            <Search className="h-5 w-5 shrink-0 text-white/40" />
+          <div className="flex items-center gap-3 border-b border-foreground/10 px-5 py-4">
+            <Search className="h-5 w-5 shrink-0 text-foreground/40" />
             <div className="flex min-w-0 flex-1 items-center">
-              <span className="truncate text-sm text-white sm:text-base">transfer</span>
+              <span className="truncate text-sm text-foreground sm:text-base">transfer</span>
               {!reduceMotion && (
                 <motion.span
                   aria-hidden="true"
-                  className="ml-px inline-block h-5 w-px bg-white"
+                  className="ml-px inline-block h-5 w-px bg-foreground"
                   animate={{ opacity: [1, 1, 0, 0] }}
                   transition={{ duration: 1.06, times: [0, 0.5, 0.5, 1], repeat: Infinity }}
                 />
@@ -145,11 +145,11 @@ export function CommandPaletteHero() {
               <span
                 key={scope.label}
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ${
-                  scope.active ? 'bg-white/10 text-white' : 'text-white/50'
+                  scope.active ? 'bg-foreground/10 text-foreground' : 'text-foreground/50'
                 }`}
               >
                 {scope.label}
-                <span className={scope.active ? 'text-white/30' : 'text-white/20'}>
+                <span className={scope.active ? 'text-foreground/30' : 'text-foreground/20'}>
                   {scope.count}
                 </span>
               </span>
@@ -157,7 +157,7 @@ export function CommandPaletteHero() {
           </div>
 
           <div className="px-5 pb-1 pt-4">
-            <span className="text-xs font-medium uppercase tracking-[0.2em] text-white/30">
+            <span className="text-xs font-medium uppercase tracking-[0.2em] text-foreground/30">
               Top results
             </span>
           </div>
@@ -168,13 +168,13 @@ export function CommandPaletteHero() {
                 key={title}
                 variants={row}
                 className={`relative flex items-center gap-3 overflow-hidden rounded-xl px-3 py-2.5 ${
-                  active ? 'bg-white/[0.06]' : ''
+                  active ? 'bg-foreground/[0.06]' : ''
                 }`}
               >
                 {active && !reduceMotion && (
                   <motion.span
                     aria-hidden="true"
-                    className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.07] to-transparent"
+                    className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-foreground/[0.07] to-transparent"
                     initial={{ x: '-140%' }}
                     animate={{ x: '140%' }}
                     transition={{
@@ -185,17 +185,17 @@ export function CommandPaletteHero() {
                     }}
                   />
                 )}
-                <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/70">
+                <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-foreground/10 bg-foreground/[0.04] text-foreground/70">
                   <Icon className="h-4 w-4" />
                 </span>
-                <span className="relative min-w-0 flex-1 truncate text-sm font-medium text-white">
+                <span className="relative min-w-0 flex-1 truncate text-sm font-medium text-foreground">
                   {title}
                 </span>
-                <span className="relative hidden shrink-0 text-xs text-white/30 sm:block">
+                <span className="relative hidden shrink-0 text-xs text-foreground/30 sm:block">
                   {source}
                 </span>
                 {active && (
-                  <span className="relative flex shrink-0 items-center gap-1.5 text-xs text-white/50">
+                  <span className="relative flex shrink-0 items-center gap-1.5 text-xs text-foreground/50">
                     <span className="hidden sm:inline">Open</span>
                     <Key>↵</Key>
                   </span>
@@ -204,8 +204,8 @@ export function CommandPaletteHero() {
             ))}
           </div>
 
-          <div className="flex items-center justify-between border-t border-white/10 px-5 py-3">
-            <div className="flex items-center gap-4 text-xs text-white/30">
+          <div className="flex items-center justify-between border-t border-foreground/10 px-5 py-3">
+            <div className="flex items-center gap-4 text-xs text-foreground/30">
               <span className="flex items-center gap-1.5">
                 <Key>↑</Key>
                 <Key>↓</Key>
@@ -216,7 +216,7 @@ export function CommandPaletteHero() {
                 <span className="hidden sm:inline">open</span>
               </span>
             </div>
-            <span className="text-xs font-medium text-white/30">sui-cli-web</span>
+            <span className="text-xs font-medium text-foreground/30">sui-cli-web</span>
           </div>
         </motion.div>
 
@@ -226,13 +226,13 @@ export function CommandPaletteHero() {
         >
           <button
             onClick={() => navigate('/app')}
-            className="group inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full bg-rose-500 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-rose-500/20 transition-colors duration-200 hover:bg-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:ring-offset-2 focus-visible:ring-offset-black sm:w-auto sm:px-7"
+            className="group inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full bg-foreground px-6 py-3 text-sm font-bold text-foreground shadow-lg shadow-background/20 transition-colors duration-200 hover:bg-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-black sm:w-auto sm:px-7"
           >
             <Zap className="h-4 w-4" />
             Open sui-cli-web
             <ArrowRight className="ml-0.5 h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </button>
-          <p className="flex items-center gap-2 text-sm text-white/40">
+          <p className="flex items-center gap-2 text-sm text-foreground/40">
             or press <Key>⌘</Key> <Key>K</Key> anywhere
           </p>
         </motion.div>
