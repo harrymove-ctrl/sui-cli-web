@@ -1,35 +1,35 @@
-import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
-import path from 'path';
+import Fastify from 'fastify';
 import fs from 'fs';
+import { createRequire } from 'module';
+import path from 'path';
+import { SuiCliExecutor } from './cli/SuiCliExecutor';
 import { addressRoutes } from './routes/address';
+import { coinRoutes } from './routes/coin';
+import { devtoolsRoutes } from './routes/devtools';
+import { dynamicFieldsRoutes } from './routes/dynamic-fields';
 import { environmentRoutes } from './routes/environment';
+import { eventsRoutes } from './routes/events';
 import { faucetRoutes } from './routes/faucet';
-import { transferRoutes } from './routes/transfer';
+import { filesystemRoutes } from './routes/filesystem';
+import { gasRoutes } from './routes/gas';
+import { inspectorRoutes } from './routes/inspector';
 import { keyManagementRoutes } from './routes/key-management';
 import { keytoolRoutes } from './routes/keytool';
+import { localNetworkRoutes } from './routes/local-network';
+import { migrationRoutes } from './routes/migration';
 import { moveRoutes } from './routes/move';
+import { outputsRoutes } from './routes/outputs';
 import { packageRoutes } from './routes/package';
-import { inspectorRoutes } from './routes/inspector';
-import { filesystemRoutes } from './routes/filesystem';
-import { dynamicFieldsRoutes } from './routes/dynamic-fields';
-import { devtoolsRoutes } from './routes/devtools';
-import { securityRoutes } from './routes/security';
-import { coinRoutes } from './routes/coin';
+import { payRoutes } from './routes/pay';
 // New routes for enhanced features
 import { ptbBuilderRoutes } from './routes/ptb-builder';
 import { replayRoutes } from './routes/replay';
-import { gasRoutes } from './routes/gas';
-import { eventsRoutes } from './routes/events';
-import { migrationRoutes } from './routes/migration';
-import { localNetworkRoutes } from './routes/local-network';
-import { payRoutes } from './routes/pay';
-import { outputsRoutes } from './routes/outputs';
+import { securityRoutes } from './routes/security';
+import { transferRoutes } from './routes/transfer';
 import { walrusMemoryRoutes } from './routes/walrusMemory';
-import { SuiCliExecutor } from './cli/SuiCliExecutor';
 import { createRateLimitHook } from './utils/rateLimiter';
-import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json');
@@ -38,7 +38,11 @@ const PACKAGE_NAME = pkg.name;
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 // Automatically bind to 0.0.0.0 in Railway/Cloud platforms or when HOST is set
-const isCloud = !!(process.env.RAILWAY_STATIC_URL || process.env.RAILWAY_SERVICE_ID || process.env.PORT);
+const isCloud = !!(
+  process.env.RAILWAY_STATIC_URL ||
+  process.env.RAILWAY_SERVICE_ID ||
+  process.env.PORT
+);
 const HOST = process.env.HOST || (isCloud ? '0.0.0.0' : '127.0.0.1');
 
 // Check for updates from npm registry
@@ -143,12 +147,29 @@ async function main() {
       }
 
       // Allowed origins from environment (comma-separated) or defaults
-      const envOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()).filter(Boolean) || [];
+      const envOrigins =
+        process.env.ALLOWED_ORIGINS?.split(',')
+          .map((o) => o.trim())
+          .filter(Boolean) || [];
+
+      // This server also serves the built UI, so requests can legitimately come
+      // from its own public domain. The bundle is loaded via <script type="module"
+      // crossorigin>, which makes the browser send an Origin header even for
+      // same-origin requests - so without these entries the app rejects its own
+      // asset requests and fails to boot. The platform hands us the hostname
+      // (no protocol), and it changes per environment, so read it rather than
+      // hardcoding it.
+      const selfOrigins = [process.env.RAILWAY_PUBLIC_DOMAIN, process.env.RAILWAY_STATIC_URL]
+        .filter((host): host is string => Boolean(host))
+        .map((host) => (host.startsWith('http') ? host : `https://${host}`));
+
       const allowedOrigins = [
         // Production domains (defaults)
         'https://cli.firstmovers.io',
         'https://www.harriweb3.dev',
         'https://harriweb3.dev',
+        // The deployment's own domain(s)
+        ...selfOrigins,
         // Additional origins from environment
         ...envOrigins,
       ];
@@ -179,7 +200,11 @@ async function main() {
 
       // Log rejected origin for debugging
       console.log(`[CORS] Rejected origin: ${origin}`);
-      cb(new Error('Not allowed by CORS'), false);
+      // Deny by omitting the CORS headers, rather than throwing. Throwing here
+      // turns every disallowed request into a 500 Internal Server Error, which
+      // both misreports the cause and floods the logs - a refused origin is not
+      // a server fault. The browser still blocks the response either way.
+      cb(null, false);
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
@@ -526,7 +551,7 @@ async function main() {
     path.resolve(process.cwd(), '../../apps/web/dist'),
     '/app/apps/web/dist',
   ];
-  const webDistPath = candidatePaths.find(p => fs.existsSync(p));
+  const webDistPath = candidatePaths.find((p) => fs.existsSync(p));
 
   if (webDistPath) {
     console.log(`[Static] Serving UI & Blog static files from: ${webDistPath}`);
