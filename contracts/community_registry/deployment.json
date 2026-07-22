@@ -1,9 +1,0 @@
-{
-  "network": "testnet",
-  "deployer_address": "0x010030a0afc40b6d8fe99cee368cab5652baa0d36b7be60a9b017d5228c0bdfd",
-  "deployed_at": "2024-12-05",
-  "package_id": "0xffb8f17c91212d170cb0fee4128b8b44277bfd19af040590cfae08c1abd2bbd2",
-  "registry_id": "0x7bf988f34c98d5b69d60264083c581d90fa97c51e902846bed491c0f6bf9b80b",
-  "upgrade_cap_id": "0xbd8a966a583849490166f5da62f92909f4f21c1d04aeed5dee2e0688a429d0dd",
-  "deploy_tx": "5VzTox1hRX4feF9gzWoUUPcMLY5YWmMauYqiu6UrKap5"
-}

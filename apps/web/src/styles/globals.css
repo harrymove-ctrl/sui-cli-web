@@ -1,0 +1,661 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light theme (default) */
+    --background: 0 0% 100%;
+    --foreground: 220 15% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 15% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 12%;
+    --primary: 211 100% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 15% 96%;
+    --secondary-foreground: 220 15% 20%;
+    --muted: 220 15% 95%;
+    --muted-foreground: 220 10% 42%;
+    --accent: 220 15% 94%;
+    --accent-foreground: 220 15% 15%;
+    --destructive: 0 84% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 15% 88%;
+    --input: 220 15% 92%;
+    --ring: 211 100% 50%;
+    --radius: 0.625rem;
+    --text-tertiary: 220 10% 50%;
+
+    /* Sui brand color */
+    --sui-blue: #4da2ff;
+
+    /* Sui official Primary Gradient - sampled from live media kit asset
+       (firebasestorage.../Primary%20Gradient_..._2500x2500.png), dark->light stops */
+    --sui-gradient-dark: #000205;
+    --sui-gradient-deep: #002355;
+    --sui-gradient-mid: #003f87;
+    --sui-gradient-blue: #4da2ff;
+    --sui-gradient-light: #dcecff;
+
+    /* Terminal/CLI color tokens - kept dark-styled intentionally in both themes
+       (terminal surfaces are a deliberate visual metaphor, like an IDE's built-in
+       terminal staying dark under a light editor theme). Not part of this pass. */
+    --term-prompt: #4da2ff;
+    --term-success: #34c759;
+    --term-error: #ff453a;
+    --term-warning: #ff9f0a;
+    --term-info: #64d2ff;
+    --term-dim: rgba(255, 255, 255, 0.3);
+    --term-text: rgba(255, 255, 255, 0.8);
+    --term-muted: rgba(255, 255, 255, 0.4);
+    --term-bg: rgba(0, 0, 0, 0.4);
+    --term-border: rgba(255, 255, 255, 0.1);
+    --term-selection: rgba(77, 162, 255, 0.2);
+
+    /* Terminal syntax highlighting */
+    --term-keyword: #ff79c6;
+    --term-string: #f1fa8c;
+    --term-number: #bd93f9;
+    --term-function: #50fa7b;
+    --term-comment: #6272a4;
+    --term-operator: #ff79c6;
+    --term-variable: #8be9fd;
+    --term-type: #ffb86c;
+
+    /* Chart theme tokens (bklit.com system) - consumed directly by recharts
+       components via inline style, not through Tailwind's hsl(var(--x)) wrapper. */
+    --chart-background: oklch(1 0 0);
+    --chart-foreground: oklch(0.145 0.004 285);
+    --chart-foreground-muted: oklch(0.55 0.014 260);
+    --chart-line-primary: oklch(0.623 0.214 255);
+    --chart-line-secondary: oklch(0.705 0.015 265);
+    --chart-crosshair: oklch(0.4 0.1828 274.34);
+    --chart-grid: oklch(0.9 0 0);
+    --chart-tooltip-foreground: oklch(0.985 0 0);
+    --chart-tooltip-muted: oklch(0.65 0.01 260);
+    --chart-marker-background: oklch(0.97 0.005 260);
+    --chart-marker-border: oklch(0.85 0.01 260);
+    --chart-marker-foreground: oklch(0.3 0.01 260);
+    --chart-marker-badge-background: oklch(0 0 0);
+    --chart-marker-badge-foreground: oklch(1 0 0);
+    --chart-segment-background: oklch(0.5 0 0 / 0.06);
+    --chart-segment-line: oklch(0.5 0 0 / 0.25);
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    /* Dark theme (previous default, preserved as-is) */
+    --background: 220 15% 10%;
+    --foreground: 0 0% 98%;
+    --card: 220 15% 11%;
+    --card-foreground: 0 0% 98%;
+    --popover: 220 15% 9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 211 100% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 12% 16%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 220 12% 20%;
+    --muted-foreground: 220 10% 60%;
+    --accent: 220 12% 20%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 12% 18%;
+    --input: 220 12% 14%;
+    --ring: 211 100% 55%;
+    --text-tertiary: 220 10% 45%;
+
+    /* Chart theme tokens - dark overrides (bklit.com system) */
+    --chart-background: oklch(0.145 0 0);
+    --chart-foreground: oklch(0.45 0 0);
+    --chart-crosshair: oklch(0.45 0 0);
+    --chart-grid: oklch(0.25 0 0);
+    --chart-marker-background: oklch(0.25 0.01 260);
+    --chart-marker-border: oklch(0.4 0.01 260);
+    --chart-marker-foreground: oklch(0.9 0 0);
+    --chart-marker-badge-background: oklch(1 0 0);
+    --chart-marker-badge-foreground: oklch(0.15 0 0);
+    --chart-segment-background: oklch(1 0 0 / 0.06);
+    --chart-segment-line: oklch(1 0 0 / 0.25);
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    margin: 0;
+    padding: 0;
+    font-family: 'Geist Pixel', 'Geist', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI',
+      Roboto, sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    letter-spacing: -0.011em;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #444444;
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #555555;
+  }
+
+  /* Selection */
+  ::selection {
+    background: rgba(0, 122, 255, 0.3);
+    color: #ffffff;
+  }
+
+  /* Recharts gives every chart's root SVG tabIndex=0 for a11y (accessibilityLayer
+     defaults to true) - without a themed focus-visible style it shows the browser's
+     stock blue ring around the whole chart on click/tab. Restyle it to something
+     on-brand instead of removing it (keeps the a11y focus indicator). */
+  .recharts-wrapper:focus-visible,
+  .recharts-surface:focus-visible {
+    outline: 1px solid rgba(77, 162, 255, 0.4);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Command palette input */
+  .command-input {
+    @apply w-full bg-transparent border-none outline-none text-foreground text-base;
+    @apply placeholder:text-muted-foreground;
+  }
+
+  /* Command item */
+  .command-item {
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer;
+    @apply transition-colors duration-75;
+  }
+
+  .command-item:hover,
+  .command-item[data-selected='true'] {
+    @apply bg-secondary;
+  }
+
+  .command-item[data-selected='true'] {
+    @apply bg-accent/20;
+  }
+
+  /* Section headers */
+  .section-header {
+    @apply text-xs font-semibold uppercase tracking-wider px-3 py-2;
+    @apply text-muted-foreground/80;
+    background: linear-gradient(90deg, transparent, hsl(var(--accent) / 0.05), transparent);
+  }
+
+  /* Keyboard shortcut */
+  .kbd {
+    @apply inline-flex items-center justify-center px-1.5 py-0.5;
+    @apply text-xs font-medium text-muted-foreground;
+    @apply bg-muted border border-border rounded;
+    @apply min-w-[20px];
+  }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply bg-success/20 text-success;
+  }
+
+  .badge-warning {
+    @apply bg-warning/20 text-warning;
+  }
+
+  .badge-error {
+    @apply bg-error/20 text-error;
+  }
+
+  .badge-accent {
+    @apply bg-accent/20 text-accent;
+  }
+
+  /* Terminal/CLI specific components */
+  .term-section {
+    @apply bg-[var(--term-bg)] backdrop-blur-sm border border-[var(--term-border)] rounded-lg overflow-hidden;
+  }
+
+  .term-header {
+    @apply flex items-center gap-2 px-3 py-2 border-b border-[var(--term-border)] font-mono text-xs;
+  }
+
+  .term-header-title {
+    @apply text-[var(--term-muted)] uppercase tracking-wider;
+  }
+
+  .term-content {
+    @apply p-3 font-mono text-sm text-[var(--term-text)];
+  }
+
+  /* Terminal prompt styling */
+  .term-prompt {
+    @apply text-[var(--term-prompt)] font-mono font-bold;
+  }
+
+  /* Terminal selection indicator */
+  .term-selected {
+    @apply bg-[var(--term-selection)] border-l-2 border-l-[var(--term-prompt)];
+  }
+
+  /* Terminal divider with ASCII style */
+  .term-divider {
+    @apply flex items-center gap-2 py-1.5 font-mono text-xs;
+  }
+
+  .term-divider::before {
+    content: '──[';
+    @apply text-white/20;
+  }
+
+  .term-divider::after {
+    content: ']';
+    @apply text-white/20;
+  }
+
+  /* Terminal status indicators */
+  .term-status-success {
+    @apply text-[var(--term-success)];
+  }
+
+  .term-status-error {
+    @apply text-[var(--term-error)];
+  }
+
+  .term-status-warning {
+    @apply text-[var(--term-warning)];
+  }
+
+  .term-status-info {
+    @apply text-[var(--term-info)];
+  }
+
+  /* Scanline effect for retro terminal feel */
+  .term-scanlines {
+    position: relative;
+  }
+
+  .term-scanlines::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(255, 255, 255, 0.02) 2px,
+      rgba(255, 255, 255, 0.02) 4px
+    );
+  }
+
+  /* Terminal keyboard hint */
+  .term-kbd {
+    @apply px-1.5 py-0.5 text-[10px] font-mono bg-white/5 text-white/40 rounded border border-white/10;
+  }
+
+  /* Terminal command line style */
+  .term-cmdline {
+    @apply flex items-center gap-2 font-mono text-sm;
+  }
+
+  .term-cmdline-prompt {
+    @apply text-[var(--term-prompt)] font-bold flex-shrink-0;
+  }
+
+  .term-cmdline-input {
+    @apply flex-1 bg-transparent border-none outline-none text-white placeholder:text-white/30;
+  }
+
+  /* Terminal cursor */
+  .term-cursor {
+    @apply inline-block w-2 h-4 bg-[var(--term-prompt)] animate-blink;
+  }
+
+  /* Terminal list item */
+  .term-list-item {
+    @apply flex items-center gap-2 px-3 py-2 cursor-pointer transition-all duration-150 font-mono;
+    @apply border-l-2 border-l-transparent hover:bg-white/[0.02] hover:border-l-white/20;
+  }
+
+  .term-list-item[data-selected='true'] {
+    @apply bg-white/5 border-l-2 border-l-[var(--term-prompt)];
+  }
+
+  .term-list-item-indicator {
+    @apply text-xs font-bold w-3 flex-shrink-0 text-[var(--term-prompt)];
+  }
+}
+
+@layer utilities {
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Alias used by the vendored Tabs component */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Truncate with ellipsis */
+  .truncate-address {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Glass effect */
+  .glass {
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  /* Toast animations */
+  @keyframes enter {
+    0% {
+      transform: translateX(400px);
+      opacity: 0;
+    }
+    100% {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes leave {
+    0% {
+      transform: translateX(0);
+      opacity: 1;
+    }
+    100% {
+      transform: translateX(400px);
+      opacity: 0;
+    }
+  }
+
+  .animate-enter {
+    animation: enter 0.3s ease-out;
+  }
+
+  .animate-leave {
+    animation: leave 0.2s ease-in forwards;
+  }
+
+  /* Blob animation - floating gradient orbs */
+  @keyframes blob {
+    0%, 100% {
+      transform: translate(0, 0) scale(1);
+    }
+    25% {
+      transform: translate(20px, -50px) scale(1.1);
+    }
+    50% {
+      transform: translate(-20px, 20px) scale(0.9);
+    }
+    75% {
+      transform: translate(50px, 50px) scale(1.05);
+    }
+  }
+
+  .animate-blob {
+    animation: blob 20s infinite cubic-bezier(0.4, 0, 0.6, 1);
+  }
+
+  .animation-delay-2000 {
+    animation-delay: 2s;
+  }
+
+  .animation-delay-4000 {
+    animation-delay: 4s;
+  }
+
+  /* Shimmer effect - moving light */
+  @keyframes shimmer {
+    0% {
+      background-position: -200% center;
+    }
+    100% {
+      background-position: 200% center;
+    }
+  }
+
+  .animate-shimmer {
+    background-size: 200% auto;
+    animation: shimmer 8s linear infinite;
+  }
+
+  /* Scale in animation */
+  @keyframes scale-in {
+    0% {
+      transform: scale(0.95);
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  .animate-scale-in {
+    animation: scale-in 0.3s ease-out;
+  }
+
+  /* Pulse glow effect */
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 20px rgba(77, 162, 255, 0.3);
+    }
+    50% {
+      box-shadow: 0 0 40px rgba(77, 162, 255, 0.6), 0 0 60px rgba(14, 165, 233, 0.4);
+    }
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 3s ease-in-out infinite;
+  }
+
+  /* Floating particles effect */
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0) translateX(0);
+      opacity: 0.3;
+    }
+    50% {
+      transform: translateY(-20px) translateX(10px);
+      opacity: 0.6;
+    }
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  /* Gradient rotation */
+  @keyframes gradient-rotate {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  .animate-gradient-rotate {
+    animation: gradient-rotate 20s linear infinite;
+  }
+
+  /* 3D Curved/Sphere Effect - Creates depth and curvature on scale */
+  .transform-3d {
+    transform-style: preserve-3d;
+    perspective: 1200px;
+  }
+
+  /* Smooth 3D scale with curved sphere effect */
+  @keyframes scale-3d-curve {
+    0% {
+      transform: scale(0.92) translateZ(-30px) rotateX(-5deg);
+    }
+    50% {
+      transform: scale(1.03) translateZ(15px) rotateX(2deg) rotateY(1deg);
+    }
+    100% {
+      transform: scale(1) translateZ(0px) rotateX(0deg) rotateY(0deg);
+    }
+  }
+
+  .animate-scale-3d {
+    animation: scale-3d-curve 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  /* Normal panel - clean, no effects */
+  .curved-panel {
+    position: relative;
+    border-radius: 1.5rem;
+  }
+
+  /* Wide panel - clean, no curve effects */
+  .curved-panel-wide {
+    position: relative;
+    border-radius: 1.5rem;
+  }
+
+  /* Wrapper - only used for layout */
+  .curved-terminal-wrapper {
+    position: relative;
+  }
+
+  /* Terminal cursor blink animation */
+  @keyframes blink {
+    0%, 50% {
+      opacity: 1;
+    }
+    50.01%, 100% {
+      opacity: 0;
+    }
+  }
+
+  .animate-blink {
+    animation: blink 1s step-end infinite;
+  }
+
+  /* Animation delay utilities */
+  .animation-delay-100 {
+    animation-delay: 100ms;
+  }
+
+  .animation-delay-200 {
+    animation-delay: 200ms;
+  }
+
+  .animation-delay-300 {
+    animation-delay: 300ms;
+  }
+
+  .animation-delay-400 {
+    animation-delay: 400ms;
+  }
+
+  .animation-delay-500 {
+    animation-delay: 500ms;
+  }
+
+  /* Vendored from shadcn's scroll-fade utility. A mask dissolves the content toward the
+     edges that have more to scroll, so a clipped list reads as "more below" instead of
+     just stopping. Static mask only - the scroll-driven animation that keeps the true
+     start/end edge crisp (so the top doesn't fade when you're already scrolled to the top)
+     wasn't part of the recipe this was vendored from; add it here if that's needed later.
+     Apply to a scroll container directly, or to a ScrollArea viewport via
+     `viewportClassName="scroll-fade"`. */
+  .scroll-fade {
+    --scroll-fade-size: 48px;
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 var(--scroll-fade-size),
+      #000 calc(100% - var(--scroll-fade-size)),
+      transparent 100%
+    );
+  }
+
+  .scroll-fade-x {
+    --scroll-fade-size: 48px;
+    mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      #000 var(--scroll-fade-size),
+      #000 calc(100% - var(--scroll-fade-size)),
+      transparent 100%
+    );
+  }
+}
+
+/* ============ TESTIMONIAL WALL ============
+   Tailwind v3 has no `not-*` variant, so the wall-wide dim/blur lives here as
+   plain CSS. One :has() rule fires for the whole wall in a single style pass —
+   the quotes never dim out of sync with each other. */
+[data-testimonial-wall]:has([data-testimonial-quote]:is(:hover, :focus-visible))
+  [data-testimonial-quote]:not(:hover):not(:focus-visible) {
+  opacity: var(--testimonial-dim, 0.2);
+  filter: blur(var(--testimonial-blur, 4px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-testimonial-wall]
+    [data-testimonial-quote]:not(:hover):not(:focus-visible) {
+    filter: blur(0px);
+  }
+}

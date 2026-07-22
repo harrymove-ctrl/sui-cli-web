@@ -109,7 +109,7 @@ function extractCoinType(fullType) {
   return match ? match[1] : null;
 }
 function isCoinType(type) {
-  return type.includes("0x2::coin::Coin<");
+  return type.includes("::coin::Coin<");
 }
 function getShortSymbol(coinType) {
   const parts = coinType.split("::");

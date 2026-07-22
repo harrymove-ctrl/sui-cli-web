@@ -6,11 +6,6 @@ export interface SuiAddress {
   isActive: boolean;
   balance?: string;
   objectCount?: number;
-  // Community membership fields
-  isCommunityMember?: boolean;
-  tierLevel?: number;
-  tierName?: string;
-  tierIcon?: string;
 }
 
 export interface SuiEnvironment {
@@ -308,6 +303,21 @@ export interface CoinGroupedResponse {
   totalCoins: number;
 }
 
+export interface PublishedPackageInfo {
+  packageId: string;
+  upgradeCapId: string;
+  version: string;
+  policy: number;
+}
+
+/** One combined per-wallet fetch (objects, coins, published packages) instead of 3
+ * separate requests each spawning their own `sui` CLI subprocess - see /addresses/:address/summary. */
+export interface WalletSummary {
+  objectCount: number;
+  packages: PublishedPackageInfo[];
+  coinGroups: CoinGroupedResponse;
+}
+
 export interface CoinMetadata {
   coinType: string;
   name: string;
@@ -355,8 +365,13 @@ export function extractCoinType(fullType: string): string | null {
 }
 
 // Helper to check if a type is a Coin type
+// Matches on the module path only ("::coin::Coin<"), not the package address prefix - the
+// framework package address can arrive as short-form ("0x2") or full 32-byte zero-padded
+// canonical form ("0x000...0002") depending on the CLI/RPC version, and a strict "0x2::coin::
+// Coin<" prefix match silently misses every object using the canonical form (real bug: this
+// hid the Coin Balance section - and Transfer/Split/Merge actions with it - for such objects).
 export function isCoinType(type: string): boolean {
-  return type.includes('0x2::coin::Coin<');
+  return type.includes('::coin::Coin<');
 }
 
 // Helper to get short symbol from coin type

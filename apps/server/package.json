@@ -1,0 +1,73 @@
+{
+  "name": "sui-cli-web-server",
+  "version": "1.5.0",
+  "description": "Local server that bridges your browser to Sui CLI. Manage addresses, transfer SUI, deploy Move contracts - all from a beautiful web UI. Private keys never leave your machine.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "sui-cli-web": "./bin/cli.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md"
+  ],
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup src/index.ts --format esm --dts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "sui",
+    "sui-blockchain",
+    "sui-cli",
+    "sui-wallet",
+    "blockchain",
+    "web3",
+    "move",
+    "move-lang",
+    "crypto",
+    "defi",
+    "nft",
+    "smart-contracts",
+    "cli-tool",
+    "developer-tools"
+  ],
+  "author": "hien-p",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hien-p/raycast-sui-cli.git"
+  },
+  "homepage": "https://cli.firstmovers.io",
+  "bugs": {
+    "url": "https://github.com/hien-p/raycast-sui-cli/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@fastify/static": "^7.0.1",
+    "@fastify/websocket": "^11.2.0",
+    "@mysten/seal": "0.9.6",
+    "@mysten/sui": "^1.45.2",
+    "chokidar": "^3.6.0",
+    "fastify": "^4.26.2",
+    "js-yaml": "^4.1.0",
+    "pino-pretty": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.11.30",
+    "@vitest/coverage-v8": "^4.0.16",
+    "tsup": "^8.0.2",
+    "tsx": "^4.7.1",
+    "typescript": "^5.4.5",
+    "vitest": "^4.0.16"
+  }
+}

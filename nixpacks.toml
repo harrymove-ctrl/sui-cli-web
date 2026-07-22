@@ -1,0 +1,8 @@
+[phases.setup]
+nixPkgs = ['nodejs-20_x', 'npm-9_x']
+
+[phases.build]
+cmds = ['ASTRO_TELEMETRY_DISABLED=1 npm run build']
+
+[start]
+cmd = 'npm start'

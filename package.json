@@ -26,21 +26,25 @@
   "author": "Harry Phan",
   "license": "MIT",
   "workspaces": [
+    "apps/*",
     "packages/*"
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "npm run dev -w sui-cli-web-server",
     "dev:client": "npm run dev -w @sui-cli-web/client",
-    "dev:blog": "npm run dev -w @sui-cli-web/blog",
-    "build": "npm run build -w @sui-cli-web/shared && npm run build -w sui-cli-web-server && npm run build -w @sui-cli-web/client && npm run build -w @sui-cli-web/blog && node -e \"require('fs').cpSync('packages/blog/dist','packages/client/dist/blog',{recursive:true})\"",
+    "dev:marketing": "npm run dev -w @sui-cli-web/marketing",
+    "dev:blog": "npm run dev:marketing",
+    "build": "npm run build -w @sui-cli-web/shared && npm run build -w sui-cli-web-server && npm run build -w @sui-cli-web/client && npm run build -w @sui-cli-web/marketing && node -e \"require('fs').cpSync('apps/marketing/dist','apps/web/dist/blog',{recursive:true})\"",
     "build:server": "npm run build -w sui-cli-web-server",
     "build:client": "npm run build -w @sui-cli-web/client",
-    "build:blog": "npm run build -w @sui-cli-web/blog",
-    "preview:blog": "npm run preview -w @sui-cli-web/blog",
+    "build:marketing": "npm run build -w @sui-cli-web/marketing",
+    "build:blog": "npm run build:marketing",
+    "preview:marketing": "npm run preview -w @sui-cli-web/marketing",
+    "preview:blog": "npm run preview:marketing",
     "start": "npm run start -w sui-cli-web-server",
     "lint": "npm run lint --workspaces --if-present",
-    "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules"
+    "clean": "rm -rf apps/*/dist apps/*/node_modules packages/*/dist packages/*/node_modules node_modules"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

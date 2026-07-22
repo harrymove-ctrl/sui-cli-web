@@ -1,0 +1,68 @@
+/**
+ * Object queries API
+ * @module api/services/objects
+ */
+
+import { fetchApi } from '../core/request';
+
+export async function getObject(objectId: string) {
+  return fetchApi<Record<string, unknown>>(`/objects/${objectId}`);
+}
+
+export async function getTransactionBlock(digest: string) {
+  return fetchApi<Record<string, unknown>>(`/tx/${digest}`);
+}
+
+export async function getDynamicFields(objectId: string, cursor?: string, limit?: number) {
+  const params = new URLSearchParams();
+  if (cursor) params.set('cursor', cursor);
+  if (limit) params.set('limit', String(limit));
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return fetchApi<{
+    objectId: string;
+    data: any[];
+    nextCursor: string | null;
+    hasNextPage: boolean;
+  }>(`/dynamic-fields/${objectId}${query}`);
+}
+
+export async function getObjectMetadata(objectId: string) {
+  return fetchApi<Record<string, unknown>>(`/inspector/object/${objectId}/metadata`);
+}
+
+export interface BlobSummary {
+  objectId: string;
+  blobId: string | null;
+  size: number | null;
+  encodingType: number | null;
+  registeredEpoch: number | null;
+  certifiedEpoch: number | null;
+  deletable: boolean;
+  storageStartEpoch: number | null;
+  storageEndEpoch: number | null;
+  storageSize: number | null;
+  lastTouchedMs: number | null;
+}
+
+export async function getBlobSummaries(objectIds: string[]) {
+  return fetchApi<BlobSummary[]>('/objects/blobs/summary', {
+    method: 'POST',
+    body: JSON.stringify({ objectIds }),
+  });
+}
+
+export interface NftMetadata {
+  objectId: string;
+  /** Resolved http(s)/data image URL, or null when the NFT carries no image. */
+  imageUrl: string | null;
+  name: string | null;
+  /** A few primitive fields (rarity, atk, ...) for the no-image fallback card. */
+  attributes: { label: string; value: string }[];
+}
+
+export async function getNftMetadata(objectIds: string[]) {
+  return fetchApi<NftMetadata[]>('/objects/nft-metadata', {
+    method: 'POST',
+    body: JSON.stringify({ objectIds }),
+  });
+}

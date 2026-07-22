@@ -4,10 +4,6 @@ interface SuiAddress {
     isActive: boolean;
     balance?: string;
     objectCount?: number;
-    isCommunityMember?: boolean;
-    tierLevel?: number;
-    tierName?: string;
-    tierIcon?: string;
 }
 interface SuiEnvironment {
     alias: string;
@@ -215,6 +211,19 @@ interface CoinGroupedResponse {
     totalCoinTypes: number;
     totalCoins: number;
 }
+interface PublishedPackageInfo {
+    packageId: string;
+    upgradeCapId: string;
+    version: string;
+    policy: number;
+}
+/** One combined per-wallet fetch (objects, coins, published packages) instead of 3
+ * separate requests each spawning their own `sui` CLI subprocess - see /addresses/:address/summary. */
+interface WalletSummary {
+    objectCount: number;
+    packages: PublishedPackageInfo[];
+    coinGroups: CoinGroupedResponse;
+}
 interface CoinMetadata {
     coinType: string;
     name: string;
@@ -254,4 +263,4 @@ declare function isCoinType(type: string): boolean;
 declare function getShortSymbol(coinType: string): string;
 declare const FAUCET_SOURCES: FaucetSource[];
 
-export { API_BASE_URL, type AddEnvironmentRequest, type ApiResponse, CATEGORIES, type CoinGroup, type CoinGroupedResponse, type CoinInfo, type CoinMetadata, type CoinOperationResult, type Command, type CommandResult, type CreateAddressRequest, DEFAULT_COMMANDS, type DryRunResult, type ExportKeyRequest, type ExportKeyResponse, FAUCET_SOURCES, type FaucetRequest, type FaucetResponse, type FaucetSource, type GasCoin, type GenericMergeRequest, type GenericSplitRequest, type GenericTransferCoinRequest, type ImportKeyRequest, type ImportKeyResponse, type MergeCoinRequest, NETWORKS, type SplitCoinRequest, type SuiAddress, type SuiEnvironment, type SuiKey, type SuiObject, type SwitchAddressRequest, type SwitchEnvironmentRequest, type TransferObjectRequest, type TransferResult, type TransferSuiRequest, type TransferableCoin, type TransferableObject, extractCoinType, getShortSymbol, isCoinType };
+export { API_BASE_URL, type AddEnvironmentRequest, type ApiResponse, CATEGORIES, type CoinGroup, type CoinGroupedResponse, type CoinInfo, type CoinMetadata, type CoinOperationResult, type Command, type CommandResult, type CreateAddressRequest, DEFAULT_COMMANDS, type DryRunResult, type ExportKeyRequest, type ExportKeyResponse, FAUCET_SOURCES, type FaucetRequest, type FaucetResponse, type FaucetSource, type GasCoin, type GenericMergeRequest, type GenericSplitRequest, type GenericTransferCoinRequest, type ImportKeyRequest, type ImportKeyResponse, type MergeCoinRequest, NETWORKS, type PublishedPackageInfo, type SplitCoinRequest, type SuiAddress, type SuiEnvironment, type SuiKey, type SuiObject, type SwitchAddressRequest, type SwitchEnvironmentRequest, type TransferObjectRequest, type TransferResult, type TransferSuiRequest, type TransferableCoin, type TransferableObject, type WalletSummary, extractCoinType, getShortSymbol, isCoinType };

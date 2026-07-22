@@ -1,0 +1,368 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Header from '../components/astro/Header.astro';
+import AnimatedGradientBackground from '../components/ui/animated-gradient-background';
+
+const releases = [
+  {
+    id: 'v1.3.3-performance-gas-profiler',
+    version: 'v1.3.3',
+    date: 'July 22, 2026',
+    dateTime: '2026-07-22',
+    accentColor: 'bg-cyan-400',
+    title: 'Performance: Real-time Gas Profiler, Multi-Coin Splitting & Batch Transfer',
+    prLinks: [
+      { pr: '142', url: 'https://github.com/hien-p/raycast-sui-cli/pull/142' },
+      { pr: '145', url: 'https://github.com/hien-p/raycast-sui-cli/pull/145' }
+    ],
+    tldr: [
+      {
+        bold: 'Real-time Gas Analytics:',
+        text: 'Live breakdown of computation vs storage gas units with 45% faster execution tracing.'
+      },
+      {
+        bold: 'Multi-Coin Merging & Splitting:',
+        text: 'Zero-friction coin management with instant balance preview across all active addresses.'
+      },
+      {
+        bold: 'Optimized Background Syncing:',
+        text: '5x fewer RPC calls when idle; instant updates upon Sui CLI state mutation.'
+      }
+    ],
+    metricsTable: {
+      headers: ['Metric', 'Before (v1.2.0)', 'After (v1.3.3)'],
+      rows: [
+        ['Gas Estimation Latency', '420 ms', '95 ms (-77%)'],
+        ['RPC Idle Request Cadence', 'Every 2.5s', 'Every 15s (6x fewer)'],
+        ['Multi-Coin Batch Max', '10 objects', '100 objects (10x larger)'],
+        ['Client JS Memory Footprint', '142 MB', '86 MB (-39%)']
+      ]
+    },
+    sections: [
+      {
+        heading: 'Interactive Gas Breakdown & Analytics',
+        content: `Understanding Sui gas fees is crucial when optimizing Move smart contracts. The new Gas Analysis view isolates Computation Cost, Storage Cost, and Storage Rebate with microsecond precision. You can inspect exact cost spikes per transaction block before broadcasting to testnet or mainnet.`
+      },
+      {
+        heading: 'Multi-Coin Merging & Automated Splits',
+        content: `Managing gas coins in Sui can quickly become messy. With v1.3.3, you can auto-consolidate dozens of small SUI coin objects into a single primary gas coin with a single shortcut, or split one coin into multiple specified amounts for parallel transactions.`
+      }
+    ]
+  },
+  {
+    id: 'v1.3.0-move-dev-studio',
+    version: 'v1.3.0',
+    date: 'July 10, 2026',
+    dateTime: '2026-07-10',
+    accentColor: 'bg-emerald-400',
+    title: 'Move Dev Studio: Live Package Publisher & Bytecode Inspector',
+    prLinks: [
+      { pr: '128', url: 'https://github.com/hien-p/raycast-sui-cli/pull/128' },
+      { pr: '131', url: 'https://github.com/hien-p/raycast-sui-cli/pull/131' }
+    ],
+    tldr: [
+      {
+        bold: 'One-Click Package Build & Publish:',
+        text: 'Compile, test, and publish Sui Move packages directly from the web interface.'
+      },
+      {
+        bold: 'Dynamic Field Explorer:',
+        text: 'Inspect nested dynamic fields and object ownership trees with real-time JSON breakdown.'
+      },
+      {
+        bold: 'Faucet Automation:',
+        text: 'Automated testnet & devnet SUI faucet requests with instant balance updates.'
+      }
+    ],
+    metricsTable: {
+      headers: ['Feature', 'CLI Only', 'Sui CLI Web Studio'],
+      rows: [
+        ['Package Deployment', 'Manual CLI terminal commands', '1-Click GUI with pre-flight dry run'],
+        ['Dynamic Field Visualizer', 'Raw JSON strings', 'Interactive expandable tree view'],
+        ['Network Switching', 'Edit client.yaml manually', 'Instant UI dropdown switch']
+      ]
+    },
+    sections: [
+      {
+        heading: 'Complete Move Development Lifecycle',
+        content: `Move Dev Studio bridges the gap between your local Move codebase and Sui networks. Run \`sui move test\`, verify gas requirements, and deploy package bytecode without ever typing complex CLI flags.`
+      }
+    ]
+  },
+  {
+    id: 'v1.2.0-keytool-manager',
+    version: 'v1.2.0',
+    date: 'June 24, 2026',
+    dateTime: '2026-07-24',
+    accentColor: 'bg-purple-400',
+    title: 'Multi-Account Keytool Manager & Active Address Switcher',
+    prLinks: [
+      { pr: '110', url: 'https://github.com/hien-p/raycast-sui-cli/pull/110' }
+    ],
+    tldr: [
+      {
+        bold: 'Zero Local Key Leakage:',
+        text: 'Keys remain safely inside local Sui CLI configuration (~/.sui/sui_config/client.yaml).'
+      },
+      {
+        bold: 'Fast Address Switching:',
+        text: 'Switch active developer address instantly across Mainnet, Testnet, Devnet, and Localnet.'
+      },
+      {
+        bold: 'Key Scheme Support:',
+        text: 'Full support for Ed25519, Secp256k1, and Secp256r1 key pairs.'
+      }
+    ],
+    sections: [
+      {
+        heading: 'Air-Gapped Security Architecture',
+        content: `Sui CLI Web operates on a local-first paradigm. Your private keys never leave your machine or get transmitted to any external server. The web UI communicates solely with your local Fastify daemon on localhost.`
+      }
+    ]
+  },
+  {
+    id: 'v1.0.0-initial-release',
+    version: 'v1.0.0',
+    date: 'May 15, 2026',
+    dateTime: '2026-05-15',
+    accentColor: 'bg-rose-500',
+    title: 'Initial Release: Sui CLI Web - Built for First Movers',
+    prLinks: [
+      { pr: '1', url: 'https://github.com/hien-p/raycast-sui-cli/releases/tag/v1.0.0' }
+    ],
+    tldr: [
+      {
+        bold: 'Keyboard-First Interface:',
+        text: 'Built for speed with command palette navigation and dark terminal aesthetic.'
+      },
+      {
+        bold: 'Full Sui CLI Parity:',
+        text: 'Address management, SUI transfers, coin splitting, and Move package execution.'
+      }
+    ],
+    sections: [
+      {
+        heading: 'Welcome to Sui CLI Web',
+        content: `We launched Sui CLI Web to give Sui developers the ultimate developer interface—combining the raw power of the Sui CLI with a stunning, high-density Web UI.`
+      }
+    ]
+  }
+];
+---
+
+<BaseLayout
+  title="Changelog - What's New"
+  description="The latest updates, performance improvements, and new features in Sui CLI Web. Updated regularly."
+>
+  <!-- Background Effect -->
+  <div class="fixed inset-0 -z-10 pointer-events-none opacity-40">
+    <AnimatedGradientBackground
+      client:idle
+      breathing={false}
+      startingGap={125}
+      breathingRange={5}
+      animationSpeed={0.02}
+      topOffset={0}
+    />
+  </div>
+
+  <Header currentPath="/blog/changelog" />
+
+  <main class="relative min-h-screen">
+    <!-- Subtle Grid Lines -->
+    <div
+      class="absolute inset-0 pointer-events-none z-0"
+      style="background-image: linear-gradient(to right, transparent 0%, transparent calc(50% - 384px), rgba(255,255,255,0.04) calc(50% - 384px), rgba(255,255,255,0.04) calc(50% - 383px), transparent calc(50% - 383px), transparent calc(50% + 383px), rgba(255,255,255,0.04) calc(50% + 383px), rgba(255,255,255,0.04) calc(50% + 384px), transparent calc(50% + 384px))"
+    ></div>
+
+    <!-- Header Section with Corner Crosses -->
+    <header class="relative border-b border-white/10 bg-black/40 backdrop-blur-sm">
+      <div class="max-w-3xl mx-auto px-6 pt-16 pb-12 relative">
+        <!-- Top Left Corner Cross -->
+        <div class="absolute overflow-hidden top-0 left-0">
+          <div class="absolute -translate-x-1/2 -translate-y-1/2 w-px h-4 bg-white/20"></div>
+          <div class="absolute -translate-x-1/2 -translate-y-1/2 w-4 h-px bg-white/20"></div>
+        </div>
+        <!-- Top Right Corner Cross -->
+        <div class="absolute overflow-hidden top-0 right-0">
+          <div class="absolute -translate-x-1/2 -translate-y-1/2 w-px h-4 bg-white/20"></div>
+          <div class="absolute -translate-x-1/2 -translate-y-1/2 w-4 h-px bg-white/20"></div>
+        </div>
+
+        <span class="text-xs font-mono text-cyan-400 uppercase tracking-widest px-2.5 py-1 rounded bg-cyan-500/10 border border-cyan-500/20">
+          Changelog
+        </span>
+
+        <h1 class="text-3xl md:text-5xl font-bold tracking-tight text-white mt-4 font-mono">
+          What's New
+        </h1>
+
+        <p class="text-white/70 mt-3 text-base max-w-lg leading-relaxed">
+          The latest updates, performance improvements, and feature additions in Sui CLI Web.
+          For raw release logs, view our
+          <a
+            href="https://github.com/hien-p/raycast-sui-cli/releases"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 transition-colors underline underline-offset-4"
+          >
+            GitHub Releases
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </a>
+        </p>
+
+        <div class="mt-6">
+          <a
+            href="https://github.com/hien-p/raycast-sui-cli/releases"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-2 text-sm font-mono text-white/80 bg-white/5 hover:bg-white/10 border border-white/15 px-4 py-2 rounded-lg transition-colors shadow-lg"
+          >
+            <svg class="w-4 h-4 text-white/70" fill="currentColor" viewBox="0 0 24 24">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+            </svg>
+            <span>View releases on GitHub</span>
+            <span class="text-cyan-400">→</span>
+          </a>
+        </div>
+
+        <!-- Bottom Left Corner Cross -->
+        <div class="absolute overflow-hidden bottom-0 left-0">
+          <div class="absolute -translate-x-1/2 -translate-y-1/2 w-px h-4 bg-white/20"></div>
+          <div class="absolute -translate-x-1/2 -translate-y-1/2 w-4 h-px bg-white/20"></div>
+        </div>
+        <!-- Bottom Right Corner Cross -->
+        <div class="absolute overflow-hidden bottom-0 right-0">
+          <div class="absolute -translate-x-1/2 -translate-y-1/2 w-px h-4 bg-white/20"></div>
+          <div class="absolute -translate-x-1/2 -translate-y-1/2 w-4 h-px bg-white/20"></div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Timeline Entries -->
+    <div class="relative max-w-3xl mx-auto px-6 py-16">
+      <div class="flex flex-col gap-16">
+        {releases.map((release) => (
+          <article id={release.id} class="relative border-b border-white/10 pb-16 last:border-b-0">
+            <!-- Desktop Sticky Left Date Bar -->
+            <div class="hidden lg:flex absolute top-0 bottom-0 items-start right-full mr-8">
+              <div class="sticky top-24 flex items-center gap-3 pt-1">
+                <span class="text-xs font-mono text-white/50 whitespace-nowrap">{release.date}</span>
+                <div class={`w-0.5 h-5 ${release.accentColor}`}></div>
+              </div>
+            </div>
+
+            <!-- Mobile Date Badge -->
+            <div class="lg:hidden flex items-center gap-2 text-xs font-mono text-white/50 mb-3">
+              <span class={`w-2 h-2 rounded-full ${release.accentColor}`}></span>
+              <time datetime={release.dateTime}>{release.date}</time>
+            </div>
+
+            <!-- Version Tag & Title -->
+            <div class="flex items-center gap-3 mb-2">
+              <span class="px-2.5 py-0.5 rounded text-xs font-mono bg-white/10 text-cyan-300 border border-white/15">
+                {release.version}
+              </span>
+              {release.prLinks.map((pr) => (
+                <a
+                  href={pr.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-xs font-mono text-white/50 hover:text-white bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded border border-white/10 transition-colors"
+                >
+                  #{pr.pr}
+                </a>
+              ))}
+            </div>
+
+            <a href={`#${release.id}`} class="group block">
+              <h2 class="text-2xl md:text-3xl font-bold text-white mb-6 group-hover:text-cyan-300 transition-colors">
+                {release.title}
+              </h2>
+            </a>
+
+            <!-- TL;DR Highlights Box -->
+            <div class="mb-8 p-5 rounded-xl bg-black/60 border border-white/15 shadow-xl">
+              <div class="text-xs font-mono text-cyan-400 uppercase tracking-wider mb-3">TL;DR Highlights</div>
+              <ul class="space-y-2.5 text-sm text-white/80">
+                {release.tldr.map((item) => (
+                  <li class="flex items-start gap-2">
+                    <span class="text-cyan-400 mt-0.5">•</span>
+                    <span>
+                      <strong class="text-white font-medium">{item.bold}</strong> {item.text}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <!-- Metrics Table (if provided) -->
+            {release.metricsTable && (
+              <div class="mb-8 overflow-x-auto rounded-xl border border-white/15 bg-black/40">
+                <table class="w-full text-left text-sm font-mono">
+                  <thead class="bg-white/5 border-b border-white/10 text-white/60">
+                    <tr>
+                      {release.metricsTable.headers.map((header) => (
+                        <th class="px-4 py-3 font-medium">{header}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-white/5 text-white/80">
+                    {release.metricsTable.rows.map((row) => (
+                      <tr class="hover:bg-white/5 transition-colors">
+                        <td class="px-4 py-3 font-medium text-white">{row[0]}</td>
+                        <td class="px-4 py-3 text-white/50">{row[1]}</td>
+                        <td class="px-4 py-3 text-cyan-300 font-semibold">{row[2]}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <!-- Article Sections -->
+            <div class="space-y-6 text-white/70 leading-relaxed text-sm md:text-base">
+              {release.sections.map((sec) => (
+                <div>
+                  <h3 class="text-lg font-semibold text-white mb-2 font-mono">{sec.heading}</h3>
+                  <p>{sec.content}</p>
+                </div>
+              ))}
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+
+    <!-- Bottom CTA Banner -->
+    <section class="max-w-3xl mx-auto px-6 pb-24 text-center">
+      <div class="p-8 rounded-2xl bg-black/70 border border-white/15 shadow-2xl relative overflow-hidden">
+        <div class="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-rose-500/10 to-purple-500/10 pointer-events-none"></div>
+        <h2 class="text-2xl font-bold text-white mb-3 font-mono relative z-10">Start Building on Sui</h2>
+        <p class="text-white/70 mb-6 max-w-md mx-auto text-sm relative z-10">
+          Try the fastest keyboard-first web interface for Sui CLI today.
+        </p>
+        <div class="flex flex-wrap justify-center gap-4 relative z-10">
+          <a
+            href="https://cli.firstmovers.io"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="px-6 py-3 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-lg font-mono text-sm transition-colors shadow-lg shadow-cyan-500/25"
+          >
+            Launch Web App
+          </a>
+          <a
+            href="https://github.com/hien-p/raycast-sui-cli"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-lg font-mono text-sm transition-colors border border-white/15"
+          >
+            GitHub Repo
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+</BaseLayout>

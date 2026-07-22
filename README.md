@@ -16,7 +16,6 @@ A keyboard-first web interface for First Movers building on Sui. Manage addresse
 - **Environment Switching** - Switch between mainnet, testnet, devnet, localnet
 - **Faucet Integration** - Request test tokens directly from the UI
 - **Move Development** - Build, test, publish, upgrade packages
-- **Community Tiers** - Join on-chain community with tier progression
 - **Transaction Inspector** - Inspect and replay transactions
 
 ## Architecture
@@ -89,7 +88,10 @@ npm run dev
 | [Features](FEATURES.md) | Feature inventory & implementation status |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues & solutions |
 | [Server API](packages/server/README.md) | Server package documentation |
-| [Smart Contract](contracts/community_registry/CONTRACT_INFO.md) | Community registry contract details |
+| [Backend Architecture](docs/architecture/BACKEND_ARCHITECTURE.md) | How the local server is put together |
+| [Dashboard Architecture](docs/architecture/DASHBOARD_ARCHITECTURE.md) | How the `/app` dashboard gets its data |
+| [Objects & Inspector](docs/architecture/OBJECTS_INSPECT.md) | The `/app/objects` list + object inspector, contents & DevX |
+| [Backlog](docs/BACKLOG.md) | Current priorities and feature backlog |
 
 ## Development
 
@@ -103,10 +105,13 @@ npm run build         # Build all packages
 ### Project Structure
 
 ```
+apps/
+├── marketing/  # Astro site (Landing page, Blog & Supersets-style Changelog)
+├── web/        # React + Vite + TailwindCSS frontend UI
+└── server/     # Fastify backend server (npm: sui-cli-web-server)
+
 packages/
-├── client/     # React + Vite + TailwindCSS frontend
-├── server/     # Fastify backend (npm: sui-cli-web-server)
-└── shared/     # TypeScript types
+└── shared/     # Shared TypeScript types & utility libraries
 ```
 
 ## Troubleshooting
