@@ -1,13 +1,6 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
-import { AnimatePresence, motion } from 'motion/react';
 import { Check, Copy } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { StreamingText } from '@/components/ui/streaming-text';
 import { useMobileDetect } from '@/hooks/useMobileDetect';
 import { cn } from '@/lib/utils';
@@ -80,6 +73,18 @@ const STEPS: Record<OS, Array<{ title: string; cmd: string; note?: string }>> = 
   ],
 };
 
+/**
+ * Answers to a manual "Check again" that found nothing. Ordered so repeated
+ * tries surface progressively more specific causes; the last one repeats once
+ * the list is exhausted.
+ */
+const RETRY_REPLIES = [
+  'Nothing answering yet. Is the last command still running in its terminal?',
+  "Still quiet. If that terminal printed an error, open the connection error below and I'll have the details.",
+  'Nothing yet. A common cause is the server picking a different port — check the address it printed on startup.',
+  'Still nothing. Worth confirming `sui` itself is installed: run `sui --version` in the same terminal.',
+];
+
 /** Detect the likely platform so the chips arrive pre-sorted for this machine. */
 function guessOS(): OS {
   const ua = navigator.userAgent;
@@ -120,15 +125,7 @@ function Bubble({
 }
 
 /** An agent line that streams itself in, then hands the turn to the next beat. */
-function Say({
-  text,
-  onDone,
-  speed = 80,
-}: {
-  text: string;
-  onDone?: () => void;
-  speed?: number;
-}) {
+function Say({ text, onDone, speed = 80 }: { text: string; onDone?: () => void; speed?: number }) {
   return (
     <Bubble className={INK_SCOPE} from="agent">
       <StreamingText
@@ -194,9 +191,7 @@ export function SetupChat({
   // Which script plays is decided once, on the first probe that resolves —
   // so a machine that is already running the server never briefly gets told
   // to go install it, and a later connection appends rather than swaps.
-  const [script, setScript] = useState<'connected' | 'setup' | 'mobile' | null>(
-    null
-  );
+  const [script, setScript] = useState<'connected' | 'setup' | 'mobile' | null>(null);
   useEffect(() => {
     if (script !== null || serverConnected === null) return;
     if (serverConnected) setScript('connected');
@@ -208,6 +203,23 @@ export function SetupChat({
   // whatever the user was reading.
   const arrived = script === 'setup' && serverConnected === true;
 
+  // "Check again" used to fail silently: the button flicked to "Checking…" and
+  // back, and the transcript said nothing. In a conversation that reads as
+  // being ignored. Every manual check that comes back empty now gets an answer,
+  // and the answers escalate instead of repeating one line, so the third try
+  // tells you something the first one didn't.
+  const [retryNotes, setRetryNotes] = useState<string[]>([]);
+  const wasRetrying = useRef(false);
+  useEffect(() => {
+    if (wasRetrying.current && !isRetrying && serverConnected === false) {
+      setRetryNotes((notes) => [
+        ...notes,
+        RETRY_REPLIES[Math.min(notes.length, RETRY_REPLIES.length - 1)],
+      ]);
+    }
+    wasRetrying.current = isRetrying;
+  }, [isRetrying, serverConnected]);
+
   const transcriptRef = useRef<HTMLDivElement>(null);
   // Layout effect, not effect: scroll before paint so a long message never
   // flashes at the wrong offset first.
@@ -215,7 +227,7 @@ export function SetupChat({
   useLayoutEffect(() => {
     const el = transcriptRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [beat, os, arrived, showDebug]);
+  }, [beat, os, arrived, showDebug, retryNotes.length]);
 
   const steps = os ? STEPS[os] : [];
 
@@ -234,22 +246,15 @@ export function SetupChat({
                 serverConnected ? 'bg-foreground' : 'animate-pulse bg-foreground/40'
               )}
             />
-            {serverConnected
-              ? `localhost:${connectedPort ?? 4001}`
-              : 'listening…'}
+            {serverConnected ? `localhost:${connectedPort ?? 4001}` : 'listening…'}
           </span>
         </div>
       </header>
 
       {/* Transcript */}
-      <div
-        className="flex-1 overflow-y-auto px-4 py-8 sm:px-6"
-        ref={transcriptRef}
-      >
+      <div className="flex-1 overflow-y-auto px-4 py-8 sm:px-6" ref={transcriptRef}>
         <div className="mx-auto flex max-w-2xl flex-col gap-3">
-          {script === null && (
-            <p className="font-mono text-sm text-foreground/30">connecting…</p>
-          )}
+          {script === null && <p className="font-mono text-sm text-foreground/30">connecting…</p>}
 
           {script === 'connected' && (
             <>
@@ -257,9 +262,7 @@ export function SetupChat({
                 onDone={next}
                 text={`Your local server is already up on localhost:${connectedPort ?? 4001}.`}
               />
-              {beat >= 1 && (
-                <Say onDone={next} text="Nothing left to set up — taking you in." />
-              )}
+              {beat >= 1 && <Say onDone={next} text="Nothing left to set up — taking you in." />}
             </>
           )}
 
@@ -288,10 +291,7 @@ export function SetupChat({
 
           {script === 'setup' && (
             <>
-              <Say
-                onDone={next}
-                text="Hey. Let's get this machine talking to the Sui CLI."
-              />
+              <Say onDone={next} text="Hey. Let's get this machine talking to the Sui CLI." />
 
               {beat >= 1 && (
                 <Say
@@ -327,11 +327,7 @@ export function SetupChat({
                 </motion.div>
               )}
 
-              {os && (
-                <Bubble from="user">
-                  {OS_LABEL[os]}
-                </Bubble>
-              )}
+              {os && <Bubble from="user">{OS_LABEL[os]}</Bubble>}
 
               {beat >= 4 && os && (
                 <Say
@@ -346,9 +342,7 @@ export function SetupChat({
                     {steps.map((step, i) => (
                       <li key={step.cmd}>
                         <div className="flex items-baseline gap-2.5">
-                          <span className="font-mono text-xs text-foreground/30">
-                            {i + 1}
-                          </span>
+                          <span className="font-mono text-xs text-foreground/30">{i + 1}</span>
                           <span className="text-sm font-medium text-foreground/90">
                             {step.title}
                           </span>
@@ -372,12 +366,16 @@ export function SetupChat({
                 />
               )}
 
+              {/* One reply per manual check that came back empty. Keyed by index
+                  because the list only ever grows. */}
+              {retryNotes.map((note, i) => (
+                <Say key={`retry-${i}`} speed={65} text={note} />
+              ))}
+
               {/* Connection landed while the user was working through the steps. */}
               <AnimatePresence>
                 {arrived && (
-                  <Say
-                    text={`There it is — connected on localhost:${connectedPort ?? 4001}.`}
-                  />
+                  <Say text={`There it is — connected on localhost:${connectedPort ?? 4001}.`} />
                 )}
               </AnimatePresence>
 

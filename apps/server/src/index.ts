@@ -7,6 +7,7 @@ import path from 'path';
 import { SuiCliExecutor } from './cli/SuiCliExecutor';
 import { addressRoutes } from './routes/address';
 import { coinRoutes } from './routes/coin';
+import { derivedObjectsRoutes } from './routes/derivedObjects';
 import { devtoolsRoutes } from './routes/devtools';
 import { dynamicFieldsRoutes } from './routes/dynamic-fields';
 import { environmentRoutes } from './routes/environment';
@@ -355,6 +356,15 @@ async function main() {
     { prefix: '/api/dynamic-fields' }
   );
 
+  // Derived Address Calculator - pure local computation, no CLI/RPC call.
+  await fastify.register(
+    async (instance) => {
+      instance.addHook('onRequest', readRateLimit);
+      await instance.register(derivedObjectsRoutes);
+    },
+    { prefix: '/api/derived-objects' }
+  );
+
   // DevTools routes - development operations (coverage, disassemble, summary)
   await fastify.register(
     async (instance) => {
@@ -561,12 +571,32 @@ async function main() {
       wildcard: false,
     });
 
+    // The Astro marketing site is built separately and copied under /blog, so
+    // its pages live at /blog/<page>/ with a trailing slash. Anything linking to
+    // the bare paths - the landing nav, or someone typing the obvious URL - would
+    // otherwise miss the file, fall through to the SPA, and render the SPA's 404
+    // because these are not React routes. Redirect them to the real page instead.
+    const marketingAliases: Record<string, string> = {
+      '/changelog': '/blog/changelog/',
+      '/changelog/': '/blog/changelog/',
+      '/blog/changelog': '/blog/changelog/',
+    };
+
     fastify.setNotFoundHandler((request, reply) => {
-      if (request.raw.url && request.raw.url.startsWith('/api')) {
+      const url = request.raw.url ?? '';
+
+      if (url.startsWith('/api')) {
         reply.status(404).send({ error: 'API route not found' });
-      } else {
-        reply.sendFile('index.html', webDistPath);
+        return;
       }
+
+      const target = marketingAliases[url.split('?')[0]];
+      if (target) {
+        reply.redirect(target, 301);
+        return;
+      }
+
+      reply.sendFile('index.html', webDistPath);
     });
   } else {
     console.log('[Static] Warning: No static web dist folder found in candidates:', candidatePaths);
