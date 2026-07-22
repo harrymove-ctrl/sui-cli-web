@@ -125,13 +125,43 @@
     </div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-      // Remove initial loader when React is ready
-      window.addEventListener('DOMContentLoaded', function() {
-        setTimeout(function() {
+      // The loader is NOT hidden on a timer. React clears #root when it mounts,
+      // which takes the loader with it. Hiding it blindly after a fixed delay
+      // used to leave a silent blank white page whenever startup failed, which
+      // is the worst possible failure mode: no spinner, no error, nothing to
+      // report. If the app has not mounted by the deadline below, say so.
+      (function () {
+        var DEADLINE_MS = 15000;
+        var failed = false;
+
+        function reportStartupFailure(detail) {
+          if (failed) return;
           var loader = document.getElementById('initial-loader');
-          if (loader) loader.style.display = 'none';
-        }, 100);
-      });
+          // Loader gone means React mounted and replaced #root: nothing to do.
+          if (!loader || !loader.isConnected) return;
+          failed = true;
+          loader.innerHTML =
+            '<div style="max-width:32rem;padding:1.5rem;text-align:center;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">' +
+            '<p style="margin:0 0 .75rem;font-size:.875rem;opacity:.85">The app failed to start.</p>' +
+            '<p style="margin:0 0 1.25rem;font-size:.75rem;opacity:.5;word-break:break-word">' +
+            (detail || 'No error was reported. Check the browser console.') +
+            '</p>' +
+            '<button onclick="location.reload()" style="padding:.5rem 1rem;font:inherit;font-size:.75rem;cursor:pointer;border:1px solid currentColor;border-radius:.5rem;background:none;color:inherit">Reload</button>' +
+            '</div>';
+        }
+
+        // A module that fails to parse or throws at top level fires `error` on
+        // window; a failed dynamic import surfaces as an unhandled rejection.
+        window.addEventListener('error', function (e) {
+          if (e.message) reportStartupFailure(e.message);
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          reportStartupFailure(e.reason && (e.reason.message || String(e.reason)));
+        });
+
+        // Backstop for the silent cases: script never ran, never threw.
+        setTimeout(reportStartupFailure, DEADLINE_MS);
+      })();
     </script>
   </body>
 </html>

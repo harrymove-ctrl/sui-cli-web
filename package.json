@@ -47,10 +47,17 @@
     "clean": "rm -rf apps/*/dist apps/*/node_modules packages/*/dist packages/*/node_modules node_modules"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.2",
     "concurrently": "^8.2.2",
+    "lint-staged": "^15.2.10",
     "typescript": "^5.4.5"
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,json,jsonc}": [
+      "biome check --write --no-errors-on-unmatched"
+    ]
   }
 }

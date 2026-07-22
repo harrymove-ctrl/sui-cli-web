@@ -22,10 +22,9 @@ export const KNOWN_TOKENS_MAINNET: Record<string, KnownToken> = {
     verified: true,
     description: 'Native token of the Sui network',
     // The native coin's own on-chain metadata has an empty `iconUrl` on every network
-    // (confirmed via suix_getCoinMetadata) - client falls back to this registry entry,
-    // which previously had none either, so SUI rendered a generic Droplet placeholder
-    // instead of the real logo. `public/sui-logo.svg` already exists in the client app.
-    iconUrl: '/sui-logo.svg',
+    // (confirmed via suix_getCoinMetadata) - client falls back to this registry entry.
+    // CoinGecko's coin id "sui" (coins/images/26375) - verified against their public API.
+    iconUrl: 'https://coin-images.coingecko.com/coins/images/26375/large/sui-ocean-square.png',
   },
   '0x356a26eb9e012a68958082340d4c4116e7f55615cf27affcff209cf0ae544f59::wal::WAL': {
     name: 'WAL Token',
@@ -33,7 +32,11 @@ export const KNOWN_TOKENS_MAINNET: Record<string, KnownToken> = {
     priority: 2,
     verified: true,
     description: 'The native token for the Walrus Protocol',
-    iconUrl: 'https://www.walrus.xyz/wal-icon.svg',
+    // CoinGecko id "walrus-2" (coins/images/54914) - the official full-color Walrus mark,
+    // verified against their public API. The walrus.xyz domain's own icon asset (used here
+    // previously) rendered as a generic dark "W" monogram, not the actual brand logo.
+    iconUrl:
+      'https://coin-images.coingecko.com/coins/images/54914/large/Walrus_Token_Full_Color_200x200.png',
   },
   // USDC on Sui (Circle official)
   '0x5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN': {
@@ -68,7 +71,7 @@ export const KNOWN_TOKENS_TESTNET: Record<string, KnownToken> = {
     priority: 1,
     verified: true,
     description: 'Native token of the Sui network',
-    iconUrl: '/sui-logo.svg',
+    iconUrl: 'https://coin-images.coingecko.com/coins/images/26375/large/sui-ocean-square.png',
   },
   // Testnet WAL (if available) - same static icon as mainnet WAL; testnet's on-chain
   // CoinMetadata for this coin type doesn't exist (suix_getCoinMetadata returns null),
@@ -79,7 +82,11 @@ export const KNOWN_TOKENS_TESTNET: Record<string, KnownToken> = {
     priority: 2,
     verified: true,
     description: 'The native token for the Walrus Protocol (Testnet)',
-    iconUrl: 'https://www.walrus.xyz/wal-icon.svg',
+    // CoinGecko id "walrus-2" (coins/images/54914) - the official full-color Walrus mark,
+    // verified against their public API. The walrus.xyz domain's own icon asset (used here
+    // previously) rendered as a generic dark "W" monogram, not the actual brand logo.
+    iconUrl:
+      'https://coin-images.coingecko.com/coins/images/54914/large/Walrus_Token_Full_Color_200x200.png',
   },
 };
 
@@ -90,14 +97,16 @@ export const KNOWN_TOKENS_DEVNET: Record<string, KnownToken> = {
     priority: 1,
     verified: true,
     description: 'Native token of the Sui network',
-    iconUrl: '/sui-logo.svg',
+    iconUrl: 'https://coin-images.coingecko.com/coins/images/26375/large/sui-ocean-square.png',
   },
 };
 
 /**
  * Get known tokens registry for a specific network
  */
-export function getKnownTokens(network: 'mainnet' | 'testnet' | 'devnet' | 'localnet'): Record<string, KnownToken> {
+export function getKnownTokens(
+  network: 'mainnet' | 'testnet' | 'devnet' | 'localnet'
+): Record<string, KnownToken> {
   switch (network) {
     case 'mainnet':
       return KNOWN_TOKENS_MAINNET;
@@ -111,12 +120,34 @@ export function getKnownTokens(network: 'mainnet' | 'testnet' | 'devnet' | 'loca
   }
 }
 
+// Struct names too generic to safely suffix-match (many unrelated tokens share these,
+// e.g. mainnet USDC/USDT/wETH are all literally `coin::COIN` - matching on that alone
+// would slap the wrong icon on an unrelated token).
+const AMBIGUOUS_STRUCT_NAMES = new Set(['coin::COIN']);
+
+function moduleStructSuffix(coinType: string): string {
+  const parts = coinType.split('::');
+  return parts.slice(-2).join('::');
+}
+
 /**
  * Get token info if known
  */
 export function getKnownToken(coinType: string, network: string): KnownToken | null {
   const tokens = getKnownTokens(network as any);
-  return tokens[coinType] || null;
+  if (tokens[coinType]) return tokens[coinType];
+
+  // Exact package-address match failed - fall back to matching on `module::StructName`
+  // alone for tokens whose name is specific enough to be unambiguous (SUI, WAL). This
+  // covers custom/local test deployments of a well-known token under a different
+  // package id than the canonical one hardcoded above (e.g. a locally-published WAL
+  // test package) - same class of address-canonicalization gap as `isCoinType`.
+  const suffix = moduleStructSuffix(coinType);
+  if (AMBIGUOUS_STRUCT_NAMES.has(suffix)) return null;
+  for (const [knownType, token] of Object.entries(tokens)) {
+    if (moduleStructSuffix(knownType) === suffix) return token;
+  }
+  return null;
 }
 
 /**

@@ -36,14 +36,24 @@ initializeAnalytics();
 // initClarity(); // Temporarily disabled
 // initStatsig(); // Session replay + auto-capture - Temporarily disabled
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <ThemeProvider>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </ThemeProvider>
-    </ErrorBoundary>
-  </React.StrictMode>
-);
+const container = document.getElementById('root');
+
+if (container) {
+  ReactDOM.createRoot(container).render(
+    <React.StrictMode>
+      <ErrorBoundary>
+        <ThemeProvider>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </ThemeProvider>
+      </ErrorBoundary>
+    </React.StrictMode>
+  );
+
+  // Explicit, rather than relying on createRoot clearing the container: this is
+  // the signal index.html watches for. While the loader is still in the DOM the
+  // page is considered "not started", and index.html turns it into a visible
+  // error once the deadline passes.
+  document.getElementById('initial-loader')?.remove();
+}
