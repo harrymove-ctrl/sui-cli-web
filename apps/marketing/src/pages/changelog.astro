@@ -2,6 +2,7 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Header from '../components/astro/Header.astro';
 import AnimatedGradientBackground from '../components/ui/animated-gradient-background';
+import { ScrollIndicator } from '../components/react/ScrollIndicator';
 
 /**
  * Hero images follow superset.sh: full content width, landscape, flush - no
@@ -142,6 +143,19 @@ const releases: Array<{
         </a>
       </div>
     </header>
+
+    <!--
+      Section rail. Fixed to the viewport edge and only on wide screens: below
+      that there is no gutter to put it in without stealing width from the text.
+      client:idle because it is an aid, not part of the first read.
+    -->
+    <div class="hidden xl:block fixed right-8 top-1/2 -translate-y-1/2 h-[60vh] z-30">
+      <ScrollIndicator
+        client:idle
+        sections={releases.map((r) => ({ id: r.id, title: r.version, level: 2 }))}
+        topOffset={96}
+      />
+    </div>
 
     <!-- Release Entries -->
     <div class="relative max-w-3xl mx-auto px-6 py-16">
