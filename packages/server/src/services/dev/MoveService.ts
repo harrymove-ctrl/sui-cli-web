@@ -58,7 +58,6 @@ export class MoveService {
             const args = [
                 'move',
                 'build',
-                '--skip-fetch-latest-git-deps', // Skip fetching latest deps to avoid verification warnings
             ];
 
             // Execute build command
@@ -86,7 +85,7 @@ export class MoveService {
      */
     public async runTests(packagePath: string, filter?: string): Promise<MoveTestResult> {
         try {
-            const args = ['move', 'test', '--skip-fetch-latest-git-deps'];
+            const args = ['move', 'test'];
             if (filter) {
                 args.push(filter);
             }
@@ -190,7 +189,6 @@ export class MoveService {
                 'client',
                 'publish',
                 '--gas-budget', gasBudget.toString(),
-                '--skip-fetch-latest-git-deps',
             ];
 
             // Execute publish command with JSON output

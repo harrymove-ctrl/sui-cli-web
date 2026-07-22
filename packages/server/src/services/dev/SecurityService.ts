@@ -66,7 +66,6 @@ export class SecurityService {
         'client',
         'verify-source',
         packagePath,
-        '--skip-fetch-latest-git-deps',
       ];
 
       if (verifyDeps) {
@@ -168,7 +167,7 @@ export class SecurityService {
       }
 
       // Build command args
-      const args = ['client', 'verify-bytecode-meter', '--skip-fetch-latest-git-deps'];
+      const args = ['client', 'verify-bytecode-meter'];
 
       if (packagePath) {
         args.push('--package', packagePath);

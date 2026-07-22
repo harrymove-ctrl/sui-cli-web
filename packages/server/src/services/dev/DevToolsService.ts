@@ -124,7 +124,6 @@ export class DevToolsService {
                 'move',
                 'coverage',
                 mode,
-                '--skip-fetch-latest-git-deps',
             ];
 
             // Add module name for source and bytecode modes
@@ -346,7 +345,6 @@ export class DevToolsService {
                 'summary',
                 '--output-format', format,
                 '--output-directory', outputDir,
-                '--skip-fetch-latest-git-deps',
             ];
 
             // Add packageId if provided (takes precedence over path)
