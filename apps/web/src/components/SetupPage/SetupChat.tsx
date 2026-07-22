@@ -1,6 +1,7 @@
 import { Check, Copy } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { COMMON_PORTS } from '@/api/core';
 import { StreamingText } from '@/components/ui/streaming-text';
 import { useMobileDetect } from '@/hooks/useMobileDetect';
 import { cn } from '@/lib/utils';
@@ -72,6 +73,33 @@ const STEPS: Record<OS, Array<{ title: string; cmd: string; note?: string }>> = 
     },
   ],
 };
+
+/**
+ * A prompt to paste into a coding agent so it can do the install unattended.
+ *
+ * The port list is not decoration: this page finds the server by scanning
+ * COMMON_PORTS, so a server started on anything else is invisible to the UI and
+ * looks exactly like a server that failed to start. The agent is told to offer
+ * the choice but to keep it inside that set.
+ */
+const AGENT_PROMPT = `Set up Sui CLI Web on this machine so the hosted UI can talk to it.
+
+1. Detect the OS and install the prerequisites if they are missing:
+   - Node.js 18 or newer
+   - the Sui CLI (verify with \`sui --version\`)
+
+2. Ask me which port to run the local server on before starting it.
+   It must be one of these, because the web UI only scans these:
+   ${COMMON_PORTS.join(', ')}
+   Default to ${COMMON_PORTS[0]} if I have no preference.
+
+3. Start the server on the chosen port and leave it running:
+   PORT=<chosen port> npx sui-cli-web-server
+
+4. Confirm it is up by checking http://localhost:<chosen port>/health
+   returns {"status":"ok"}, then tell me the port you used.
+
+Do not install anything else, and do not modify my Sui config or keys.`;
 
 /**
  * Answers to a manual "Check again" that found nothing. Ordered so repeated
@@ -164,6 +192,40 @@ function CommandRow({ cmd }: { cmd: string }) {
       >
         {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
       </button>
+    </div>
+  );
+}
+
+/** Multi-line copy target, for text that is pasted rather than run. */
+function CopyBlock({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = () => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  };
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-foreground/10 bg-background/50">
+      <div className="flex items-center justify-between gap-2 border-b border-foreground/10 px-3 py-2">
+        <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-foreground/40">
+          {label}
+        </span>
+        <button
+          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 font-mono text-[11px] text-foreground/50 transition-colors hover:bg-foreground/10 hover:text-foreground"
+          onClick={copy}
+          type="button"
+        >
+          {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      {/* Capped height: the prompt is meant to be copied, not read line by line,
+          so it should not push the rest of the transcript off screen. */}
+      <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words px-3 py-2.5 font-mono text-[12px] leading-relaxed text-foreground/70">
+        {text}
+      </pre>
     </div>
   );
 }
@@ -361,8 +423,22 @@ export function SetupChat({
 
               {beat >= 5 && os && (
                 <Say
+                  onDone={next}
                   speed={70}
-                  text="I'm watching the port. The moment the server answers, this page moves on by itself."
+                  text="Rather hand it off? Paste this to your coding agent and it'll do the install for you."
+                />
+              )}
+
+              {beat >= 6 && os && (
+                <Bubble className="w-full max-w-[92%]" from="agent">
+                  <CopyBlock label="prompt for your agent" text={AGENT_PROMPT} />
+                </Bubble>
+              )}
+
+              {beat >= 6 && os && (
+                <Say
+                  speed={70}
+                  text="Either way, I'm watching the port. The moment the server answers, this page moves on by itself."
                 />
               )}
 

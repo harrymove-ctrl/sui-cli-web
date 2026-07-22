@@ -4,12 +4,13 @@
  */
 
 export {
-  getApiBaseUrl,
-  getServerPort,
-  getConnectionStatus,
-  setConnectionStatus,
-  getLastConnectionError,
+  COMMON_PORTS,
   checkConnection,
+  getApiBaseUrl,
+  getConnectionStatus,
+  getLastConnectionError,
+  getServerPort,
+  setConnectionStatus,
 } from './connection';
 
-export { fetchApi, apiClient } from './request';
+export { apiClient, fetchApi } from './request';

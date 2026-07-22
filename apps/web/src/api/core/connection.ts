@@ -7,14 +7,17 @@
 // In development (vite dev), use proxy
 const isDev = import.meta.env.DEV;
 
-// Common ports to scan for server
-const COMMON_PORTS = [3001, 3002, 3003, 3004, 3005, 4001, 4002, 8001, 8080];
+// Common ports to scan for server. Exported because the setup screen tells
+// users which ports it can actually find - a port outside this list means a
+// running server the UI never discovers, which looks identical to a server
+// that failed to start.
+export const COMMON_PORTS = [3001, 3002, 3003, 3004, 3005, 4001, 4002, 8001, 8080];
 
 // Connection timeout for port scanning
 const PORT_SCAN_TIMEOUT_MS = 2000;
 
 // Connection state
-let API_BASE = isDev ? '/api' : (import.meta.env.VITE_API_URL || 'http://localhost:3001/api');
+let API_BASE = isDev ? '/api' : import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 let currentServerPort: number | null = null;
 let isServerConnected = false;
 let lastConnectionError: string | null = null;
@@ -30,10 +33,7 @@ function logDebug(message: string, ...args: unknown[]) {
 
 // Build localhost URLs for all common ports
 function buildLocalhostUrls(port: number): string[] {
-  return [
-    `http://localhost:${port}/api`,
-    `http://127.0.0.1:${port}/api`,
-  ];
+  return [`http://localhost:${port}/api`, `http://127.0.0.1:${port}/api`];
 }
 
 // Get saved port from localStorage or URL param
@@ -85,7 +85,10 @@ function getPortsToTry(): number[] {
 }
 
 // Try to connect to a single URL
-async function tryConnect(url: string, port: number): Promise<{ success: boolean; url: string; port: number; error?: string }> {
+async function tryConnect(
+  url: string,
+  port: number
+): Promise<{ success: boolean; url: string; port: number; error?: string }> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), PORT_SCAN_TIMEOUT_MS);
@@ -174,11 +177,9 @@ export async function checkConnection(): Promise<boolean> {
     }
   }
 
-  const results = await Promise.all(
-    allAttempts.map(({ url, port }) => tryConnect(url, port))
-  );
+  const results = await Promise.all(allAttempts.map(({ url, port }) => tryConnect(url, port)));
 
-  const successResult = results.find(r => r.success);
+  const successResult = results.find((r) => r.success);
   if (successResult) {
     API_BASE = successResult.url;
     currentServerPort = successResult.port;
@@ -188,12 +189,13 @@ export async function checkConnection(): Promise<boolean> {
     return true;
   }
 
-  const errors = results
-    .filter(r => !r.success && r.error)
-    .map(r => `${r.url}: ${r.error}`);
+  const errors = results.filter((r) => !r.success && r.error).map((r) => `${r.url}: ${r.error}`);
 
   isServerConnected = false;
-  lastConnectionError = errors.length > 0 ? errors.slice(0, 5).join('; ') + (errors.length > 5 ? '...' : '') : 'No server found';
+  lastConnectionError =
+    errors.length > 0
+      ? errors.slice(0, 5).join('; ') + (errors.length > 5 ? '...' : '')
+      : 'No server found';
   logDebug('All connection attempts failed');
   return false;
 }
