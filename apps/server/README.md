@@ -9,7 +9,7 @@
 
 **Local server that bridges your browser to the Sui CLI**
 
-[Live Demo](https://cli.firstmovers.io) · [Documentation](https://github.com/hien-p/raycast-sui-cli#readme) · [Report Bug](https://github.com/hien-p/raycast-sui-cli/issues)
+[Live Demo](https://sui-cli-web-production.up.railway.app) · [Documentation](https://github.com/hien-p/raycast-sui-cli#readme) · [Report Bug](https://github.com/hien-p/raycast-sui-cli/issues)
 
 </div>
 
@@ -17,10 +17,10 @@
 
 ## Why sui-cli-web-server?
 
-**Your private keys stay on YOUR machine.** This package runs a local server that connects the [web interface](https://cli.firstmovers.io) to your locally installed Sui CLI. No keys are ever transmitted to external servers.
+**Your private keys stay on YOUR machine.** This package runs a local server that connects the [web interface](https://sui-cli-web-production.up.railway.app) to your locally installed Sui CLI. No keys are ever transmitted to external servers.
 
 ```
-Browser (cli.firstmovers.io)  ←→  Local Server (this package)  ←→  Sui CLI (your machine)
+Browser (sui-cli-web-production.up.railway.app)  ←→  Local Server (this package)  ←→  Sui CLI (your machine)
 ```
 
 ## Quick Start
@@ -33,7 +33,7 @@ sui --version
 npx sui-cli-web
 ```
 
-Then open **https://cli.firstmovers.io** - it connects automatically.
+Then open **https://sui-cli-web-production.up.railway.app** - it connects automatically.
 
 ## Features
 
@@ -174,7 +174,7 @@ The server runs on port **3001** by default and binds to **localhost** only.
 |---------|-------|-------|
 | Port | 3001 | Fixed |
 | Host | localhost | Security: no external access |
-| CORS | Configured | cli.firstmovers.io + localhost |
+| CORS | Configured | sui-cli-web-production.up.railway.app + localhost |
 
 ## Security
 
@@ -206,7 +206,7 @@ cargo install --locked sui  # Other
 ### CORS errors
 
 Make sure you're accessing via:
-- `https://cli.firstmovers.io`
+- `https://sui-cli-web-production.up.railway.app`
 - `http://localhost:5173` (dev mode)
 
 ## Development
@@ -234,7 +234,7 @@ npm run build
 
 ## Related
 
-- [Web Interface](https://cli.firstmovers.io) - Beautiful UI for this server
+- [Web Interface](https://sui-cli-web-production.up.railway.app) - Beautiful UI for this server
 - [Sui Documentation](https://docs.sui.io) - Official Sui docs
 - [Move Language](https://move-language.github.io/move/) - Smart contract language
 
@@ -246,6 +246,6 @@ MIT © [hien-p](https://github.com/hien-p)
 
 <div align="center">
 
-**[cli.firstmovers.io](https://cli.firstmovers.io)** · Made with ❤️ for the Sui community
+**[sui-cli-web-production.up.railway.app](https://sui-cli-web-production.up.railway.app)** · Made with ❤️ for the Sui community
 
 </div>

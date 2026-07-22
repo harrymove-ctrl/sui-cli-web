@@ -11,7 +11,7 @@
 // import { checkGate, FeatureGates } from './statsig'; // Temporarily disabled - __DEFINES__ error
 
 // Track if analytics was disabled by feature flag
-let analyticsDisabledByFlag = false;
+const analyticsDisabledByFlag = false;
 
 /**
  * Get the appropriate Google Analytics ID
@@ -26,10 +26,10 @@ function getGAId(): string {
 
   // Map domains to their GA IDs (fallback if env var not set)
   const gaIds: Record<string, string> = {
-    'cli.firstmovers.io': 'G-Z37RHCYYX6', // Primary domain
+    'sui-cli-web-production.up.railway.app': 'G-Z37RHCYYX6', // Primary domain
     'harriweb3.dev': 'G-Z37RHCYYX6', // Legacy domain (redirects to primary)
     'raycast-sui-cli.vercel.app': 'G-CQXKRXBW5J',
-    'localhost': 'G-Z37RHCYYX6', // Use primary GA for local development
+    localhost: 'G-Z37RHCYYX6', // Use primary GA for local development
   };
 
   // Find matching GA ID
@@ -69,6 +69,10 @@ export function initializeAnalytics() {
 
   // Initialize gtag
   (window as any).dataLayer = (window as any).dataLayer || [];
+  // Google's own snippet pushes the Arguments object, not an array: gtag.js
+  // reads it as such, and passing a real array silently drops the call.
+  // biome-ignore lint/complexity/noArguments: required by the gtag.js contract.
+  // biome-ignore lint/correctness/noUnusedFunctionParameters: the rest param documents the signature; arguments is what gets forwarded.
   function gtag(...args: any[]) {
     (window as any).dataLayer.push(arguments);
   }

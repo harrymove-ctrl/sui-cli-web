@@ -12,8 +12,8 @@ const organizationSchema = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
   name: 'Sui CLI Web',
-  url: 'https://cli.firstmovers.io',
-  logo: 'https://cli.firstmovers.io/sui-logo.svg',
+  url: 'https://sui-cli-web-production.up.railway.app',
+  logo: 'https://sui-cli-web-production.up.railway.app/sui-logo.svg',
   sameAs: [
     'https://github.com/hien-p/raycast-sui-cli',
     'https://www.npmjs.com/package/sui-cli-web-server',
@@ -38,7 +38,8 @@ const softwareApplicationSchema = {
     price: '0',
     priceCurrency: 'USD',
   },
-  description: 'Keyboard-first interface for First Movers on Sui blockchain. Manage addresses, transfer SUI, deploy Move smart contracts from a powerful web UI designed for developers.',
+  description:
+    'Keyboard-first interface for First Movers on Sui blockchain. Manage addresses, transfer SUI, deploy Move smart contracts from a powerful web UI designed for developers.',
   featureList: [
     'Address Management',
     'SUI Token Transfers',
@@ -47,10 +48,10 @@ const softwareApplicationSchema = {
     'Gas Coin Management',
     'Multi-Environment Support',
   ],
-  screenshot: 'https://cli.firstmovers.io/og-image.svg',
+  screenshot: 'https://sui-cli-web-production.up.railway.app/og-image.svg',
   softwareVersion: '1.1.0',
   downloadUrl: 'https://www.npmjs.com/package/sui-cli-web-server',
-  installUrl: 'https://cli.firstmovers.io/setup',
+  installUrl: 'https://sui-cli-web-production.up.railway.app/setup',
 };
 
 // WebSite schema - For sitelinks search box
@@ -58,10 +59,10 @@ const websiteSchema = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
   name: 'Sui CLI Web',
-  url: 'https://cli.firstmovers.io',
+  url: 'https://sui-cli-web-production.up.railway.app',
   potentialAction: {
     '@type': 'SearchAction',
-    target: 'https://cli.firstmovers.io/app?q={search_term_string}',
+    target: 'https://sui-cli-web-production.up.railway.app/app?q={search_term_string}',
     'query-input': 'required name=search_term_string',
   },
 };
@@ -75,13 +76,13 @@ const setupBreadcrumbSchema = {
       '@type': 'ListItem',
       position: 1,
       name: 'Home',
-      item: 'https://cli.firstmovers.io',
+      item: 'https://sui-cli-web-production.up.railway.app',
     },
     {
       '@type': 'ListItem',
       position: 2,
       name: 'Setup',
-      item: 'https://cli.firstmovers.io/setup',
+      item: 'https://sui-cli-web-production.up.railway.app/setup',
     },
   ],
 };
@@ -91,7 +92,8 @@ const howToSchema = {
   '@context': 'https://schema.org',
   '@type': 'HowTo',
   name: 'How to Install Sui CLI Web',
-  description: 'Step-by-step guide to install and configure Sui CLI Web for local blockchain development.',
+  description:
+    'Step-by-step guide to install and configure Sui CLI Web for local blockchain development.',
   totalTime: 'PT5M',
   tool: [
     {
@@ -122,7 +124,7 @@ const howToSchema = {
     {
       '@type': 'HowToStep',
       name: 'Access the Web Interface',
-      text: 'Open https://cli.firstmovers.io in your browser',
+      text: 'Open https://sui-cli-web-production.up.railway.app in your browser',
     },
   ],
 };
@@ -160,9 +162,10 @@ const faqSchema = {
 };
 
 export function StructuredData({ type = 'homepage' }: StructuredDataProps) {
-  const schemas = type === 'homepage'
-    ? [organizationSchema, softwareApplicationSchema, websiteSchema, faqSchema]
-    : [organizationSchema, setupBreadcrumbSchema, howToSchema];
+  const schemas =
+    type === 'homepage'
+      ? [organizationSchema, softwareApplicationSchema, websiteSchema, faqSchema]
+      : [organizationSchema, setupBreadcrumbSchema, howToSchema];
 
   return (
     <>
@@ -170,6 +173,9 @@ export function StructuredData({ type = 'homepage' }: StructuredDataProps) {
         <script
           key={index}
           type="application/ld+json"
+          // JSON-LD has to be the raw body of a script tag; the value is
+          // built here from literals, never from user input.
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: schema.org payload, not user content.
           dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
         />
       ))}

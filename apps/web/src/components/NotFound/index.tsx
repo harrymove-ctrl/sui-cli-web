@@ -1,6 +1,6 @@
-import { useLocation, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Command, Home, Terminal, Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Home, Terminal, ArrowLeft, Zap, Command } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 export function NotFound() {
   const location = useLocation();
@@ -27,7 +27,7 @@ export function NotFound() {
   // Blinking cursor
   useEffect(() => {
     const interval = setInterval(() => {
-      setShowCursor(prev => !prev);
+      setShowCursor((prev) => !prev);
     }, 530);
     return () => clearInterval(interval);
   }, []);
@@ -37,9 +37,12 @@ export function NotFound() {
     const glitchChars = '!@#$%^&*()_+-=[]{}|;:,.<>?~`';
     const interval = setInterval(() => {
       if (Math.random() > 0.9) {
-        const glitched = '404'.split('').map(char =>
-          Math.random() > 0.7 ? glitchChars[Math.floor(Math.random() * glitchChars.length)] : char
-        ).join('');
+        const glitched = '404'
+          .split('')
+          .map((char) =>
+            Math.random() > 0.7 ? glitchChars[Math.floor(Math.random() * glitchChars.length)] : char
+          )
+          .join('');
         setGlitchText(glitched);
         setTimeout(() => setGlitchText('404'), 100);
       }
@@ -77,16 +80,16 @@ export function NotFound() {
                 <div className="flex items-start gap-2">
                   <span className="text-green-400 shrink-0">$</span>
                   <span className="text-white/80">
-                    curl https://cli.firstmovers.io{typedPath}
-                    <span className={`inline-block w-2 h-4 bg-white/80 ml-0.5 ${showCursor ? 'opacity-100' : 'opacity-0'}`} />
+                    curl https://sui-cli-web-production.up.railway.app{typedPath}
+                    <span
+                      className={`inline-block w-2 h-4 bg-white/80 ml-0.5 ${showCursor ? 'opacity-100' : 'opacity-0'}`}
+                    />
                   </span>
                 </div>
 
                 <div className="flex items-start gap-2">
                   <span className="text-red-400 shrink-0">!</span>
-                  <span className="text-red-400">
-                    Error: HTTP 404 — Resource not found
-                  </span>
+                  <span className="text-red-400">Error: HTTP 404 — Resource not found</span>
                 </div>
 
                 <div className="text-white/50 pl-4 text-sm">
@@ -106,7 +109,8 @@ export function NotFound() {
                   <h1
                     className="text-[120px] md:text-[180px] font-bold leading-none select-none"
                     style={{
-                      background: 'linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.4) 100%)',
+                      background:
+                        'linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.4) 100%)',
                       WebkitBackgroundClip: 'text',
                       WebkitTextFillColor: 'transparent',
                       textShadow: '0 0 80px rgba(239,68,68,0.5)',
@@ -119,14 +123,13 @@ export function NotFound() {
                   <div
                     className="absolute inset-0 pointer-events-none opacity-10"
                     style={{
-                      background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.3) 2px, rgba(0,0,0,0.3) 4px)',
+                      background:
+                        'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.3) 2px, rgba(0,0,0,0.3) 4px)',
                     }}
                   />
                 </div>
 
-                <p className="text-white/60 text-lg mt-4">
-                  Page not found
-                </p>
+                <p className="text-white/60 text-lg mt-4">Page not found</p>
               </div>
 
               {/* Suggestions */}
@@ -135,6 +138,7 @@ export function NotFound() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button
+                    type="button"
                     onClick={() => navigate('/')}
                     className="flex items-center gap-3 px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-xl transition-all group"
                   >
@@ -148,6 +152,7 @@ export function NotFound() {
                   </button>
 
                   <button
+                    type="button"
                     onClick={() => navigate('/app')}
                     className="flex items-center gap-3 px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-xl transition-all group"
                   >
@@ -161,6 +166,7 @@ export function NotFound() {
                   </button>
 
                   <button
+                    type="button"
                     onClick={() => navigate('/setup')}
                     className="flex items-center gap-3 px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-xl transition-all group"
                   >
@@ -174,6 +180,7 @@ export function NotFound() {
                   </button>
 
                   <button
+                    type="button"
                     onClick={() => navigate(-1)}
                     className="flex items-center gap-3 px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-xl transition-all group"
                   >
@@ -205,7 +212,7 @@ export function NotFound() {
         {/* Fun ASCII art at bottom */}
         <div className="mt-8 text-center">
           <pre className="text-white/20 text-xs font-mono inline-block">
-{`   _____  ___  _  _
+            {`   _____  ___  _  _
   |   | ||   || || |
   | | | ||   ||_  _|
   |_|___||___| |_|

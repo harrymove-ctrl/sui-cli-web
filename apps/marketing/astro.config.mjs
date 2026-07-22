@@ -6,7 +6,7 @@ import react from '@astrojs/react';
 
 // https://astro.build/config
 export default defineConfig({
-  site: 'https://cli.firstmovers.io',
+  site: 'https://sui-cli-web-production.up.railway.app',
   base: '/blog',
   integrations: [
     mdx(),

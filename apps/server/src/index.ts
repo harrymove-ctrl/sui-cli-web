@@ -165,7 +165,13 @@ async function main() {
         .map((host) => (host.startsWith('http') ? host : `https://${host}`));
 
       const allowedOrigins = [
-        // Production domains (defaults)
+        // The hosted UI. selfOrigins below only covers the copy of this server
+        // running on the platform; a user's own `npx sui-cli-web-server` has no
+        // RAILWAY_* variables, so the hosted UI's origin has to be listed here
+        // or every local install rejects the very UI it exists to serve.
+        'https://sui-cli-web-production.up.railway.app',
+        // Previous hosted UI. Still listed because local servers already in the
+        // wild are talked to by it; dropping this cuts those users off.
         'https://cli.firstmovers.io',
         'https://www.harriweb3.dev',
         'https://harriweb3.dev',
@@ -621,7 +627,7 @@ async function main() {
 ║   Server running at: http://localhost:${PORT}                  ║
 ║                                                               ║
 ║   Now open the web UI:                                        ║
-║   → https://cli.firstmovers.io                                ║
+║   → https://sui-cli-web-production.up.railway.app             ║
 ║                                                               ║
 ║   The UI will connect to this local server automatically.     ║
 ║   Keep this terminal open while using the app.                ║

@@ -43,7 +43,7 @@
     "type": "git",
     "url": "https://github.com/hien-p/raycast-sui-cli.git"
   },
-  "homepage": "https://cli.firstmovers.io",
+  "homepage": "https://sui-cli-web-production.up.railway.app",
   "bugs": {
     "url": "https://github.com/hien-p/raycast-sui-cli/issues"
   },
