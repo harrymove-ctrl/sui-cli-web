@@ -12,7 +12,9 @@ window.
 
 This package is the read-only MVP slice of that idea. Full background and the
 complete design (including the write-tool/confirmation-flow phases not built
-yet) lives in [`docs/architecture/MCP_SERVER_DESIGN.md`](../../docs/architecture/MCP_SERVER_DESIGN.md).
+yet) lives in `docs/architecture/MCP_SERVER_DESIGN.md`. That path is not a
+link on purpose: `docs/` is gitignored, so the file exists in a working
+checkout but not in the published repository.
 
 ## The problem
 
