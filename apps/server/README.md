@@ -30,7 +30,7 @@ Browser (sui-cli-web-production.up.railway.app)  ←→  Local Server (this pack
 sui --version
 
 # Run the server (no installation needed!)
-npx sui-cli-web
+npx sui-cli-web-server
 ```
 
 Then open **https://sui-cli-web-production.up.railway.app** - it connects automatically.
@@ -53,7 +53,7 @@ Then open **https://sui-cli-web-production.up.railway.app** - it connects automa
 ### Option 1: npx (Recommended)
 
 ```bash
-npx sui-cli-web
+npx sui-cli-web-server
 ```
 
 ### Option 2: Global Install
@@ -67,7 +67,7 @@ sui-cli-web
 
 ```bash
 npm install sui-cli-web
-npx sui-cli-web
+npx sui-cli-web-server
 ```
 
 ## Requirements
@@ -83,13 +83,18 @@ cargo install --locked sui  # All platforms
 
 ## API Reference
 
-The server exposes a REST API at `http://localhost:3001/api`
+The server exposes a REST API at `http://localhost:<port>/api` (3001 by
+default). `GET /health` sits outside that prefix — it is the endpoint
+clients probe to identify this server, and it reports
+`service: "sui-cli-web-server"` so they do not attach to something else
+that happens to hold the port.
 
 ### Core Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/health` | Health check |
+| `GET` | `/health` | Liveness + service identity — **not** under `/api` |
+| `GET` | `/api/health` | Health check (status, timestamp, port) |
 | `GET` | `/status` | Sui CLI status |
 | `GET` | `/addresses` | List all addresses |
 | `GET` | `/addresses/active` | Get active address |
@@ -168,28 +173,49 @@ curl -X POST http://localhost:3001/api/environments/switch \
 
 ## Configuration
 
-The server runs on port **3001** by default and binds to **localhost** only.
+| Setting | Default | How to change |
+|---|---|---|
+| Port | `3001` | `PORT=4002 npx sui-cli-web-server` |
+| Host | `127.0.0.1` | `HOST=0.0.0.0` — see the warning below |
+| Allowed origins | hosted UI + `localhost` | `ALLOWED_ORIGINS=https://example.com,...` |
 
-| Setting | Value | Notes |
-|---------|-------|-------|
-| Port | 3001 | Fixed |
-| Host | localhost | Security: no external access |
-| CORS | Configured | sui-cli-web-production.up.railway.app + localhost |
+The port is **not fixed** — `PORT` is read at startup. One caveat: clients find
+the server by scanning ports `3001`–`3005`, `4001`, `4002`, `8001` and `8080`,
+so a port outside that list works but leaves the web UI and the MCP server
+unable to discover it. Pick one from the list, or point them at it explicitly
+(`SUI_CLI_WEB_PORT` for the MCP server).
+
+`HOST` defaults to `127.0.0.1`, but the server binds `0.0.0.0` automatically
+when a `PORT` variable is present in the environment — the check that detects
+container platforms. If you set `PORT` inside something that also treats it as
+a signal, be aware you may be listening on every interface.
 
 ## Security
 
-- **Private keys never leave your machine** - All signing happens via local Sui CLI
-- **Localhost only** - Server doesn't accept external connections
-- **Open source** - [Audit the code](https://github.com/hien-p/raycast-sui-cli)
-- **Rate limited** - 100/min read, 30/min write, 5/min faucet
+- **Private keys never leave your machine.** All signing happens through your
+  local Sui CLI. The one exception is the explicit export endpoint, which is
+  gated behind a confirmation code.
+- **No authentication, on any endpoint.** Whatever can reach the server can
+  call anything on it, including the `sui keytool` routes. On loopback that is
+  fine — anything that local already runs as you. It is *not* fine on a public
+  interface, so do not set `HOST=0.0.0.0` (or run this where `PORT` is
+  injected) without putting authentication in front of it.
+- **Rate limited** — 1000/min read, 300/min write, 200/min keytool, 5/min
+  faucet. Sized for one local user, not for public traffic.
+- **CORS is an allowlist**, not a wildcard — but it only governs which web
+  pages may read responses. It stops nothing that is not a browser.
+- **Open source** — [audit the code](https://github.com/hien-p/raycast-sui-cli).
 
 ## Troubleshooting
 
 ### Server won't start
 
 ```bash
-# Check if port 3001 is in use
+# Something else already on the port?
 lsof -ti:3001 | xargs kill -9
+
+# Or just use another one from the scanned list
+PORT=4002 npx sui-cli-web-server
 ```
 
 ### Sui CLI not found
