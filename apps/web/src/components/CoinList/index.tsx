@@ -1,4 +1,5 @@
 import type { CoinGroup, CoinGroupedResponse, CoinInfo } from '@sui-cli-web/shared';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   ChevronDown,
   ChevronRight,
@@ -9,7 +10,7 @@ import {
   Send,
   Split,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
@@ -17,7 +18,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ShimmerSkeleton } from '@/components/unlumen-ui/shimmer-skeleton';
 import { useAppStore } from '@/stores/useAppStore';
-import { Spinner } from '../shared/Spinner';
 
 // Format balance with proper decimals
 function formatBalance(balance: string, decimals: number): string {
@@ -174,12 +174,16 @@ export function CoinList() {
       <div className="px-4 py-3 bg-card border border-border rounded-xl flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <Coins className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          <span
-            className="text-sm text-foreground truncate cursor-pointer hover:text-muted-foreground transition-colors"
+          {/* A real <button>, not a clickable span: copying the address is an
+              action, and it was previously unreachable by keyboard. text-left
+              undoes the button default so the truncation reads as before. */}
+          <button
+            type="button"
+            className="text-sm text-foreground truncate text-left cursor-pointer hover:text-muted-foreground transition-colors"
             onClick={() => copyToClipboard(activeAddress.address, 'Address')}
           >
             {activeAddress.alias || `${activeAddress.address.slice(0, 12)}...`}
-          </span>
+          </button>
         </div>
         <Badge variant="secondary">
           {coinData.totalCoinTypes} type{coinData.totalCoinTypes !== 1 ? 's' : ''}
@@ -252,6 +256,7 @@ function CoinGroupCard({
     <div className="border border-border rounded-xl overflow-hidden bg-card">
       {/* Group Header */}
       <button
+        type="button"
         onClick={onToggle}
         className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${
           isExpanded ? 'bg-accent' : 'hover:bg-accent/50'
@@ -318,9 +323,21 @@ function CoinGroupCard({
             <span
               className="text-xs font-mono text-tertiary hover:text-muted-foreground cursor-pointer hidden sm:block"
               onClick={(e) => {
+                // Nested inside the group-header <button>, so a real button
+                // here would be invalid HTML. stopPropagation keeps the copy
+                // from also toggling the group open.
                 e.stopPropagation();
                 onCopy(group.packageId, 'Package ID');
               }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onCopy(group.packageId, 'Package ID');
+                }
+              }}
+              role="button"
+              tabIndex={0}
             >
               {truncatedPackageId}
             </span>
@@ -336,19 +353,109 @@ function CoinGroupCard({
               {group.description}
             </div>
           )}
-          {group.coins.map((coin) => (
-            <CoinItem
-              key={coin.coinObjectId}
-              coin={coin}
+          {/* A wallet that farms the faucet or splits gas accumulates hundreds
+              of dust coins in one group - and the first group (SUI) auto-expands
+              on mount. Rendering them all is ~19 DOM nodes each in one
+              synchronous commit. Past a threshold, window the rows; below it the
+              plain map avoids a scroll container nobody needs. */}
+          {group.coins.length > VIRTUALIZE_THRESHOLD ? (
+            <VirtualCoinList
+              coins={group.coins}
               symbol={group.symbol}
               decimals={group.decimals}
-              onTransfer={() => onTransfer(coin)}
-              onSplit={() => onSplit(coin)}
+              onTransfer={onTransfer}
+              onSplit={onSplit}
               onCopy={onCopy}
             />
-          ))}
+          ) : (
+            group.coins.map((coin) => (
+              <CoinItem
+                key={coin.coinObjectId}
+                coin={coin}
+                symbol={group.symbol}
+                decimals={group.decimals}
+                onTransfer={() => onTransfer(coin)}
+                onSplit={() => onSplit(coin)}
+                onCopy={onCopy}
+              />
+            ))
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+// Above this many coins in one expanded group, window the rows instead of
+// mounting all of them. Chosen so a normal wallet (a handful of coin types,
+// a few objects each) never pays for a scroll container, while a dust-heavy
+// SUI group does not block the main thread on mount.
+const VIRTUALIZE_THRESHOLD = 40;
+
+// Estimated row height in px (px-4 py-3 around two text lines); the virtualizer
+// measures real rows and corrects this, so it only needs to be close.
+const COIN_ROW_HEIGHT = 64;
+
+interface VirtualCoinListProps {
+  coins: CoinInfo[];
+  symbol: string;
+  decimals: number;
+  onTransfer: (coin: CoinInfo) => void;
+  onSplit: (coin: CoinInfo) => void;
+  onCopy: (text: string, label: string) => void;
+}
+
+/** Windowed rendering of one expanded group's coins. Only the rows in (and near)
+ *  the viewport exist in the DOM, so a 900-coin dust group mounts ~10 rows, not
+ *  900. The container is a bounded scroll area; the total-height spacer keeps the
+ *  scrollbar honest. */
+function VirtualCoinList({
+  coins,
+  symbol,
+  decimals,
+  onTransfer,
+  onSplit,
+  onCopy,
+}: VirtualCoinListProps) {
+  const parentRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: coins.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => COIN_ROW_HEIGHT,
+    overscan: 8,
+    getItemKey: (i) => coins[i].coinObjectId,
+  });
+
+  return (
+    <div ref={parentRef} className="max-h-[28rem] overflow-auto">
+      <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+        {virtualizer.getVirtualItems().map((row) => {
+          const coin = coins[row.index];
+          return (
+            <div
+              key={row.key}
+              ref={virtualizer.measureElement}
+              data-index={row.index}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                transform: `translateY(${row.start}px)`,
+              }}
+            >
+              <CoinItem
+                coin={coin}
+                symbol={symbol}
+                decimals={decimals}
+                onTransfer={() => onTransfer(coin)}
+                onSplit={() => onSplit(coin)}
+                onCopy={onCopy}
+              />
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -363,19 +470,27 @@ interface CoinItemProps {
   onCopy: (text: string, label: string) => void;
 }
 
-function CoinItem({ coin, symbol, decimals, onTransfer, onSplit, onCopy }: CoinItemProps) {
+const CoinItem = memo(function CoinItem({
+  coin,
+  symbol,
+  decimals,
+  onTransfer,
+  onSplit,
+  onCopy,
+}: CoinItemProps) {
   const formattedBalance = formatBalance(coin.balance, decimals);
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 hover:bg-accent/50 transition-colors group">
       <div className="flex-1 min-w-0">
-        <div
-          className="text-xs font-mono text-tertiary truncate cursor-pointer hover:text-muted-foreground flex items-center gap-1"
+        <button
+          type="button"
+          className="text-xs font-mono text-tertiary truncate text-left cursor-pointer hover:text-muted-foreground flex items-center gap-1 w-full"
           onClick={() => onCopy(coin.coinObjectId, 'Coin ID')}
         >
           {coin.coinObjectId}
           <Copy className="w-3 h-3 flex-shrink-0" />
-        </div>
+        </button>
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-sm text-foreground">
             {formattedBalance} {symbol}
@@ -395,4 +510,4 @@ function CoinItem({ coin, symbol, decimals, onTransfer, onSplit, onCopy }: CoinI
       </div>
     </div>
   );
-}
+});
