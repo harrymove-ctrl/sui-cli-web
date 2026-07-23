@@ -17,7 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import { APP_VERSION } from '@/config/version';
 import { useTheme } from '@/contexts/ThemeContext';
 import { StructuredData } from '../SEO/StructuredData';
-import { CommandPaletteHero } from './CommandPaletteHero';
+import { HexFloatHero } from './HexFloatHero';
 import { Features4 } from './Features4';
 import { TestimonialWall } from './TestimonialWall';
 
@@ -218,7 +218,7 @@ export function HomePage() {
         </div>
 
         {/* ============ COMMAND-PALETTE HERO ============ */}
-        <CommandPaletteHero />
+        <HexFloatHero />
 
         {/* ============ FEATURES (Auto-cycling tabbed) ============ */}
         <Features4 />
