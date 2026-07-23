@@ -1,0 +1,53 @@
+name: Deploy to Railway
+
+# Railway's own GitHub trigger deploys on push, but only while its GitHub App
+# holds access to this repo - and that access was lost, so pushes stopped
+# building with no error anywhere. This workflow uploads the source itself with
+# a project token, which does not depend on the App at all.
+#
+# Requires a repository secret RAILWAY_TOKEN: a *project* token from
+# https://railway.com/account/tokens scoped to sui-cli-web / production.
+# Without it the job skips instead of failing, so a fork or a clone without the
+# secret does not report a red build for something it was never meant to do.
+
+on:
+  push:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+concurrency:
+  # A deploy in flight is worth cancelling when a newer commit lands: the older
+  # build would only be overwritten a minute later anyway.
+  group: railway-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'harrymove-ctrl/sui-cli-web' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Guard on the deploy token
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "::warning::RAILWAY_TOKEN is not set - skipping deploy."
+            echo "skip=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Install Railway CLI
+        if: env.skip != 'true'
+        run: npm install -g @railway/cli
+
+      - name: Deploy
+        if: env.skip != 'true'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        # --detach returns once the build is queued. The build itself is long
+        # (full monorepo: shared, server, client, marketing, mcp) and holding a
+        # runner open to watch it buys nothing the Railway dashboard does not
+        # already show.
+        run: railway up --service sui-cli-web --detach
