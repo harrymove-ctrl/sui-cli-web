@@ -69,6 +69,12 @@ Start the local server and leave it running:
 npx sui-cli-web-server
 ```
 
+> Use that exact name. `sui-cli-web` is also a published package, but it is an
+> older build (1.0.2) that is no longer updated — and it will not tell you so,
+> because its update check compares against its own name. The binary being
+> called `sui-cli-web` while the package is `sui-cli-web-server` is what makes
+> this easy to get wrong; `npx` resolves the package name, not the binary.
+
 Then open **https://sui-cli-web-production.up.railway.app** — it finds your
 server automatically.
 

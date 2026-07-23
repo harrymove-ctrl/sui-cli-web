@@ -33,6 +33,11 @@ sui --version
 npx sui-cli-web-server
 ```
 
+The installed binary is called `sui-cli-web`, but the package is
+`sui-cli-web-server` — and `npx` resolves package names. `npx sui-cli-web`
+fetches a different, older package (1.0.2) that is no longer updated, so use
+the full name.
+
 Then open **https://sui-cli-web-production.up.railway.app** - it connects automatically.
 
 ## Features
