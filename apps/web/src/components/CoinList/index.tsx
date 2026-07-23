@@ -1,14 +1,23 @@
-import { ChevronDown, ChevronRight, Coins, Combine, Copy, Droplet, Send, Split } from 'lucide-react';
+import type { CoinGroup, CoinGroupedResponse, CoinInfo } from '@sui-cli-web/shared';
+import {
+  ChevronDown,
+  ChevronRight,
+  Coins,
+  Combine,
+  Copy,
+  Droplet,
+  Send,
+  Split,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useAppStore } from '@/stores/useAppStore';
-import type { CoinGroup, CoinGroupedResponse, CoinInfo } from '@sui-cli-web/shared';
-import { Spinner } from '../shared/Spinner';
 import { ShimmerSkeleton } from '@/components/unlumen-ui/shimmer-skeleton';
+import { useAppStore } from '@/stores/useAppStore';
+import { Spinner } from '../shared/Spinner';
 
 // Format balance with proper decimals
 function formatBalance(balance: string, decimals: number): string {
@@ -101,7 +110,9 @@ export function CoinList() {
   };
 
   const handleSplit = (coin: CoinInfo) => {
-    navigate(`/app/coins/split?coinId=${coin.coinObjectId}&type=${encodeURIComponent(coin.coinType)}`);
+    navigate(
+      `/app/coins/split?coinId=${coin.coinObjectId}&type=${encodeURIComponent(coin.coinType)}`
+    );
   };
 
   const handleMerge = (group: CoinGroup) => {
@@ -113,11 +124,7 @@ export function CoinList() {
   };
 
   if (!activeAddress) {
-    return (
-      <div className="px-3 py-8 text-center text-muted-foreground">
-        No address selected
-      </div>
-    );
+    return <div className="px-3 py-8 text-center text-muted-foreground">No address selected</div>;
   }
 
   if (isLoading || storeLoading) {
@@ -195,10 +202,20 @@ export function CoinList() {
         ))}
       </div>
 
-      {/* Footer */}
+      {/* Footer. When the node served only aggregate balances there are no coin
+          objects to count or expand, so say that instead of printing "0 coin
+          objects" next to real balances and letting it read as a broken page. */}
       <div className="px-3 py-2 flex items-center justify-between text-xs text-muted-foreground">
-        <span>{coinData.totalCoins} coin objects</span>
-        <span>Click a coin type to expand</span>
+        {coinData.balancesOnly ? (
+          <span>
+            Balances only - this node returned no coin objects, so split and merge are unavailable
+          </span>
+        ) : (
+          <>
+            <span>{coinData.totalCoins} coin objects</span>
+            <span>Click a coin type to expand</span>
+          </>
+        )}
       </div>
     </div>
   );

@@ -143,12 +143,18 @@ export interface OwnedObjectSummary {
 function mapProtoOwner(o: any): unknown {
   if (!o) return null;
   switch (o.kind) {
-    case 1: return { AddressOwner: o.address };
-    case 2: return { ObjectOwner: o.address };
-    case 3: return { Shared: { initial_shared_version: o.version?.toString() } };
-    case 4: return 'Immutable';
-    case 5: return { AddressOwner: o.address };
-    default: return null;
+    case 1:
+      return { AddressOwner: o.address };
+    case 2:
+      return { ObjectOwner: o.address };
+    case 3:
+      return { Shared: { initial_shared_version: o.version?.toString() } };
+    case 4:
+      return 'Immutable';
+    case 5:
+      return { AddressOwner: o.address };
+    default:
+      return null;
   }
 }
 
@@ -188,7 +194,88 @@ export async function getOwnedObjectsViaGrpc(
         previousTransaction: o.previousTransaction ?? null,
       });
     }
-    pageToken = response.nextPageToken && response.nextPageToken.length > 0 ? response.nextPageToken : undefined;
+    pageToken =
+      response.nextPageToken && response.nextPageToken.length > 0
+        ? response.nextPageToken
+        : undefined;
+  } while (pageToken);
+  return out;
+}
+
+/**
+ * gRPC reports every address in a type padded to 32 bytes
+ * (`0x0000...0002::sui::SUI`), while suix_getAllCoins - and therefore
+ * knownTokens, the SUI_COIN_TYPE constants and the client's equality checks -
+ * used the short form for system packages. Strip the padding only when what
+ * remains is short enough to be a system package (`0x2`, `0x3`, `0xdee9`);
+ * a real package id keeps its full 64 hex digits, leading zeros included,
+ * because that is the form JSON-RPC returned for it too.
+ */
+function compactSuiAddress(addr: string): string {
+  const stripped = addr.replace(/^0x0*/, '');
+  return stripped.length > 0 && stripped.length <= 4 ? `0x${stripped}` : addr;
+}
+
+export interface OwnedCoinSummary {
+  coinObjectId: string;
+  coinType: string;
+  /** Raw balance in the coin's smallest unit. */
+  balance: string;
+  version: string;
+  digest: string;
+}
+
+/**
+ * List every `0x2::coin::Coin<T>` an address owns, as individual objects.
+ *
+ * The JSON-RPC equivalent (`suix_getAllCoins`) is gone from Mysten's public
+ * fullnodes - every method there answers 404 - and `getAllBalancesViaGrpc` only
+ * returns per-type aggregates, which is why coin groups could show a balance
+ * but no objects to split, merge or transfer.
+ *
+ * `object_type` filters server-side: passing the bare `0x2::coin::Coin` (no
+ * type parameter) matches every `Coin<T>` regardless of `T`, so one paginated
+ * call covers all coin types instead of one call per type. `balance` is a
+ * first-class field on the Object message for coins, so no second lookup is
+ * needed to decode the Move struct.
+ */
+export async function getOwnedCoinsViaGrpc(
+  address: string,
+  rpcUrl: string
+): Promise<OwnedCoinSummary[]> {
+  const client = getGrpcClient(rpcUrl);
+  const out: OwnedCoinSummary[] = [];
+  let pageToken: Uint8Array | undefined;
+  do {
+    const { response } = await (client as any).stateService.listOwnedObjects({
+      owner: address,
+      objectType: '0x2::coin::Coin',
+      pageSize: OWNED_OBJECTS_PAGE_SIZE,
+      pageToken,
+      readMask: { paths: ['object_id', 'object_type', 'version', 'digest', 'balance'] },
+    });
+    for (const o of response.objects) {
+      if (!o.objectId || !o.objectType) continue;
+      // gRPC reports the wrapper type, `Coin<T>`, while every consumer here
+      // keys off the inner `T` the way suix_getAllCoins did. The leading
+      // address arrives zero-padded, so match loosely and compact after.
+      const inner = o.objectType.match(/^0x0*2::coin::Coin<(.+)>$/);
+      if (!inner) continue;
+      const coinType = inner[1].replace(/0x[0-9a-fA-F]+/g, compactSuiAddress);
+      out.push({
+        coinObjectId: o.objectId,
+        coinType,
+        // Absent balance means the node did not resolve this object as a coin;
+        // "0" keeps it listable rather than crashing the BigInt sum downstream.
+        balance: o.balance != null ? o.balance.toString() : '0',
+        version: o.version != null ? o.version.toString() : '0',
+        digest: o.digest ?? '',
+      });
+    }
+    pageToken =
+      response.nextPageToken && response.nextPageToken.length > 0
+        ? response.nextPageToken
+        : undefined;
   } while (pageToken);
   return out;
 }

@@ -1,15 +1,15 @@
-import { SuiCliExecutor } from '../cli/SuiCliExecutor';
-import { ConfigParser } from '../cli/ConfigParser';
 import type {
-  CoinInfo,
   CoinGroup,
   CoinGroupedResponse,
+  CoinInfo,
   CoinMetadata,
   CoinOperationResult,
 } from '@sui-cli-web/shared';
 import { getShortSymbol } from '@sui-cli-web/shared';
+import { ConfigParser } from '../cli/ConfigParser';
+import { SuiCliExecutor } from '../cli/SuiCliExecutor';
 import { getKnownToken, getTokenPriority, isVerifiedToken } from '../utils/knownTokens';
-import { getAllBalancesViaGrpc } from '../utils/suiGrpcClient';
+import { getAllBalancesViaGrpc, getOwnedCoinsViaGrpc } from '../utils/suiGrpcClient';
 
 // Constants
 const MIST_PER_SUI = 1_000_000_000;
@@ -102,18 +102,31 @@ export class CoinService {
     // Detect network for known tokens lookup
     const network = detectNetworkFromRpc(rpcUrl);
 
-    // Fetch all coins using suix_getAllCoins, falling back to gRPC aggregate
-    // balances when JSON-RPC is unavailable (deprecated on public fullnodes).
-    // The gRPC path only returns per-type totals, not individual coin object
-    // IDs, so fallback groups carry no `coins` entries (split/merge needs
-    // real object IDs and isn't available in that mode).
-    let allCoins: CoinInfo[];
+    // Fetch every coin object. suix_getAllCoins first for nodes that still
+    // serve JSON-RPC, then gRPC's owned-object listing, which returns the same
+    // per-object detail - Mysten's public fullnodes now answer 404 to every
+    // JSON-RPC method, so on those the gRPC path is the only one that runs.
+    //
+    // Aggregate balances are the last resort only: they carry no object IDs, so
+    // groups built from them cannot be split, merged or transferred. That mode
+    // is now reported (`balancesOnly`) instead of looking like an empty wallet.
+    let allCoins: CoinInfo[] = [];
     let grpcBalances: { coinType: string; balance: string }[] | null = null;
     try {
       allCoins = await this.fetchAllCoins(address, rpcUrl);
     } catch {
-      grpcBalances = await getAllBalancesViaGrpc(address, rpcUrl);
-      allCoins = [];
+      try {
+        allCoins = (await getOwnedCoinsViaGrpc(address, rpcUrl)).map((c) => ({
+          coinObjectId: c.coinObjectId,
+          coinType: c.coinType,
+          balance: c.balance,
+          version: c.version,
+          digest: c.digest,
+        }));
+      } catch {
+        grpcBalances = await getAllBalancesViaGrpc(address, rpcUrl);
+        allCoins = [];
+      }
     }
 
     // Group coins by type
@@ -206,8 +219,14 @@ export class CoinService {
     return {
       groups,
       totalCoinTypes: groups.length,
-      // gRPC fallback only gives per-type totals, not individual object counts
-      totalCoins: grpcBalances ? groups.length : allCoins.length,
+      // Count objects, never types: the old fallback reported `groups.length`
+      // here, so a balances-only answer rendered "6 coin objects" above six
+      // groups each showing (0) - a contradiction that read as a broken page
+      // rather than as a degraded data source.
+      totalCoins: allCoins.length,
+      // True when only aggregate balances could be fetched, so the UI can say
+      // why every group is empty instead of implying the wallet holds nothing.
+      balancesOnly: grpcBalances !== null,
     };
   }
 

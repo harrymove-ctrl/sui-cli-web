@@ -315,6 +315,9 @@ export interface CoinGroupedResponse {
   groups: CoinGroup[];
   totalCoinTypes: number;
   totalCoins: number;
+  /** Set when the node served only aggregate balances, so groups carry no coin
+   *  objects and split/merge/transfer have nothing to act on. */
+  balancesOnly?: boolean;
 }
 
 export interface PublishedPackageInfo {
