@@ -64,8 +64,15 @@ jobs:
             echo "Authenticated with a project token."
             export RAILWAY_TOKEN="$DEPLOY_TOKEN"
           else
-            echo "Project token rejected - trying it as an account token."
+            echo "Project token rejected - using it as a workspace token."
             export RAILWAY_API_TOKEN="$DEPLOY_TOKEN"
-            railway link -p "$PROJECT_ID" -e production -s sui-cli-web
           fi
-          railway up --service sui-cli-web --detach
+          # Project, environment and service are passed explicitly rather than
+          # linked first: `railway link` resolves workspaces through the logged-in
+          # user and returns Unauthorized under a token, while `up` takes the ids
+          # directly and needs no link at all.
+          railway up \
+            --project "$PROJECT_ID" \
+            --environment production \
+            --service sui-cli-web \
+            --detach
