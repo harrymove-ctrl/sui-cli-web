@@ -45,9 +45,27 @@ jobs:
       - name: Deploy
         if: env.skip != 'true'
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          # Deliberately not named RAILWAY_TOKEN: the CLI reads that variable
+          # directly, and feeding it an account token fails with a flat
+          # "Invalid RAILWAY_TOKEN" that says nothing about the token being the
+          # wrong *kind*. Railway has two: a project token, which the CLI wants
+          # in RAILWAY_TOKEN and which carries its own project context, and an
+          # account token, which belongs in RAILWAY_API_TOKEN and needs the
+          # project linked explicitly. The secret may hold either, so probe.
+          DEPLOY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          PROJECT_ID: b993c667-8d17-47e3-9d39-b80449d2dc94
         # --detach returns once the build is queued. The build itself is long
         # (full monorepo: shared, server, client, marketing, mcp) and holding a
         # runner open to watch it buys nothing the Railway dashboard does not
         # already show.
-        run: railway up --service sui-cli-web --detach
+        run: |
+          set -euo pipefail
+          if RAILWAY_TOKEN="$DEPLOY_TOKEN" railway status >/dev/null 2>&1; then
+            echo "Authenticated with a project token."
+            export RAILWAY_TOKEN="$DEPLOY_TOKEN"
+          else
+            echo "Project token rejected - trying it as an account token."
+            export RAILWAY_API_TOKEN="$DEPLOY_TOKEN"
+            railway link -p "$PROJECT_ID" -e production -s sui-cli-web
+          fi
+          railway up --service sui-cli-web --detach
