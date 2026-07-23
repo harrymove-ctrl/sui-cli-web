@@ -1,8 +1,17 @@
 # Sui CLI Web
 
-A keyboard-first web interface for the Sui CLI. Manage addresses, switch
-environments, request faucet tokens, publish Move packages and inspect
-transactions — without leaving the keyboard.
+A keyboard-first web interface for the Sui CLI.
+
+The Sui CLI can do everything. Reading what it tells you is the hard part —
+addresses copied between terminal tabs, object IDs hunted out of walls of JSON,
+`sui client object` output that leaves out the fields you actually wanted. This
+puts a dense, navigable UI over the CLI you already have, without taking
+custody of anything.
+
+It is not a wallet. There is no account to create, nothing to connect, no key
+to paste. A small server runs on your machine and shells out to your own `sui`
+binary against your own `~/.sui` config; the browser only renders what comes
+back.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![npm](https://img.shields.io/npm/v/sui-cli-web-server)
@@ -10,21 +19,57 @@ transactions — without leaving the keyboard.
 
 **Live**: https://sui-cli-web-production.up.railway.app · **npm**: `sui-cli-web-server`
 
-## Features
+## What you get
 
-- **Address Management** — view, switch and create addresses with balances
-- **Transfer SUI** — send tokens with gas estimation and a dry run first
-- **Gas Management** — split and merge gas coins
-- **Environment Switching** — mainnet, testnet, devnet, localnet
-- **Faucet Integration** — request test tokens from the UI
-- **Move Development** — build, test, publish and upgrade packages
-- **Transaction Inspector** — inspect, replay and analyse gas
-- **MCP Server** — read-only access for AI agents (`@sui-cli-web/mcp`)
+**Dashboard.** Every wallet in one table — balance, object count, packages
+published — each column scaled to its own maximum so the comparison is
+readable rather than dominated by whichever wallet is largest. Click a row to
+switch active wallet. Below that: balance over time, a coin-type breakdown, a
+12-week activity heatmap, and recent activity drawn from both your local Move
+Studio history and real on-chain transactions. Sections are explicitly scoped —
+*across all wallets*, *active wallet*, *this browser only* — so a number is
+never ambiguous about what it counts.
+
+**Objects and the inspector.** Every object an address owns, in one virtualized
+table that stays fast at a thousand rows, filtered by categories that only
+appear when you actually hold that kind. Click any row and the inspector opens
+in place:
+
+- All five ownership kinds named correctly — address-owned, object-owned (with
+  a link to the parent), shared, immutable, and party. Nothing falls back to
+  "Unknown".
+- **Why** an object can or cannot be transferred, from the real `hasPublicTransfer`
+  ability check rather than a guess: *"anyone can transfer this (has store)"*
+  versus *"only this object's module can transfer it"*.
+- Display-standard NFT metadata — image, name, description, creator — resolved
+  properly, plus a dedicated card when the object is the `Display<T>` template
+  itself rather than an instance of it.
+- `TransferPolicy`, `TransferPolicyCap`, `Kiosk` and `KioskOwnerCap` each get
+  their own card, with click-through between a cap and the object it controls.
+- A bounded walk back through an object's version chain — several real hops,
+  not just the last transaction.
+- Coins show a live balance with one-tap transfer, split and merge.
+
+**Move development.** Build, test, publish and upgrade packages. Dry-run a call
+and read the result before signing anything. Inspect and replay past
+transactions, analyse where gas actually went, and query events.
+
+**Environments and keys.** Switch between mainnet, testnet, devnet and a local
+node. Request faucet tokens. Manage addresses across key schemes. Private keys
+stay in your Sui config — the one endpoint that returns raw key material is
+gated behind a confirmation code.
+
+**Walrus Memory.** Decoded blob details, memwal accounts, decryption as a
+chosen signer, and delegate-key management for Walrus storage objects.
+
+**MCP server.** `@sui-cli-web/mcp` exposes read-only tools — list environments,
+list wallets, check balances and objects — so an AI agent can answer questions
+about your setup through the same validated, rate-limited API the browser uses,
+instead of being handed shell access to `sui`.
 
 ## How it works
 
-The browser never touches your keys. It talks to a small server running on
-your own machine, which shells out to the `sui` CLI you already have.
+Three pieces, one of which you already have:
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -45,12 +90,13 @@ your own machine, which shells out to the `sui` CLI you already have.
 └──────────────────────────────────────────────────────────────┘
 ```
 
-**Your keys stay on your machine.** They live in your local Sui CLI config and
-are never sent anywhere. The only exception is the explicit export flow, which
-is gated behind a confirmation code.
+The server holds no state of its own. There is no database — the source of
+truth is whatever `sui client` and `sui keytool` report from
+`~/.sui/sui_config/*`, which means nothing can drift out of sync with your CLI,
+and uninstalling this leaves your setup exactly as it was.
 
-The hosted URL above serves the UI. It runs the same server binary, but with
-no Sui config and no keystore behind it — it exists to hand your browser the
+The hosted URL serves the UI only. It runs the same server binary, but with no
+Sui config and no keystore behind it — it exists to hand your browser the
 interface, not to hold anything of yours.
 
 ## Quick start
