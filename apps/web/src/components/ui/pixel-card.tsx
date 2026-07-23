@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties } from 'react';
+import { type CSSProperties, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 
 /** Ported from OriginKit's PixelCard (originkit.dev/components/pixelcard), stripped of
@@ -182,6 +182,7 @@ export function PixelCard({
     typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
   ).current;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: colors is depended on via JSON.stringify(colors); the effect owns the canvas + rAF loop and re-inits only on the listed visual props.
   useEffect(() => {
     const initPixels = () => {
       const el = canvasRef.current;
@@ -251,12 +252,29 @@ export function PixelCard({
       ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
 
       let allIdle = true;
+      let allShimmer = true;
       for (const pixel of pixelsRef.current) {
         pixel[fnName](timeNow, durationMs, EASE_OUT);
         if (!pixel.isIdle) allIdle = false;
+        if (!pixel.isShimmer) allShimmer = false;
       }
       if (allIdle && fnName === 'disappear') {
         cancelAnimationFrame(animationRef.current as number);
+        animationRef.current = null;
+      }
+      // `appear` latches every pixel into isShimmer and never sets isIdle -
+      // isIdle is only ever assigned inside `disappear`. Without this branch the
+      // exit above is structurally unreachable for an autoPlay card, so the loop
+      // runs at 60fps for the lifetime of the page: one fillStyle + fillRect per
+      // pixel per frame, after a clearRect over the whole canvas.
+      //
+      // Stopping here freezes the shimmer once every pixel has grown. That is a
+      // real, if small, visual change - the shimmer amplitude is
+      // getEffectiveSpeed(speed) px/frame, which at the only call site (speed=35)
+      // is 0.07px and sits under a background gradient.
+      if (allShimmer && fnName === 'appear') {
+        cancelAnimationFrame(animationRef.current as number);
+        animationRef.current = null;
       }
     };
 
@@ -266,9 +284,37 @@ export function PixelCard({
     };
 
     initPixels();
-    if (autoPlay) handleAnimation('appear');
+
+    // A card that is scrolled away or in a hidden tab should cost nothing. The
+    // termination above already bounds the autoPlay case; this bounds the hover
+    // case and any future long-running variant.
+    let inView = true;
+    const canRun = () => inView && !document.hidden;
+    const stop = () => {
+      if (animationRef.current !== null) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+    };
+    const maybeStart = () => {
+      if (autoPlay && canRun()) handleAnimation('appear');
+    };
+    maybeStart();
+
+    const onVisibility = () => {
+      if (document.hidden) stop();
+      else maybeStart();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    const io = new IntersectionObserver((entries) => {
+      inView = entries.some((e) => e.isIntersecting);
+      if (inView) maybeStart();
+      else stop();
+    });
 
     const container = containerRef.current;
+    if (container) io.observe(container);
     const onEnter = () => handleAnimation('appear');
     const onLeave = () => handleAnimation('disappear');
     if (!autoPlay) {
@@ -284,6 +330,8 @@ export function PixelCard({
 
     return () => {
       observer.disconnect();
+      io.disconnect();
+      document.removeEventListener('visibilitychange', onVisibility);
       container?.removeEventListener('mouseenter', onEnter);
       container?.removeEventListener('mouseleave', onLeave);
       if (animationRef.current !== null) cancelAnimationFrame(animationRef.current);
