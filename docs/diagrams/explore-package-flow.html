@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light dark">
+<title>Explore a package — glowmotion</title>
+<style>:root { --bg:#000000;--grid:#101210;--card-bg:#040404;--border:#2a2f31;--border-hi:#5c6265;--text:#f4f0ee;--subtext:#8a8482;--legend-text:#cfc7c5;--footer:#5c6265;--flow-node-fill:rgba(34,200,111,0.05);--flow-node-stroke:#22c86f;--flow-pill-fill:rgba(34,200,111,0.09);--flow-pill-stroke:#22c86f;--flow-conn:#22c86f;--flow-dot:#22c86f;--arch-conn:#cfc7c5;--arch-async:#f4b64e;--arch-auth:#ff7ab6;--arch-dot:#7ee3d6;--node-base:#060606;--region:#f4b64e;--subnet:#ff7ab6;--capsule-fill:#124238;--capsule-text:#22c86f;--t-frontend-fill:#04171e;--t-frontend-stroke:#7ee3d6;--t-backend-fill:#02160a;--t-backend-stroke:#22c86f;--t-database-fill:#120814;--t-database-stroke:#bd54d3;--t-cloud-fill:#1c1204;--t-cloud-stroke:#f4b64e;--t-security-fill:#1c0812;--t-security-stroke:#ff7ab6;--t-bus-fill:#1c1204;--t-bus-stroke:#f4b64e;--t-external-fill:#0d0d0d;--t-external-stroke:#cfc7c5;--accent-0:#22c86f;--accent-1:#bd54d3;--accent-2:#7ee3d6;--accent-3:#f4b64e;--pulse:#22c86f; }
+:root[data-theme="light"] { --bg:#e8eef5;--grid:#d3dded;--card-bg:#f8fafc;--border:#cbd5e1;--border-hi:#94a3b8;--text:#0f172a;--subtext:#64748b;--legend-text:#475569;--footer:#94a3b8;--flow-node-fill:rgba(5,150,105,0.08);--flow-node-stroke:#059669;--flow-pill-fill:rgba(4,120,87,0.12);--flow-pill-stroke:#047857;--flow-conn:#059669;--flow-dot:#059669;--arch-conn:#64748b;--arch-async:#ea580c;--arch-auth:#e11d48;--arch-dot:#0891b2;--node-base:#ffffff;--region:#d97706;--subnet:#e11d48;--capsule-fill:rgba(8,145,178,0.12);--capsule-text:#0e7490;--t-frontend-fill:rgba(8,145,178,0.10);--t-frontend-stroke:#0891b2;--t-backend-fill:rgba(5,150,105,0.10);--t-backend-stroke:#059669;--t-database-fill:rgba(124,58,237,0.10);--t-database-stroke:#7c3aed;--t-cloud-fill:rgba(217,119,6,0.10);--t-cloud-stroke:#d97706;--t-security-fill:rgba(225,29,72,0.10);--t-security-stroke:#e11d48;--t-bus-fill:rgba(234,88,12,0.10);--t-bus-stroke:#ea580c;--t-external-fill:rgba(100,116,139,0.10);--t-external-stroke:#64748b;--accent-0:#0891b2;--accent-1:#7c3aed;--accent-2:#e11d48;--accent-3:#059669;--pulse:#059669; }
+@media (prefers-color-scheme: light) { :root:not([data-theme]) { --bg:#e8eef5;--grid:#d3dded;--card-bg:#f8fafc;--border:#cbd5e1;--border-hi:#94a3b8;--text:#0f172a;--subtext:#64748b;--legend-text:#475569;--footer:#94a3b8;--flow-node-fill:rgba(5,150,105,0.08);--flow-node-stroke:#059669;--flow-pill-fill:rgba(4,120,87,0.12);--flow-pill-stroke:#047857;--flow-conn:#059669;--flow-dot:#059669;--arch-conn:#64748b;--arch-async:#ea580c;--arch-auth:#e11d48;--arch-dot:#0891b2;--node-base:#ffffff;--region:#d97706;--subnet:#e11d48;--capsule-fill:rgba(8,145,178,0.12);--capsule-text:#0e7490;--t-frontend-fill:rgba(8,145,178,0.10);--t-frontend-stroke:#0891b2;--t-backend-fill:rgba(5,150,105,0.10);--t-backend-stroke:#059669;--t-database-fill:rgba(124,58,237,0.10);--t-database-stroke:#7c3aed;--t-cloud-fill:rgba(217,119,6,0.10);--t-cloud-stroke:#d97706;--t-security-fill:rgba(225,29,72,0.10);--t-security-stroke:#e11d48;--t-bus-fill:rgba(234,88,12,0.10);--t-bus-stroke:#ea580c;--t-external-fill:rgba(100,116,139,0.10);--t-external-stroke:#64748b;--accent-0:#0891b2;--accent-1:#7c3aed;--accent-2:#e11d48;--accent-3:#059669;--pulse:#059669; } }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace; background: var(--bg);
+         min-height: 100vh; padding: 2rem; color: var(--text); }
+  .container { max-width: 960px; margin: 0 auto; }
+  .header { display: flex; align-items: center; gap: 12px; margin-bottom: 0.4rem; }
+  .pulse-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--pulse); }
+  h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.02em; }
+  .capsule { display: inline-block; background: var(--capsule-fill); color: var(--capsule-text);
+    border: 1px solid var(--capsule-text); border-radius: 999px; padding: 0 14px;
+    margin-left: 10px; font-size: 1.05rem; line-height: 1.75; }
+  .sig { margin-left: auto; color: var(--text); font-size: 0.85rem; font-weight: 600;
+    text-shadow: -1px 1px 0 var(--accent-1), 1px -1px 0 var(--accent-0); opacity: 0.85; }
+  .subtitle { color: var(--subtext); font-size: 0.8rem; margin-bottom: 1.5rem; }
+  .diagram-card { border: 1px solid var(--border); border-radius: 12px; position: relative;
+    background: repeating-linear-gradient(0deg, var(--grid) 0 0.5px, transparent 0.5px 40px),
+      repeating-linear-gradient(90deg, var(--grid) 0 0.5px, transparent 0.5px 40px), var(--card-bg);
+    padding: 1.25rem 1rem; }
+  .ctrls { position: absolute; top: 12px; right: 12px; z-index: 2; display: flex; gap: 6px; }
+  .ctrl { background: transparent; border: 1px solid var(--border); color: var(--subtext);
+    border-radius: 6px; padding: 4px 10px; font: inherit; font-size: 11px; cursor: pointer; }
+  .ctrl:hover { color: var(--text); border-color: var(--border-hi); }
+  .footer { color: var(--footer); font-size: 0.7rem; margin-top: 1rem; }
+  .flow { stroke-dasharray: 5 5; }
+  .flow-async { stroke-dasharray: 2 4; }
+  .flow-auth { stroke-dasharray: 4 4; }
+  .halo { opacity: 0; }
+  @media (prefers-reduced-motion: no-preference) {
+    .flow { animation: dashmove 0.75s linear infinite; }
+    .flow-async { animation: dashasync 0.9s linear infinite; }
+    .flow-auth { animation: dashauth 1.2s linear infinite; }
+    .pulse-dot { animation: pulse 2s ease-in-out infinite; }
+    .halo { animation: halo 4.8s ease-in-out infinite; }
+  }
+  @keyframes dashmove { to { stroke-dashoffset: -10; } }
+  @keyframes dashasync { to { stroke-dashoffset: -12; } }
+  @keyframes dashauth { to { stroke-dashoffset: -8; } }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  @keyframes halo { 0%, 20%, 100% { opacity: 0; } 7% { opacity: 0.8; } 13% { opacity: 0.3; } }
+  body.paused .flow, body.paused .flow-async, body.paused .flow-auth,
+  body.paused .pulse-dot, body.paused .halo { animation-play-state: paused; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header"><div class="pulse-dot"></div><h1>Explore a package<span class="capsule">cap to callable</span></h1><div class="sig">@sui-cli-web</div></div>
+  <p class="subtitle">My Packages → interface → interact</p>
+  <div class="diagram-card">
+    <div class="ctrls"><button class="ctrl" id="themeBtn" aria-label="Switch theme">☀ light</button><button class="ctrl" id="pauseBtn" aria-pressed="false">⏸ pause</button></div>
+    <svg id="flowsvg" width="100%" viewBox="0 0 547 918" role="img" aria-roledescription="flowchart" aria-labelledby="flowsvg-title" aria-describedby="flowsvg-desc"><title id="flowsvg-title">Explore a package animated diagram</title><desc id="flowsvg-desc">Top-down flow diagram; dashed connectors animate in the direction of flow and glowing dots ride the main paths.</desc><defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker><filter id="glow" x="-120%" y="-120%" width="340%" height="340%"><feGaussianBlur stdDeviation="2.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter><symbol id="sparkle" viewBox="0 0 12 12"><path d="M6 1v10M1 6h10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol></defs><g fill="none"><path class="flow" d="M273.5 74 V126" style="stroke:var(--flow-conn)" stroke-width="1.5" opacity="0.85" marker-end="url(#arrow)"/><path class="flow" d="M273.5 174 V226" style="stroke:var(--flow-conn)" stroke-width="1" opacity="0.85" marker-end="url(#arrow)"/><path class="flow" d="M273.5 274 V302 H150 V326" style="stroke:var(--flow-conn)" stroke-width="1" opacity="0.85" marker-end="url(#arrow)"/><path class="flow" d="M273.5 274 V302 H370.5 V326" style="stroke:var(--flow-conn)" stroke-width="1" opacity="0.85" marker-end="url(#arrow)"/><path class="flow" d="M150 374 V402 H273.5 V426" style="stroke:var(--flow-conn)" stroke-width="1" opacity="0.85" marker-end="url(#arrow)"/><path class="flow" d="M370.5 374 V402 H273.5 V426" style="stroke:var(--flow-conn)" stroke-width="1" opacity="0.85" marker-end="url(#arrow)"/><path class="flow" d="M273.5 474 V526" style="stroke:var(--flow-conn)" stroke-width="1" opacity="0.85" marker-end="url(#arrow)"/><path class="flow" d="M273.5 574 V626" style="stroke:var(--flow-conn)" stroke-width="1" opacity="0.85" marker-end="url(#arrow)"/><path class="flow" d="M273.5 674 V726" style="stroke:var(--flow-conn)" stroke-width="1.5" opacity="0.85" marker-end="url(#arrow)"/><path class="flow" d="M273.5 774 V802 H91 V826" style="stroke:var(--flow-conn)" stroke-width="1" opacity="0.85" marker-end="url(#arrow)"/><path class="flow" d="M273.5 774 V802 H255.5 V826" style="stroke:var(--flow-conn)" stroke-width="1" opacity="0.85" marker-end="url(#arrow)"/><path class="flow" d="M273.5 774 V803 H438 V828" style="stroke:var(--flow-conn)" stroke-width="1" opacity="0.85" marker-end="url(#arrow)"/></g><text x="221.8" y="299" style="fill:var(--subtext)" font-size="10">have id</text><text x="328" y="299" style="fill:var(--subtext)" font-size="10">browse</text><text x="192.2" y="799" style="fill:var(--subtext)" font-size="10">copy</text><text x="274.5" y="799" style="fill:var(--subtext)" font-size="10">inspect</text><text x="361.8" y="800" style="fill:var(--subtext)" font-size="10">call</text><g><circle r="3.5" class="dot" style="fill:var(--flow-dot)" filter="url(#glow)"><animateMotion id="j0_0" dur="0.6s" begin="0s;j0_4.end+0.6s" fill="freeze" path="M273.5 174 V226"/></circle><circle r="2.4" class="trail" style="fill:var(--flow-dot)" opacity="0.5"><animateMotion dur="0.6s" begin="j0_0.begin+0.09s" fill="freeze" path="M273.5 174 V226"/></circle><circle r="1.7" class="trail" style="fill:var(--flow-dot)" opacity="0.28"><animateMotion dur="0.6s" begin="j0_0.begin+0.18s" fill="freeze" path="M273.5 174 V226"/></circle><circle r="3.5" class="dot" style="fill:var(--flow-dot)" filter="url(#glow)"><animateMotion id="j0_1" dur="1.0s" begin="j0_0.end+0.3s" fill="freeze" path="M273.5 274 V302 H370.5 V326"/></circle><circle r="2.4" class="trail" style="fill:var(--flow-dot)" opacity="0.5"><animateMotion dur="1.0s" begin="j0_1.begin+0.09s" fill="freeze" path="M273.5 274 V302 H370.5 V326"/></circle><circle r="1.7" class="trail" style="fill:var(--flow-dot)" opacity="0.28"><animateMotion dur="1.0s" begin="j0_1.begin+0.18s" fill="freeze" path="M273.5 274 V302 H370.5 V326"/></circle><circle r="3.5" class="dot" style="fill:var(--flow-dot)" filter="url(#glow)"><animateMotion id="j0_2" dur="1.0s" begin="j0_1.end+0.3s" fill="freeze" path="M370.5 374 V402 H273.5 V426"/></circle><circle r="2.4" class="trail" style="fill:var(--flow-dot)" opacity="0.5"><animateMotion dur="1.0s" begin="j0_2.begin+0.09s" fill="freeze" path="M370.5 374 V402 H273.5 V426"/></circle><circle r="1.7" class="trail" style="fill:var(--flow-dot)" opacity="0.28"><animateMotion dur="1.0s" begin="j0_2.begin+0.18s" fill="freeze" path="M370.5 374 V402 H273.5 V426"/></circle><circle r="3.5" class="dot" style="fill:var(--flow-dot)" filter="url(#glow)"><animateMotion id="j0_3" dur="0.6s" begin="j0_2.end+0.3s" fill="freeze" path="M273.5 474 V526"/></circle><circle r="2.4" class="trail" style="fill:var(--flow-dot)" opacity="0.5"><animateMotion dur="0.6s" begin="j0_3.begin+0.09s" fill="freeze" path="M273.5 474 V526"/></circle><circle r="1.7" class="trail" style="fill:var(--flow-dot)" opacity="0.28"><animateMotion dur="0.6s" begin="j0_3.begin+0.18s" fill="freeze" path="M273.5 474 V526"/></circle><circle r="3.5" class="dot" style="fill:var(--flow-dot)" filter="url(#glow)"><animateMotion id="j0_4" dur="0.6s" begin="j0_3.end+0.3s" fill="freeze" path="M273.5 574 V626"/></circle><circle r="2.4" class="trail" style="fill:var(--flow-dot)" opacity="0.5"><animateMotion dur="0.6s" begin="j0_4.begin+0.09s" fill="freeze" path="M273.5 574 V626"/></circle><circle r="1.7" class="trail" style="fill:var(--flow-dot)" opacity="0.28"><animateMotion dur="0.6s" begin="j0_4.begin+0.18s" fill="freeze" path="M273.5 574 V626"/></circle><circle r="3.5" class="dot" style="fill:var(--accent-0)" filter="url(#glow)"><animateMotion id="j1_0" dur="0.6s" begin="0s;j1_1.end+0.6s" fill="freeze" path="M273.5 674 V726"/></circle><circle r="2.4" class="trail" style="fill:var(--accent-0)" opacity="0.5"><animateMotion dur="0.6s" begin="j1_0.begin+0.09s" fill="freeze" path="M273.5 674 V726"/></circle><circle r="1.7" class="trail" style="fill:var(--accent-0)" opacity="0.28"><animateMotion dur="0.6s" begin="j1_0.begin+0.18s" fill="freeze" path="M273.5 674 V726"/></circle><circle r="3.5" class="dot" style="fill:var(--accent-0)" filter="url(#glow)"><animateMotion id="j1_1" dur="1.5s" begin="j1_0.end+0.3s" fill="freeze" path="M273.5 774 V803 H438 V828"/></circle><circle r="2.4" class="trail" style="fill:var(--accent-0)" opacity="0.5"><animateMotion dur="1.5s" begin="j1_1.begin+0.09s" fill="freeze" path="M273.5 774 V803 H438 V828"/></circle><circle r="1.7" class="trail" style="fill:var(--accent-0)" opacity="0.28"><animateMotion dur="1.5s" begin="j1_1.begin+0.18s" fill="freeze" path="M273.5 774 V803 H438 V828"/></circle></g><g font-family="'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace" text-anchor="middle"><rect x="198.5" y="34" width="150" height="40" rx="20" style="fill:var(--flow-pill-fill);stroke:var(--flow-pill-stroke)" stroke-width="1.5"/><text x="273.5" y="58" style="fill:var(--text)" font-size="13" font-weight="600">Open Package Explorer</text><rect x="195" y="130" width="157" height="44" rx="8" style="fill:var(--flow-node-fill);stroke:var(--flow-node-stroke)"/><rect x="195" y="130" width="157" height="44" rx="8" fill="none" stroke-width="2" class="halo" filter="url(#glow)" style="stroke:var(--flow-node-stroke);animation-delay:0.0s"/><text x="273.5" y="156" style="fill:var(--text)" font-size="13" font-weight="500">Load My Packages</text><rect x="182" y="230" width="183" height="44" rx="8" style="fill:var(--flow-node-fill);stroke:var(--flow-node-stroke)" stroke-dasharray="4 3"/><rect x="182" y="230" width="183" height="44" rx="8" fill="none" stroke-width="2" class="halo" filter="url(#glow)" style="stroke:var(--flow-node-stroke);animation-delay:0.6s"/><text x="273.5" y="256" style="fill:var(--text)" font-size="13" font-weight="500">Know the package ID?</text><rect x="68" y="330" width="164" height="44" rx="8" style="fill:var(--flow-node-fill);stroke:var(--flow-node-stroke)"/><text x="150" y="356" style="fill:var(--text)" font-size="13" font-weight="500">Paste a package ID</text><rect x="262" y="330" width="217" height="44" rx="8" style="fill:var(--flow-node-fill);stroke:var(--flow-node-stroke)"/><rect x="262" y="330" width="217" height="44" rx="8" fill="none" stroke-width="2" class="halo" filter="url(#glow)" style="stroke:var(--flow-node-stroke);animation-delay:1.2s"/><text x="370.5" y="356" style="fill:var(--text)" font-size="13" font-weight="500">Pick one of your packages</text><rect x="163.5" y="430" width="220" height="44" rx="8" style="fill:var(--flow-node-fill);stroke:var(--flow-node-stroke)"/><rect x="163.5" y="430" width="220" height="44" rx="8" fill="none" stroke-width="2" class="halo" filter="url(#glow)" style="stroke:var(--flow-node-stroke);animation-delay:1.8s"/><text x="273.5" y="456" style="fill:var(--text)" font-size="13" font-weight="500">explorePackage → /explore</text><rect x="163.5" y="530" width="220" height="44" rx="8" style="fill:var(--flow-node-fill);stroke:var(--flow-node-stroke)"/><rect x="163.5" y="530" width="220" height="44" rx="8" fill="none" stroke-width="2" class="halo" filter="url(#glow)" style="stroke:var(--flow-node-stroke);animation-delay:2.4s"/><text x="273.5" y="556" style="fill:var(--text)" font-size="13" font-weight="500">gRPC · normalized modules</text><rect x="198" y="630" width="151" height="44" rx="8" style="fill:var(--flow-node-fill);stroke:var(--flow-node-stroke)"/><rect x="198" y="630" width="151" height="44" rx="8" fill="none" stroke-width="2" class="halo" filter="url(#glow)" style="stroke:var(--flow-node-stroke);animation-delay:3.0s"/><text x="273.5" y="656" style="fill:var(--text)" font-size="13" font-weight="500">Render interface</text><rect x="218.5" y="730" width="110" height="44" rx="8" style="fill:var(--flow-node-fill);stroke:var(--flow-node-stroke)" stroke-dasharray="4 3"/><rect x="218.5" y="730" width="110" height="44" rx="8" fill="none" stroke-width="2" class="halo" filter="url(#glow)" style="stroke:var(--flow-node-stroke);animation-delay:3.6s"/><text x="273.5" y="756" style="fill:var(--text)" font-size="13" font-weight="500">What next?</text><rect x="34" y="830" width="114" height="44" rx="8" style="fill:var(--flow-node-fill);stroke:var(--flow-node-stroke)"/><text x="91" y="856" style="fill:var(--text)" font-size="13" font-weight="500">Copy for AI</text><rect x="178" y="830" width="155" height="44" rx="8" style="fill:var(--flow-node-fill);stroke:var(--flow-node-stroke)"/><text x="255.5" y="856" style="fill:var(--text)" font-size="13" font-weight="500">Open in Object tab</text><rect x="363" y="832" width="150" height="40" rx="20" style="fill:var(--flow-pill-fill);stroke:var(--flow-pill-stroke)" stroke-width="1.5"/><rect x="363" y="832" width="150" height="40" rx="20" fill="none" stroke-width="2" class="halo" filter="url(#glow)" style="stroke:var(--flow-pill-stroke);animation-delay:4.2s"/><text x="438" y="856" style="fill:var(--text)" font-size="13" font-weight="600">Build a move-call</text></g><use href="#sparkle" x="10" y="8" width="12" height="12" style="color:var(--accent-0)" opacity="0.35"/><use href="#sparkle" x="523" y="12" width="12" height="12" style="color:var(--accent-1)" opacity="0.35"/><use href="#sparkle" x="8" y="894" width="12" height="12" style="color:var(--accent-2)" opacity="0.35"/><use href="#sparkle" x="519" y="890" width="12" height="12" style="color:var(--accent-3)" opacity="0.35"/></svg>
+  </div>
+  
+  <p class="footer">Runs against the active env&#39;s RPC — the same network everything else in the app uses.</p>
+</div>
+
+<script>
+(function () {
+  // Theme toggle — flips [data-theme] on <html>; all colors are CSS vars, so
+  // one attribute change repaints CSS and inline SVG together. Independent of
+  // reduced-motion, so it is wired first and always.
+  var root = document.documentElement;
+  var tbtn = document.getElementById('themeBtn');
+  if (tbtn) {
+    var mq = matchMedia('(prefers-color-scheme: light)');
+    var cur = function () {
+      return root.getAttribute('data-theme') || (mq.matches ? 'light' : 'dark');
+    };
+    var sync = function () {
+      var c = cur();
+      tbtn.textContent = c === 'light' ? '\u263e dark' : '\u2600 light';
+      tbtn.setAttribute('aria-label', 'Switch to ' + (c === 'light' ? 'dark' : 'light') + ' theme');
+    };
+    tbtn.addEventListener('click', function () {
+      root.setAttribute('data-theme', cur() === 'light' ? 'dark' : 'light');
+      sync();
+    });
+    mq.addEventListener && mq.addEventListener('change', sync);
+    sync();
+  }
+  var svg = document.getElementById('flowsvg');
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.querySelectorAll('.dot, .trail').forEach(function (d) { d.remove(); });
+    var b = document.getElementById('pauseBtn'); if (b) b.remove(); return;
+  }
+  var btn = document.getElementById('pauseBtn'); if (!btn) return; var paused = false;
+  btn.addEventListener('click', function () {
+    paused = !paused; document.body.classList.toggle('paused', paused);
+    paused ? svg.pauseAnimations() : svg.unpauseAnimations();
+    btn.textContent = paused ? '\u25b6 play' : '\u23f8 pause';
+    btn.setAttribute('aria-pressed', String(paused));
+  });
+})();
+</script>
+
+</body>
+</html>

@@ -54,6 +54,13 @@ in place:
 and read the result before signing anything. Inspect and replay past
 transactions, analyse where gas actually went, and query events.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/explore-package-flow-dark.gif">
+  <img alt="Explore a package: open the Package Explorer, load your published packages, pick or paste a package ID, fetch its normalized modules over gRPC, render the interface, then copy for AI, inspect, or build a move-call." src="docs/diagrams/explore-package-flow-light.gif" width="720">
+</picture>
+
+<sub>Exploring a package — from a wall of `UpgradeCap`s to a callable interface. Interactive version: [open it live](https://htmlpreview.github.io/?https://raw.githubusercontent.com/harrymove-ctrl/sui-cli-web/master/docs/diagrams/explore-package-flow.html).</sub>
+
 **Environments and keys.** Switch between mainnet, testnet, devnet and a local
 node. Request faucet tokens. Manage addresses across key schemes. Private keys
 stay in your Sui config — the one endpoint that returns raw key material is
@@ -68,6 +75,13 @@ about your setup through the same validated, rate-limited API the browser uses,
 instead of being handed shell access to `sui`.
 
 ## How it works
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/sui-cli-web-architecture-dark.gif">
+  <img alt="Sui CLI Web architecture: a web client and an MCP AI agent on your machine talk to a local Fastify server, which shells out to the sui CLI (holding your keystore) and reads the Sui network — fullnode gRPC, GraphQL, and faucet." src="docs/diagrams/sui-cli-web-architecture-light.gif" width="820">
+</picture>
+
+<sub>Animated overview — the request dots trace a browser call (`client → server → gRPC`) and an agent call (`MCP → server → GraphQL`). Interactive version with a ☀/☾ theme toggle and ⏯ pause: [open it live](https://htmlpreview.github.io/?https://raw.githubusercontent.com/harrymove-ctrl/sui-cli-web/master/docs/diagrams/sui-cli-web-architecture.html) · source in [`docs/diagrams/`](docs/diagrams/).</sub>
 
 Three pieces, one of which you already have:
 
