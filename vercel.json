@@ -1,28 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm install",
-  "buildCommand": "npm run build",
-  "outputDirectory": "apps/web/dist",
-  "rewrites": [
-    {
-      "source": "/blog",
-      "destination": "/blog/index.html"
-    },
-    {
-      "source": "/changelog",
-      "destination": "/blog/changelog/index.html"
-    },
-    {
-      "source": "/changelog/:path*",
-      "destination": "/blog/changelog/:path*"
-    },
-    {
-      "source": "/blog/:path*",
-      "destination": "/blog/:path*"
-    },
-    {
-      "source": "/:path*",
-      "destination": "/index.html"
-    }
-  ]
+  "git": {
+    "deploymentEnabled": false
+  }
 }
