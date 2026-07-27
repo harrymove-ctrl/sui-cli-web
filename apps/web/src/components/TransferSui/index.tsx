@@ -19,11 +19,16 @@ import {
   Zap,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import { useSearchParams } from 'react-router-dom';
 import { getApiBaseUrl } from '@/api/client';
 import { Button } from '@/components/ui/button';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ClarityEvents, trackEvent } from '@/lib/clarity';
 import { showErrorToast, showInfoToast, showSuccessToast } from '@/lib/toast';
+import { buildAiContext } from '@/lib/ai-context';
+import { cn } from '@/lib/utils';
 import { useAppStore } from '@/stores/useAppStore';
 
 interface TransferableCoin {
@@ -91,6 +96,15 @@ export function TransferSui() {
   const [addressToSave, setAddressToSave] = useState('');
   const [saveAlias, setSaveAlias] = useState('');
   const [coins, setCoins] = useState<TransferableCoin[]>([]);
+
+  // Ticket needs the spendable balance of the *selected* coin object, not the
+  // address total - a transfer draws from one coin, so the address balance
+  // would let Max overshoot.
+  const spendableSui = (() => {
+    const coin = coins.find((c) => c.coinObjectId === selectedCoin);
+    return coin ? parseFloat(coin.balanceSui) || 0 : 0;
+  })();
+  const overBalance = (parseFloat(amount) || 0) > spendableSui && spendableSui > 0;
   const [isLoadingCoins, setIsLoadingCoins] = useState(false);
   const [isEstimating, setIsEstimating] = useState(false);
   const [isTransferring, setIsTransferring] = useState(false);
@@ -295,9 +309,121 @@ export function TransferSui() {
 
   const isAnyLoading = isLoadingCoins || isEstimating || isTransferring;
 
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied`);
+  };
+
+  const destination = transferMode === 'internal' ? selectedInternalAddress : toAddress;
+  const totalAmount = getTotalAmount();
+
+  const aiJson = JSON.stringify(
+    {
+      transferMode,
+      from: activeAddress?.address ?? null,
+      toAddress: transferMode === 'batch' ? undefined : destination || null,
+      amount: transferMode === 'batch' ? undefined : amount || null,
+      selectedCoin: selectedCoin || null,
+      batchRecipients:
+        transferMode === 'batch'
+          ? batchRecipients.map((r) => ({ address: r.address, amount: r.amount }))
+          : undefined,
+      totalAmount,
+      estimatedGas: estimatedGas || null,
+      transferResult,
+    },
+    null,
+    2
+  );
+
+  const aiMarkdown = [
+    '# Sui transfer',
+    '',
+    `- **Mode:** ${transferMode}`,
+    `- **From:** ${activeAddress?.address ?? 'no active wallet'}`,
+    transferMode === 'batch'
+      ? `- **Recipients:** ${batchRecipients.length}`
+      : `- **To:** ${destination || '(not set)'}`,
+    transferMode === 'batch'
+      ? `- **Total amount:** ${totalAmount} SUI`
+      : `- **Amount:** ${amount || '0'} SUI`,
+    `- **Selected coin:** ${selectedCoin || '(none)'}`,
+    estimatedGas ? `- **Estimated gas:** ${estimatedGas} SUI` : null,
+    transferMode === 'batch'
+      ? [
+          '',
+          '## Recipients',
+          '| # | Address | Amount (SUI) |',
+          '|---|---|---|',
+          ...batchRecipients.map(
+            (r, i) => `| ${i + 1} | ${r.address || '(empty)'} | ${r.amount || '0'} |`
+          ),
+        ].join('\n')
+      : null,
+    transferResult
+      ? `\n## Result\n${transferResult.success ? `Success — digest \`${transferResult.digest}\`` : `Failed — ${transferResult.error}`}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const aiPrompt = buildAiContext({
+    title: 'Sui transfer',
+    intro: [
+      'A transfer being composed in sui-cli-web. Nothing has been signed or',
+      'submitted.',
+    ],
+    stateJson: aiJson,
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/transfers/sui/coins/:address',
+        effect: "the address's spendable coin objects",
+      },
+      {
+        method: 'POST',
+        path: '/transfers/sui/dry-run',
+        body: '{ to, amount, coinId?, gasBudget? }',
+        effect: 'simulate; returns estimatedGas',
+      },
+      {
+        method: 'POST',
+        path: '/transfers/sui',
+        body: '{ to, amount, coinId?, gasBudget? }',
+        effect: 'signs and submits the transfer',
+        mutating: true,
+      },
+      {
+        method: 'POST',
+        path: '/pay/sui',
+        body: '{ recipients: [], amounts: [], inputCoins?, gasBudget?, dryRun? }',
+        effect: 'signs and submits a multi-recipient pay',
+        mutating: true,
+      },
+    ],
+    rules: [
+      "A transfer draws from a SINGLE coin object; `amount` must be <= that object's balance, not the address total",
+      'Gas is paid separately in SUI and needs its own coin with enough balance',
+      'Addresses are 0x-prefixed and 66 characters; they are NOT checksummed, so a typo is a valid-looking address and the funds are unrecoverable',
+      'Amounts in this UI are SUI; the RPC takes MIST (1 SUI = 1e9 MIST)',
+      'Use `splitCoin` / `mergeCoins` first if no single coin covers the amount',
+    ],
+    examples: [
+      'review this before I sign',
+      'work out the coin splits',
+      'run the dry-run and report the gas',
+      'turn it into a CLI command',
+    ],
+  });
+
   return (
     <div className="p-4 sm:p-6">
-      <div className="max-w-[1600px] mx-auto space-y-4">
+      <div
+        className={cn(
+          'mx-auto space-y-4',
+          transferMode === 'batch' ? 'max-w-[1600px]' : 'max-w-xl'
+        )}
+      >
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -308,47 +434,50 @@ export function TransferSui() {
             <Send className="w-5 h-5 text-[#4da2ff]" />
             <h1 className="text-lg font-semibold text-foreground">Transfer SUI</h1>
           </div>
-          <span className="text-muted-foreground text-xs hidden sm:block">
-            External &middot; Internal &middot; Batch
-          </span>
+          <CopyForAiMenu
+            prompt={aiPrompt}
+            json={aiJson}
+            markdown={aiMarkdown}
+            onCopy={copyToClipboard}
+          />
         </motion.div>
 
         {/* Mode Selector */}
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            {
-              mode: 'external' as TransferMode,
-              icon: Send,
-              label: 'External',
-              desc: 'Any address',
-            },
-            {
-              mode: 'internal' as TransferMode,
-              icon: Repeat,
-              label: 'Internal',
-              desc: 'Your wallets',
-            },
-            { mode: 'batch' as TransferMode, icon: Users, label: 'Batch', desc: 'Multiple' },
-          ].map(({ mode, icon: Icon, label, desc }) => (
-            <button
-              key={mode}
-              onClick={() => handleModeChange(mode)}
-              className={`px-3 py-3 rounded-lg border text-xs transition-all ${
-                transferMode === mode
-                  ? 'border-[#4da2ff]/50 bg-[#4da2ff]/10 text-[#4da2ff]'
-                  : 'border-border bg-card text-muted-foreground hover:border-[#4da2ff]/30 hover:text-foreground'
-              }`}
-            >
-              <Icon className="w-4 h-4 mx-auto mb-1" />
-              <div className="font-medium">{label}</div>
-              <div className="text-xs opacity-70">{desc}</div>
-            </button>
-          ))}
+        <div className="space-y-1.5">
+          <Tabs
+            value={transferMode}
+            onValueChange={(v) => handleModeChange(v as TransferMode)}
+            variant="pill"
+          >
+            <TabsList fullWidth indicatorClassName="bg-[#4da2ff]">
+              <TabsTrigger value="external" icon={<Send />} className="flex-1">
+                External
+              </TabsTrigger>
+              <TabsTrigger value="internal" icon={<Repeat />} className="flex-1">
+                Internal
+              </TabsTrigger>
+              <TabsTrigger value="batch" icon={<Users />} className="flex-1">
+                Batch
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <p className="px-1 text-xs text-muted-foreground">
+            {transferMode === 'external' && 'Send to any Sui address'}
+            {transferMode === 'internal' && 'Move funds between your own wallets'}
+            {transferMode === 'batch' && 'Send to multiple recipients at once'}
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div
+          className={cn(
+            'gap-4',
+            transferMode === 'batch'
+              ? 'grid grid-cols-1 lg:grid-cols-3'
+              : 'flex flex-col'
+          )}
+        >
           {/* Address Book */}
-          <div className="lg:col-span-1 space-y-3">
+          <div className={cn('space-y-3', transferMode === 'batch' ? 'lg:col-span-1' : 'order-2')}>
             {/* Saved Addresses */}
             <div className="bg-card border border-border rounded-lg p-4 space-y-3">
               <div className="flex items-center gap-2 text-sm text-foreground">
@@ -444,7 +573,7 @@ export function TransferSui() {
           </div>
 
           {/* Transfer Form */}
-          <div className="lg:col-span-2 space-y-3">
+          <div className={cn('space-y-3', transferMode === 'batch' ? 'lg:col-span-2' : 'order-1')}>
             <motion.div
               initial={{ opacity: 0, x: 10 }}
               animate={{ opacity: 1, x: 0 }}
@@ -458,7 +587,7 @@ export function TransferSui() {
                   {transferMode === 'batch' && <Users className="w-5 h-5 text-[#4da2ff]" />}
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-foreground">
+                  <h3 className="text-base font-semibold text-foreground">
                     {transferMode === 'external' && 'External Transfer'}
                     {transferMode === 'internal' && 'Internal Transfer'}
                     {transferMode === 'batch' && 'Batch Transfer'}
@@ -477,7 +606,7 @@ export function TransferSui() {
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-secondary/50 border border-border">
                   <Wallet className="w-4 h-4 text-[#4da2ff]" />
                   <div className="flex-1">
-                    <div className="text-xs font-medium text-foreground">
+                    <div className="text-sm font-medium text-foreground">
                       {activeAddress?.alias || 'Unknown'}
                     </div>
                     <div className="text-xs text-muted-foreground font-mono">
@@ -485,8 +614,8 @@ export function TransferSui() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-xs font-medium text-foreground">
-                      {activeAddress?.balance || '0'} SUI
+                    <div className="text-base font-semibold tabular-nums text-foreground">
+                      {activeAddress?.balance || '0'} <span className="text-xs font-normal text-muted-foreground">SUI</span>
                     </div>
                   </div>
                 </div>
@@ -503,7 +632,7 @@ export function TransferSui() {
                     value={toAddress}
                     onChange={(e) => setToAddress(e.target.value)}
                     placeholder="0x... recipient address"
-                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground placeholder:text-tertiary focus:outline-none focus:border-[#4da2ff]/50 font-mono text-xs"
+                    className="w-full px-3 py-2.5 bg-secondary border border-border rounded-lg text-foreground placeholder:text-tertiary focus:outline-none focus:border-[#4da2ff]/50 font-mono text-sm"
                   />
                 </div>
               )}
@@ -520,9 +649,7 @@ export function TransferSui() {
                         <AlertCircle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
                         <div>
                           <p className="text-xs font-medium text-yellow-400">No other wallets</p>
-                          <p className="text-xs text-yellow-500/70">
-                            Create more addresses first
-                          </p>
+                          <p className="text-xs text-yellow-500/70">Create more addresses first</p>
                         </div>
                       </div>
                     </div>
@@ -598,35 +725,78 @@ export function TransferSui() {
                 </div>
               )}
 
-              {/* Amount */}
+              {/* Amount - trade-ticket style: the number is the subject of this
+                  screen, so it leads at display size with the spendable balance
+                  and quick-add chips attached to it. */}
               {transferMode !== 'batch' && (
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">
-                    Amount <span className="text-destructive">*</span>
-                  </label>
-                  <div className="relative">
+                <div className="rounded-xl border border-border bg-secondary/50 p-3 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="transfer-amount" className="text-xs text-muted-foreground">
+                      Amount <span className="text-destructive">*</span>
+                    </label>
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="text-muted-foreground">
+                        Balance{' '}
+                        <span className="font-mono text-foreground">
+                          {spendableSui.toFixed(4)}
+                        </span>{' '}
+                        SUI
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setAmount(String(spendableSui))}
+                        disabled={spendableSui <= 0}
+                        className="rounded-md px-1.5 py-0.5 font-medium text-[#4da2ff] transition-colors hover:bg-[#4da2ff]/10 disabled:opacity-40"
+                      >
+                        Max
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-baseline gap-2">
                     <input
+                      id="transfer-amount"
                       type="text"
+                      inputMode="decimal"
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
                       placeholder="0.00"
-                      className="w-full px-3 py-2 pr-12 bg-secondary border border-border rounded-lg text-foreground placeholder:text-tertiary focus:outline-none focus:border-[#4da2ff]/50 text-sm"
+                      className="min-w-0 flex-1 bg-transparent text-4xl font-semibold tabular-nums text-foreground placeholder:text-tertiary focus:outline-none"
                     />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                      SUI
-                    </span>
+                    <span className="text-sm font-medium text-muted-foreground">SUI</span>
                   </div>
-                  <div className="flex gap-1.5">
+
+                  <div className="flex flex-wrap gap-1.5">
                     {[0.1, 0.5, 1, 5].map((val) => (
                       <button
                         key={val}
-                        onClick={() => setAmount(val.toString())}
-                        className="px-2 py-1 text-xs bg-[#4da2ff]/10 hover:bg-[#4da2ff]/20 text-[#4da2ff] rounded-md transition-colors"
+                        type="button"
+                        // Additive, not "set to": topping up a ticket is the
+                        // common gesture, and a plain set discards what's typed.
+                        onClick={() =>
+                          setAmount(String(Number(((parseFloat(amount) || 0) + val).toFixed(9))))
+                        }
+                        className="rounded-md bg-[#4da2ff]/10 px-2 py-1 text-xs text-[#4da2ff] transition-colors hover:bg-[#4da2ff]/20"
                       >
-                        {val}
+                        +{val}
                       </button>
                     ))}
+                    {amount && (
+                      <button
+                        type="button"
+                        onClick={() => setAmount('')}
+                        className="rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        Clear
+                      </button>
+                    )}
                   </div>
+
+                  {overBalance && (
+                    <p className="text-xs text-destructive">
+                      Exceeds the selected coin's balance.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -767,9 +937,7 @@ export function TransferSui() {
                         {/* Balance Change */}
                         {transferResult.balanceBefore && transferResult.balanceAfter && (
                           <div className="bg-secondary/50 border border-border rounded-lg p-3">
-                            <div className="text-xs text-muted-foreground mb-2">
-                              Balance change
-                            </div>
+                            <div className="text-xs text-muted-foreground mb-2">Balance change</div>
                             <div className="grid grid-cols-3 gap-2 items-center text-center">
                               <div>
                                 <div className="text-lg font-semibold text-foreground">

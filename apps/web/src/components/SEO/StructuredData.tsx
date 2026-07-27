@@ -13,7 +13,7 @@ const organizationSchema = {
   '@type': 'Organization',
   name: 'Sui CLI Web',
   url: 'https://sui-cli-web-production.up.railway.app',
-  logo: 'https://sui-cli-web-production.up.railway.app/sui-logo.svg',
+  logo: 'https://sui-cli-web-production.up.railway.app/sui-logo.png',
   sameAs: [
     'https://github.com/hien-p/raycast-sui-cli',
     'https://www.npmjs.com/package/sui-cli-web-server',

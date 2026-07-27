@@ -6,12 +6,14 @@ export const VIEW_TO_ROUTE: Record<string, string> = {
   environments: '/app/environments',
   objects: '/app/objects',
   'dynamic-fields': '/app/dynamic-fields',
+  packages: '/app/packages', // Its own Assets page - no longer a tab inside Objects
   gas: '/app/coins', // Redirected from gas to coins (all coin types)
   faucet: '/app/faucet',
   transfer: '/app/transfer',
   move: '/app/move',
   inspector: '/app/inspector',
   devtools: '/app/devtools',
+  devstack: '/app/devstack',
   'derived-objects': '/app/derived-objects',
   security: '/app/security',
   keytool: '/app/keytool',

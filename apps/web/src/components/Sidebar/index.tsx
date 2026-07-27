@@ -16,6 +16,8 @@ import {
   ShieldCheck,
   User,
   Wrench,
+  Boxes,
+  Braces,
 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -38,7 +40,9 @@ const NAV_ICON_MAP: Record<string, LucideIcon> = {
   faucet: Droplet,
   move: Hammer,
   inspector: Search,
+  packages: Braces,
   devtools: Wrench,
+  devstack: Boxes,
   'derived-objects': Fingerprint,
   keytool: Key,
   security: ShieldCheck,
@@ -159,9 +163,13 @@ export function Sidebar({ onSearchClick, collapsed = false, onToggleCollapse }: 
         </Tooltip>
 
         {/* Brand */}
-        <div className="w-9 h-9 my-1 rounded-lg bg-foreground flex items-center justify-center text-background text-sm font-bold flex-shrink-0">
-          S
-        </div>
+        <img
+          src="/sui-logo.png"
+          alt="Sui"
+          width={36}
+          height={36}
+          className="w-9 h-9 my-1 flex-shrink-0"
+        />
 
         {/* Search */}
         <Tooltip content="Search  ⌘K" side="right">
@@ -233,9 +241,7 @@ export function Sidebar({ onSearchClick, collapsed = false, onToggleCollapse }: 
     <aside className="flex flex-col h-full w-full px-3 py-4">
       {/* Brand + collapse toggle */}
       <div className="flex items-center gap-2 px-2 mb-4">
-        <div className="w-7 h-7 rounded-md bg-foreground flex items-center justify-center text-background text-sm font-bold">
-          S
-        </div>
+        <img src="/sui-logo.png" alt="Sui" width={28} height={28} className="w-7 h-7 shrink-0" />
         <span className="text-base font-semibold text-foreground flex-1">Sui CLI</span>
         {onToggleCollapse && (
           <Tooltip content="Collapse sidebar" side="bottom">

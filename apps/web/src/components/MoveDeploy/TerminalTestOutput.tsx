@@ -2,6 +2,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, XCircle, TestTube2, Copy, Maximize2, Minimize2 } from 'lucide-react';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
+import { Pie } from '@/components/dither-kit/pie';
+import { PieChart } from '@/components/dither-kit/pie-chart';
 
 interface TerminalTestOutputProps {
   output: string;
@@ -249,6 +251,38 @@ export function TerminalTestOutput({ output, passed, failed }: TerminalTestOutpu
                 ┌─ SUMMARY ───────────────────────────────────────┐
               </div>
               <div className={`bg-black/40 border-l-2 border-r-2 border-${colorClass}-500/20 px-4 py-3 space-y-2`}>
+                {/* A pass/fail donut, but only once something actually ran - a
+                    ring rendered from zeros is just a misleading circle. */}
+                {passed + failed > 0 && (
+                  <div className="flex items-center gap-4 pb-1">
+                    <div className="h-[76px] w-[76px] flex-shrink-0">
+                      <PieChart
+                        data={[
+                          { name: 'Passed', value: passed },
+                          { name: 'Failed', value: failed },
+                        ].filter((d) => d.value > 0)}
+                        config={{
+                          Passed: { label: 'Passed', color: 'green' },
+                          Failed: { label: 'Failed', color: 'red' },
+                        }}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={0.62}
+                        bloom="low"
+                      >
+                        <Pie variant="gradient" />
+                      </PieChart>
+                    </div>
+                    <div className="min-w-0">
+                      <div className={`text-lg font-semibold ${textColor}`}>
+                        {Math.round((passed / (passed + failed)) * 100)}%
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {passed} of {passed + failed} passing
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <motion.div
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}

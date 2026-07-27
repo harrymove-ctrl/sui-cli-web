@@ -109,6 +109,28 @@ export const DEFAULT_COMMANDS: Command[] = [
     action: 'gas',
   },
   {
+    // Sits under Assets, not Development: packages are something the address
+    // *owns* (they're derived from your UpgradeCaps), and next to "My Objects"
+    // it's clear the two lists are different things.
+    id: 'packages',
+    title: 'My Packages',
+    subtitle: "Packages you published - modules, functions & types",
+    icon: '📦',
+    category: CATEGORIES.ASSETS,
+    keywords: [
+      'package',
+      'module',
+      'function',
+      'struct',
+      'abi',
+      'interface',
+      'explore',
+      'contract',
+      'move',
+    ],
+    action: 'packages',
+  },
+  {
     id: 'dynamic-fields',
     title: 'Dynamic Fields',
     subtitle: 'Query dynamic fields on any object',
@@ -173,6 +195,15 @@ export const DEFAULT_COMMANDS: Command[] = [
     category: CATEGORIES.DEVELOPMENT,
     keywords: ['coverage', 'disassemble', 'summary', 'bytecode', 'test', 'debug'],
     action: 'devtools',
+  },
+  {
+    id: 'devstack',
+    title: 'Devstack Bridge',
+    subtitle: 'Read a local devstack project and switch to its network',
+    icon: '📦',
+    category: CATEGORIES.DEVELOPMENT,
+    keywords: ['devstack', 'localnet', 'stack', 'sandbox', 'deployment', 'fork'],
+    action: 'devstack',
   },
   {
     id: 'derived-objects',
