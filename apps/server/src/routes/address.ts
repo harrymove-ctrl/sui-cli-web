@@ -151,14 +151,19 @@ export async function addressRoutes(fastify: FastifyInstance) {
   }>('/addresses/:address/summary', async (request, reply) => {
     try {
       const address = validateAddress(request.params.address);
-      const [rawObjects, coinGroups] = await Promise.all([
-        addressService.getRawObjects(address),
+      const [summary, coinGroups] = await Promise.all([
+        addressService.getObjectSummary(address),
         coinService.getCoinsGrouped(address),
       ]);
-      const packages = packageService.extractPublishedPackages(rawObjects);
+      // rawObjects is only non-null on the CLI fallback path, where packages
+      // still have to be extracted from the raw BCS shape. The gRPC path has
+      // already resolved them.
+      const packages = summary.rawObjects
+        ? packageService.extractPublishedPackages(summary.rawObjects)
+        : summary.packages;
       return {
         success: true,
-        data: { objectCount: rawObjects.length, packages, coinGroups },
+        data: { objectCount: summary.objectCount, packages, coinGroups },
       };
     } catch (error) {
       return handleError(error, reply);
@@ -298,6 +303,23 @@ export async function addressRoutes(fastify: FastifyInstance) {
       const objectIds = rawIds.slice(0, 500).map((id) => validateObjectId(id));
       const metadata = await addressService.getNftMetadata(objectIds);
       return { success: true, data: metadata };
+    } catch (error) {
+      return handleError(error, reply);
+    }
+  });
+
+  // Batch-fetch richer per-object attributes (owner, storage rebate, digest,
+  // has-public-transfer, previous tx, best-effort Display) for the "My Objects"
+  // expandable rows. Same batching approach as nft-metadata above.
+  fastify.post<{
+    Body: { objectIds: string[] };
+    Reply: ApiResponse<any>;
+  }>('/objects/attributes', async (request, reply) => {
+    try {
+      const rawIds = Array.isArray(request.body?.objectIds) ? request.body.objectIds : [];
+      const objectIds = rawIds.slice(0, 500).map((id) => validateObjectId(id));
+      const attributes = await addressService.getObjectsAttributes(objectIds);
+      return { success: true, data: attributes };
     } catch (error) {
       return handleError(error, reply);
     }

@@ -40,7 +40,6 @@ PLAN.md
 # Keep README.md and packages/server/README.md for npm
 IMPLEMENTATION_PLAN.md
 FEATURES.md
-docs/
 plans/
 contracts/community_registry/CONTRACT_INFO.md
 

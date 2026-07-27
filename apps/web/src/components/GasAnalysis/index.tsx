@@ -2,35 +2,36 @@
  * GasAnalysis - Comprehensive gas analysis with transaction insights
  */
 
-import React, { useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
-  Search,
-  Fuel,
-  Zap,
-  Database,
-  ArrowDownRight,
-  HelpCircle,
-  CheckCircle2,
+  Activity,
   AlertTriangle,
-  Lightbulb,
-  Loader2,
-  Copy,
+  ArrowDownRight,
+  ArrowRightLeft,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
-  Activity,
-  TrendingUp,
   Clock,
-  Package,
   Coins,
-  ArrowRightLeft,
+  Copy,
+  Database,
   FileCode,
-  Sparkles,
+  Fuel,
+  HelpCircle,
   Info,
+  Lightbulb,
+  Loader2,
+  Package,
+  Search,
+  Sparkles,
+  TrendingUp,
+  Zap,
 } from 'lucide-react';
+import React, { useCallback, useState } from 'react';
 import toast from 'react-hot-toast';
 import { apiClient } from '@/api/client';
 import { Button } from '@/components/ui/button';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 
 interface GasBreakdown {
   computationCost: string;
@@ -95,7 +96,11 @@ function analyzeGasDistribution(breakdown: GasBreakdown) {
 }
 
 // Estimate transaction type from gas pattern
-function estimateTransactionType(breakdown: GasBreakdown): { type: string; icon: React.ReactNode; description: string } {
+function estimateTransactionType(breakdown: GasBreakdown): {
+  type: string;
+  icon: React.ReactNode;
+  description: string;
+} {
   const computation = Number(breakdown.computationCost);
   const storage = Number(breakdown.storageCost);
   const rebate = Number(breakdown.storageRebate);
@@ -106,7 +111,7 @@ function estimateTransactionType(breakdown: GasBreakdown): { type: string; icon:
     return {
       type: 'Cleanup/Delete',
       icon: <Package className="w-4 h-4" />,
-      description: 'Objects were deleted, freeing storage'
+      description: 'Objects were deleted, freeing storage',
     };
   }
 
@@ -115,7 +120,7 @@ function estimateTransactionType(breakdown: GasBreakdown): { type: string; icon:
     return {
       type: 'Object Creation',
       icon: <Sparkles className="w-4 h-4" />,
-      description: 'New objects created (NFT mint, deploy, etc.)'
+      description: 'New objects created (NFT mint, deploy, etc.)',
     };
   }
 
@@ -124,7 +129,7 @@ function estimateTransactionType(breakdown: GasBreakdown): { type: string; icon:
     return {
       type: 'DeFi/Swap',
       icon: <ArrowRightLeft className="w-4 h-4" />,
-      description: 'Complex computation (swap, stake, etc.)'
+      description: 'Complex computation (swap, stake, etc.)',
     };
   }
 
@@ -133,7 +138,7 @@ function estimateTransactionType(breakdown: GasBreakdown): { type: string; icon:
     return {
       type: 'Simple Transfer',
       icon: <Coins className="w-4 h-4" />,
-      description: 'Basic SUI or token transfer'
+      description: 'Basic SUI or token transfer',
     };
   }
 
@@ -142,14 +147,14 @@ function estimateTransactionType(breakdown: GasBreakdown): { type: string; icon:
     return {
       type: 'Contract Deploy',
       icon: <FileCode className="w-4 h-4" />,
-      description: 'Smart contract deployment'
+      description: 'Smart contract deployment',
     };
   }
 
   return {
     type: 'General Transaction',
     icon: <Activity className="w-4 h-4" />,
-    description: 'Standard blockchain operation'
+    description: 'Standard blockchain operation',
   };
 }
 
@@ -166,7 +171,11 @@ function Tooltip({ children, content }: { children: React.ReactNode; content: st
   const [show, setShow] = useState(false);
   return (
     <div className="relative inline-flex">
-      <div onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)} className="cursor-help">
+      <div
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        className="cursor-help"
+      >
         {children}
       </div>
       <AnimatePresence>
@@ -222,10 +231,22 @@ export function GasAnalysis() {
     toast.success('Copied!');
   };
 
+  const copyForAi = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied`);
+  };
+
   const getEfficiencyInfo = (eff: number) => {
-    if (eff >= 70) return { color: 'text-green-400', bg: 'bg-green-500', label: 'Excellent', emoji: '🎯' };
+    if (eff >= 70)
+      return { color: 'text-green-400', bg: 'bg-green-500', label: 'Excellent', emoji: '🎯' };
     if (eff >= 40) return { color: 'text-blue-400', bg: 'bg-blue-500', label: 'Good', emoji: '👍' };
-    if (eff >= 20) return { color: 'text-yellow-400', bg: 'bg-yellow-500', label: 'Room to optimize', emoji: '💡' };
+    if (eff >= 20)
+      return {
+        color: 'text-yellow-400',
+        bg: 'bg-yellow-500',
+        label: 'Room to optimize',
+        emoji: '💡',
+      };
     return { color: 'text-orange-400', bg: 'bg-orange-500', label: 'Over-budgeted', emoji: '⚠️' };
   };
 
@@ -234,16 +255,53 @@ export function GasAnalysis() {
   const gasDistribution = breakdown ? analyzeGasDistribution(breakdown) : null;
   const efficiencyInfo = breakdown ? getEfficiencyInfo(breakdown.efficiency) : null;
 
+  // AI export of the current gas analysis, only meaningful once a tx is analyzed.
+  const aiJson = breakdown
+    ? JSON.stringify(
+        {
+          digest: digest.trim(),
+          transactionType: txType?.type,
+          breakdown,
+          gasDistribution,
+          optimizations: result?.optimizations ?? [],
+        },
+        null,
+        2
+      )
+    : undefined;
+
+  const aiPrompt = breakdown
+    ? [
+        `Explain this Sui transaction's gas usage and how to optimize it.`,
+        '',
+        `- Digest: ${digest.trim()}`,
+        `- Detected type: ${txType?.type ?? 'unknown'} (${txType?.description ?? ''})`,
+        `- Total gas used: ${formatSui(breakdown.totalGasUsed)} SUI (${formatNumber(breakdown.totalGasUsed)} MIST)`,
+        `- Gas budget: ${formatSui(breakdown.totalGasBudget)} SUI, efficiency ${breakdown.efficiency}% used`,
+        `- Computation: ${formatSui(breakdown.computationCost)} SUI (${gasDistribution?.computationPercent ?? 0}%)`,
+        `- Storage: ${formatSui(breakdown.storageCost)} SUI (${gasDistribution?.storagePercent ?? 0}%)`,
+        `- Storage rebate: ${formatSui(breakdown.storageRebate)} SUI`,
+        result && result.optimizations.length > 0
+          ? `\nExisting insights:\n${result.optimizations.map((o) => `- [${o.type}] ${o.message}`).join('\n')}`
+          : '',
+        '',
+        `Break down where the gas went and suggest concrete ways to reduce it.`,
+      ].join('\n')
+    : '';
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="p-4 border-b border-border space-y-3">
-        <div className="flex items-center gap-2">
-          <Fuel className="w-5 h-5 text-orange-400" />
-          <h2 className="text-lg font-semibold text-foreground">Gas Analysis</h2>
-          <Tooltip content="Analyze transaction gas usage, understand costs, and get optimization tips">
-            <HelpCircle className="w-4 h-4 text-muted-foreground" />
-          </Tooltip>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Fuel className="w-5 h-5 text-orange-400" />
+            <h2 className="text-lg font-semibold text-foreground">Gas Analysis</h2>
+            <Tooltip content="Analyze transaction gas usage, understand costs, and get optimization tips">
+              <HelpCircle className="w-4 h-4 text-muted-foreground" />
+            </Tooltip>
+          </div>
+          {breakdown && <CopyForAiMenu prompt={aiPrompt} json={aiJson} onCopy={copyForAi} />}
         </div>
 
         <div className="flex gap-2">
@@ -258,7 +316,11 @@ export function GasAnalysis() {
               className="w-full pl-9 pr-4 py-2.5 bg-secondary border border-border rounded-lg text-sm text-foreground placeholder:text-tertiary focus:outline-none focus:border-orange-500/50 font-mono"
             />
           </div>
-          <Button onClick={analyzeTransaction} disabled={isLoading || !digest.trim()} className="px-5">
+          <Button
+            onClick={analyzeTransaction}
+            disabled={isLoading || !digest.trim()}
+            className="px-5"
+          >
             {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Analyze'}
           </Button>
         </div>
@@ -274,7 +336,6 @@ export function GasAnalysis() {
 
         {breakdown && txType && gasDistribution && efficiencyInfo && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-
             {/* Transaction Summary Card */}
             <div className="bg-gradient-to-br from-orange-500/10 to-yellow-500/5 border border-orange-500/20 rounded-xl p-4">
               <div className="flex items-start justify-between mb-3">
@@ -306,13 +367,19 @@ export function GasAnalysis() {
                   </div>
                 </div>
                 <div className="flex-1 text-right">
-                  <div className="text-xs text-muted-foreground">~${(Number(breakdown.totalGasUsed) / 1_000_000_000 * 3.5).toFixed(4)} USD</div>
-                  <div className="text-xs text-tertiary font-mono">{formatNumber(breakdown.totalGasUsed)} MIST</div>
+                  <div className="text-xs text-muted-foreground">
+                    ~${((Number(breakdown.totalGasUsed) / 1_000_000_000) * 3.5).toFixed(4)} USD
+                  </div>
+                  <div className="text-xs text-tertiary font-mono">
+                    {formatNumber(breakdown.totalGasUsed)} MIST
+                  </div>
                 </div>
               </div>
 
               {/* Efficiency Badge */}
-              <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${efficiencyInfo.bg}/20 ${efficiencyInfo.color} border border-current/30`}>
+              <div
+                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${efficiencyInfo.bg}/20 ${efficiencyInfo.color} border border-current/30`}
+              >
                 <span>{efficiencyInfo.emoji}</span>
                 <span className="font-medium">{breakdown.efficiency}% budget used</span>
                 <span className="text-xs opacity-70">• {efficiencyInfo.label}</span>
@@ -333,7 +400,9 @@ export function GasAnalysis() {
                     className="bg-blue-500 flex items-center justify-center"
                   >
                     {gasDistribution.computationPercent > 15 && (
-                      <span className="text-xs font-medium text-white">{gasDistribution.computationPercent}%</span>
+                      <span className="text-xs font-medium text-white">
+                        {gasDistribution.computationPercent}%
+                      </span>
                     )}
                   </motion.div>
                   <motion.div
@@ -343,7 +412,9 @@ export function GasAnalysis() {
                     className="bg-purple-500 flex items-center justify-center"
                   >
                     {gasDistribution.storagePercent > 15 && (
-                      <span className="text-xs font-medium text-white">{gasDistribution.storagePercent}%</span>
+                      <span className="text-xs font-medium text-white">
+                        {gasDistribution.storagePercent}%
+                      </span>
                     )}
                   </motion.div>
                 </div>
@@ -370,7 +441,9 @@ export function GasAnalysis() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-mono text-foreground">{formatSui(breakdown.computationCost)} SUI</div>
+                    <div className="text-sm font-mono text-foreground">
+                      {formatSui(breakdown.computationCost)} SUI
+                    </div>
                   </div>
                 </div>
 
@@ -383,7 +456,9 @@ export function GasAnalysis() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-mono text-foreground">{formatSui(breakdown.storageCost)} SUI</div>
+                    <div className="text-sm font-mono text-foreground">
+                      {formatSui(breakdown.storageCost)} SUI
+                    </div>
                   </div>
                 </div>
 
@@ -397,7 +472,9 @@ export function GasAnalysis() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm font-mono text-green-400">-{formatSui(breakdown.storageRebate)} SUI</div>
+                      <div className="text-sm font-mono text-green-400">
+                        -{formatSui(breakdown.storageRebate)} SUI
+                      </div>
                     </div>
                   </div>
                 )}
@@ -411,16 +488,23 @@ export function GasAnalysis() {
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Gas Budget Set</span>
-                  <span className="font-mono text-foreground">{formatSui(breakdown.totalGasBudget)} SUI</span>
+                  <span className="font-mono text-foreground">
+                    {formatSui(breakdown.totalGasBudget)} SUI
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Actually Used</span>
-                  <span className="font-mono text-foreground">{formatSui(breakdown.totalGasUsed)} SUI</span>
+                  <span className="font-mono text-foreground">
+                    {formatSui(breakdown.totalGasUsed)} SUI
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Unused (Returned)</span>
                   <span className="font-mono text-green-400">
-                    {formatSui((Number(breakdown.totalGasBudget) - Number(breakdown.totalGasUsed)).toString())} SUI
+                    {formatSui(
+                      (Number(breakdown.totalGasBudget) - Number(breakdown.totalGasUsed)).toString()
+                    )}{' '}
+                    SUI
                   </span>
                 </div>
 
@@ -450,8 +534,11 @@ export function GasAnalysis() {
                     <div
                       key={i}
                       className={`flex items-start gap-3 p-3 rounded-lg ${
-                        opt.type === 'warning' ? 'bg-yellow-500/10' :
-                        opt.type === 'suggestion' ? 'bg-blue-500/10' : 'bg-green-500/10'
+                        opt.type === 'warning'
+                          ? 'bg-yellow-500/10'
+                          : opt.type === 'suggestion'
+                            ? 'bg-blue-500/10'
+                            : 'bg-green-500/10'
                       }`}
                     >
                       {opt.type === 'warning' ? (
@@ -462,14 +549,23 @@ export function GasAnalysis() {
                         <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
                       )}
                       <div>
-                        <div className={`text-sm ${
-                          opt.type === 'warning' ? 'text-yellow-300' :
-                          opt.type === 'suggestion' ? 'text-blue-300' : 'text-green-300'
-                        }`}>
+                        <div
+                          className={`text-sm ${
+                            opt.type === 'warning'
+                              ? 'text-yellow-300'
+                              : opt.type === 'suggestion'
+                                ? 'text-blue-300'
+                                : 'text-green-300'
+                          }`}
+                        >
                           {opt.message}
                         </div>
-                        {opt.details && <div className="text-xs text-muted-foreground mt-1">{opt.details}</div>}
-                        {opt.potentialSavings && <div className="text-xs text-green-400 mt-1">{opt.potentialSavings}</div>}
+                        {opt.details && (
+                          <div className="text-xs text-muted-foreground mt-1">{opt.details}</div>
+                        )}
+                        {opt.potentialSavings && (
+                          <div className="text-xs text-green-400 mt-1">{opt.potentialSavings}</div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -486,11 +582,15 @@ export function GasAnalysis() {
               <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
                 <div>
                   <span className="text-blue-400 font-medium">Computation</span>
-                  <p className="mt-0.5">Processing power for executing code (loops, calculations, function calls)</p>
+                  <p className="mt-0.5">
+                    Processing power for executing code (loops, calculations, function calls)
+                  </p>
                 </div>
                 <div>
                   <span className="text-purple-400 font-medium">Storage</span>
-                  <p className="mt-0.5">Cost to store data on-chain (creating objects, modifying state)</p>
+                  <p className="mt-0.5">
+                    Cost to store data on-chain (creating objects, modifying state)
+                  </p>
                 </div>
                 <div>
                   <span className="text-green-400 font-medium">Rebate</span>
@@ -498,7 +598,9 @@ export function GasAnalysis() {
                 </div>
                 <div>
                   <span className="text-orange-400 font-medium">Budget</span>
-                  <p className="mt-0.5">Max gas you're willing to pay. Unused gas is returned to you.</p>
+                  <p className="mt-0.5">
+                    Max gas you're willing to pay. Unused gas is returned to you.
+                  </p>
                 </div>
               </div>
             </div>
@@ -513,13 +615,20 @@ export function GasAnalysis() {
             </div>
             <h3 className="text-foreground/80 font-medium mb-2">Analyze Transaction Gas</h3>
             <p className="text-sm text-muted-foreground max-w-sm mb-6">
-              Understand how much gas was used, where it went, and how to optimize future transactions
+              Understand how much gas was used, where it went, and how to optimize future
+              transactions
             </p>
             <div className="space-y-2">
               <div className="text-xs text-muted-foreground">Try these examples:</div>
               {[
-                { digest: '7SZsZ8RzL7JcteKbcJh4D5xXjz6vGkuxNzj6wJtB73Dv', label: 'Oracle Update (11 events)' },
-                { digest: '95iEUzhvYWZoceBtgq7LkMsZxhrtfK3iJQk7AFV6Xgnk', label: 'DeFi Transaction (29 events)' },
+                {
+                  digest: '7SZsZ8RzL7JcteKbcJh4D5xXjz6vGkuxNzj6wJtB73Dv',
+                  label: 'Oracle Update (11 events)',
+                },
+                {
+                  digest: '95iEUzhvYWZoceBtgq7LkMsZxhrtfK3iJQk7AFV6Xgnk',
+                  label: 'DeFi Transaction (29 events)',
+                },
               ].map((example) => (
                 <button
                   key={example.digest}

@@ -4,6 +4,15 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    // react-draggable (pulled in by react-grid-layout) reads
+    // `process.env.DRAGGABLE_DEBUG` inside a log() it calls on EVERY drag/resize
+    // event. Vite's dev server does not define `process`, so without this the
+    // reference throws "process is not defined", the drag handler crashes, and
+    // cards silently refuse to move. `vite build` already inlines it, so this
+    // only matters for the dev server.
+    'process.env.DRAGGABLE_DEBUG': 'false',
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -66,7 +75,9 @@ export default defineConfig({
   },
   // Optimize dependencies
   optimizeDeps: {
-    include: ['react', 'react-dom', 'react-router-dom', 'zustand'],
+    // Pre-bundle the grid libs so the `define` above is applied to their code
+    // (react-draggable's process.env access lives inside react-grid-layout's tree).
+    include: ['react', 'react-dom', 'react-router-dom', 'zustand', 'react-grid-layout', 'react-draggable'],
     // Exclude libraries with __DEFINES__ issues in dev mode
     exclude: ['@microsoft/clarity', '@statsig/js-client', '@statsig/session-replay', '@statsig/web-analytics'],
   },

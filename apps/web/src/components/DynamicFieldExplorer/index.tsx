@@ -1,11 +1,21 @@
-import { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import {
+  ArrowRight,
+  ChevronDown,
+  Copy,
+  ExternalLink,
+  Eye,
+  Link2,
+  RefreshCw,
+  Search,
+} from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import toast from 'react-hot-toast';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getDynamicFields } from '@/api/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 import { Spinner } from '../shared/Spinner';
-import toast from 'react-hot-toast';
-import { Link2, Eye, Search, Copy, ExternalLink, ChevronDown, RefreshCw, ArrowRight } from 'lucide-react';
 
 interface DynamicField {
   name: any;
@@ -18,7 +28,12 @@ interface DynamicField {
 }
 
 // Parse field key from name object
-function parseFieldKey(name: any): { type: string; value: string; displayType: string; displayValue: string } {
+function parseFieldKey(name: any): {
+  type: string;
+  value: string;
+  displayType: string;
+  displayValue: string;
+} {
   if (typeof name === 'object' && name !== null) {
     const type = name.type || 'unknown';
     const value = name.value || JSON.stringify(name);
@@ -27,9 +42,10 @@ function parseFieldKey(name: any): { type: string; value: string; displayType: s
     const displayType = type.split('::').pop() || type;
 
     // Shortened value for display
-    const displayValue = typeof value === 'string' && value.length > 20
-      ? `${value.slice(0, 10)}...${value.slice(-8)}`
-      : String(value);
+    const displayValue =
+      typeof value === 'string' && value.length > 20
+        ? `${value.slice(0, 10)}...${value.slice(-8)}`
+        : String(value);
 
     return { type, value, displayType, displayValue };
   }
@@ -37,7 +53,7 @@ function parseFieldKey(name: any): { type: string; value: string; displayType: s
     type: 'string',
     value: String(name),
     displayType: 'string',
-    displayValue: String(name)
+    displayValue: String(name),
   };
 }
 
@@ -57,14 +73,54 @@ function getPackageId(fullType: string): string {
 }
 
 // Get type-based styling
-function getTypeStyle(objectType: string): { icon: string; colorClass: string; bgClass: string; borderClass: string } {
+function getTypeStyle(objectType: string): {
+  icon: string;
+  colorClass: string;
+  bgClass: string;
+  borderClass: string;
+} {
   const type = objectType.toLowerCase();
-  if (type.includes('table')) return { icon: '📊', colorClass: 'text-cyan-400', bgClass: 'bg-cyan-500/20', borderClass: 'border-cyan-500/30' };
-  if (type.includes('bag')) return { icon: '🎒', colorClass: 'text-purple-400', bgClass: 'bg-purple-500/20', borderClass: 'border-purple-500/30' };
-  if (type.includes('vec') || type.includes('vector')) return { icon: '📋', colorClass: 'text-green-400', bgClass: 'bg-green-500/20', borderClass: 'border-green-500/30' };
-  if (type.includes('item') || type.includes('nft') || type.includes('character')) return { icon: '🎮', colorClass: 'text-orange-400', bgClass: 'bg-orange-500/20', borderClass: 'border-orange-500/30' };
-  if (type.includes('coin')) return { icon: '🪙', colorClass: 'text-yellow-400', bgClass: 'bg-yellow-500/20', borderClass: 'border-yellow-500/30' };
-  return { icon: '📦', colorClass: 'text-blue-400', bgClass: 'bg-blue-500/20', borderClass: 'border-blue-500/30' };
+  if (type.includes('table'))
+    return {
+      icon: '📊',
+      colorClass: 'text-cyan-400',
+      bgClass: 'bg-cyan-500/20',
+      borderClass: 'border-cyan-500/30',
+    };
+  if (type.includes('bag'))
+    return {
+      icon: '🎒',
+      colorClass: 'text-purple-400',
+      bgClass: 'bg-purple-500/20',
+      borderClass: 'border-purple-500/30',
+    };
+  if (type.includes('vec') || type.includes('vector'))
+    return {
+      icon: '📋',
+      colorClass: 'text-green-400',
+      bgClass: 'bg-green-500/20',
+      borderClass: 'border-green-500/30',
+    };
+  if (type.includes('item') || type.includes('nft') || type.includes('character'))
+    return {
+      icon: '🎮',
+      colorClass: 'text-orange-400',
+      bgClass: 'bg-orange-500/20',
+      borderClass: 'border-orange-500/30',
+    };
+  if (type.includes('coin'))
+    return {
+      icon: '🪙',
+      colorClass: 'text-yellow-400',
+      bgClass: 'bg-yellow-500/20',
+      borderClass: 'border-yellow-500/30',
+    };
+  return {
+    icon: '📦',
+    colorClass: 'text-blue-400',
+    bgClass: 'bg-blue-500/20',
+    borderClass: 'border-blue-500/30',
+  };
 }
 
 export function DynamicFieldExplorer() {
@@ -99,18 +155,14 @@ export function DynamicFieldExplorer() {
 
     setIsLoading(true);
     try {
-      const result = await getDynamicFields(
-        cursor ? queriedObjectId : id,
-        cursor,
-        50
-      );
+      const result = await getDynamicFields(cursor ? queriedObjectId : id, cursor, 50);
 
       if (!cursor) {
         setFields(result.data);
         setQueriedObjectId(id);
         setExpandedFields(new Set()); // Collapse all on new query
       } else {
-        setFields(prev => [...prev, ...result.data]);
+        setFields((prev) => [...prev, ...result.data]);
       }
 
       setHasNextPage(result.hasNextPage);
@@ -167,12 +219,67 @@ export function DynamicFieldExplorer() {
     window.open(`https://suiscan.xyz/testnet/object/${objectId}`, '_blank');
   };
 
+  // Copy-for-AI export of the parent object and its dynamic fields (capped so a
+  // huge collection doesn't produce an unusable prompt).
+  const aiExport = useMemo(() => {
+    if (!queriedObjectId || fields.length === 0) return null;
+    const CAP = 200;
+    const capped = fields.slice(0, CAP);
+    const rows = capped.map((f) => {
+      const key = parseFieldKey(f.name);
+      return {
+        keyType: key.type,
+        keyValue: key.value,
+        objectId: f.objectId,
+        objectType: f.objectType,
+        version: f.version,
+      };
+    });
+    const truncatedNote = fields.length > CAP ? ` (showing first ${CAP} of ${fields.length})` : '';
+    const prompt = [
+      `The Sui object ${queriedObjectId} has ${fields.length} dynamic field${fields.length !== 1 ? 's' : ''}${truncatedNote}.`,
+      'Fields (key -> stored object):',
+      ...rows.map(
+        (r) =>
+          `- ${getShortTypeName(r.keyType)} ${r.keyValue} -> ${r.objectId} (${getShortTypeName(r.objectType)})`
+      ),
+      '',
+      'Help me understand what this object stores and how these dynamic fields are used.',
+    ].join('\n');
+    const json = JSON.stringify(
+      { parentObjectId: queriedObjectId, totalFields: fields.length, fields: rows },
+      null,
+      2
+    );
+    const markdown = [
+      `# Dynamic Fields of \`${queriedObjectId}\`${truncatedNote}`,
+      '',
+      '| Key type | Key value | Stored object | Object type |',
+      '| --- | --- | --- | --- |',
+      ...rows.map(
+        (r) =>
+          `| ${getShortTypeName(r.keyType)} | ${r.keyValue} | \`${r.objectId}\` | ${getShortTypeName(r.objectType)} |`
+      ),
+    ].join('\n');
+    return { prompt, json, markdown };
+  }, [queriedObjectId, fields]);
+
   return (
     <div className="px-2 py-2 max-w-2xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-2 px-1">
-        <Link2 className="w-5 h-5 text-muted-foreground" />
-        <h1 className="text-lg font-semibold text-foreground">Dynamic Fields</h1>
+      <div className="flex items-center justify-between gap-2 px-1">
+        <div className="flex items-center gap-2">
+          <Link2 className="w-5 h-5 text-muted-foreground" />
+          <h1 className="text-lg font-semibold text-foreground">Dynamic Fields</h1>
+        </div>
+        {aiExport && (
+          <CopyForAiMenu
+            prompt={aiExport.prompt}
+            json={aiExport.json}
+            markdown={aiExport.markdown}
+            onCopy={copyToClipboard}
+          />
+        )}
       </div>
 
       {/* Search Input */}
@@ -264,7 +371,9 @@ export function DynamicFieldExplorer() {
                     className="flex items-center gap-3 px-3 py-3 cursor-pointer hover:bg-accent/50 transition-colors"
                     onClick={() => toggleExpanded(index)}
                   >
-                    <div className={`w-9 h-9 rounded-lg ${typeStyle.bgClass} flex items-center justify-center text-lg`}>
+                    <div
+                      className={`w-9 h-9 rounded-lg ${typeStyle.bgClass} flex items-center justify-center text-lg`}
+                    >
                       {typeStyle.icon}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -273,9 +382,7 @@ export function DynamicFieldExplorer() {
                           {shortType}
                         </span>
                         <span className="text-xs text-tertiary">•</span>
-                        <span className="text-xs text-muted-foreground">
-                          Field {index + 1}
-                        </span>
+                        <span className="text-xs text-muted-foreground">Field {index + 1}</span>
                       </div>
                       <div className="text-xs text-muted-foreground font-mono truncate">
                         {field.objectId.slice(0, 12)}...{field.objectId.slice(-8)}
@@ -298,7 +405,9 @@ export function DynamicFieldExplorer() {
                         <div className="p-3 bg-secondary rounded-lg border border-border space-y-1.5">
                           <div className="flex items-center justify-between">
                             <span className="text-xs text-muted-foreground">Type</span>
-                            <span className="text-xs font-mono text-foreground">{keyInfo.displayType}</span>
+                            <span className="text-xs font-mono text-foreground">
+                              {keyInfo.displayType}
+                            </span>
                           </div>
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-xs text-muted-foreground">Value</span>
@@ -339,22 +448,30 @@ export function DynamicFieldExplorer() {
                                 copyToClipboard(field.objectId, 'Object ID');
                               }}
                             >
-                              <span className="truncate">{field.objectId.slice(0, 10)}...{field.objectId.slice(-8)}</span>
+                              <span className="truncate">
+                                {field.objectId.slice(0, 10)}...{field.objectId.slice(-8)}
+                              </span>
                               <Copy className="w-3 h-3 flex-shrink-0 opacity-50" />
                             </div>
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-xs text-muted-foreground">Type</span>
-                            <span className={`text-xs font-medium ${typeStyle.colorClass}`}>{shortType}</span>
+                            <span className={`text-xs font-medium ${typeStyle.colorClass}`}>
+                              {shortType}
+                            </span>
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-xs text-muted-foreground">Version</span>
-                            <span className="text-xs font-mono text-foreground">{field.version}</span>
+                            <span className="text-xs font-mono text-foreground">
+                              {field.version}
+                            </span>
                           </div>
                           {getPackageId(field.objectType) && (
                             <div className="flex items-center justify-between">
                               <span className="text-xs text-muted-foreground">Package</span>
-                              <span className="text-xs font-mono text-muted-foreground">{getPackageId(field.objectType)}</span>
+                              <span className="text-xs font-mono text-muted-foreground">
+                                {getPackageId(field.objectType)}
+                              </span>
                             </div>
                           )}
                         </div>
@@ -438,15 +555,22 @@ export function DynamicFieldExplorer() {
           <div className="p-6 rounded-xl border border-border bg-card text-center">
             <div className="text-4xl mb-3">📭</div>
             <div className="text-foreground font-medium mb-1">No dynamic fields</div>
-            <div className="text-xs text-muted-foreground mb-4">This object doesn't have any dynamic fields attached.</div>
+            <div className="text-xs text-muted-foreground mb-4">
+              This object doesn't have any dynamic fields attached.
+            </div>
 
             <div className="mt-4 p-4 bg-secondary rounded-lg border border-border text-left">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-sm">💡</span>
-                <span className="text-xs font-medium text-foreground">What are dynamic fields?</span>
+                <span className="text-xs font-medium text-foreground">
+                  What are dynamic fields?
+                </span>
               </div>
               <div className="text-xs text-muted-foreground space-y-2">
-                <p>Dynamic fields let you attach key-value data to objects at runtime without declaring them in the Move struct definition.</p>
+                <p>
+                  Dynamic fields let you attach key-value data to objects at runtime without
+                  declaring them in the Move struct definition.
+                </p>
                 <div className="space-y-1 mt-2">
                   <div className="flex items-center gap-2">
                     <span>🎮</span>
@@ -480,9 +604,7 @@ export function DynamicFieldExplorer() {
             </div>
 
             <div className="mt-4 p-4 bg-secondary rounded-lg border border-border text-left">
-              <div className="text-xs font-medium text-muted-foreground mb-2">
-                What you'll see
-              </div>
+              <div className="text-xs font-medium text-muted-foreground mb-2">What you'll see</div>
               <div className="text-xs text-muted-foreground space-y-1.5">
                 <div className="flex items-center gap-2">
                   <span>🔑</span>

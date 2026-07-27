@@ -21,7 +21,7 @@ interface BrandedImageProps {
  * - SVG displacement filter for interactive "decay" effect on hover
  * - 3D perspective tilt effect (rotateX/rotateY based on mouse position)
  * - Smooth mouse-tracking distortion
- * - Branded watermark overlay (default: cli.firstmovers.io)
+ * - Branded watermark overlay (default: sui-cli-web-production.up.railway.app)
  * - Works with both online URLs and local images
  */
 export function BrandedImage({
@@ -29,7 +29,7 @@ export function BrandedImage({
   alt = 'Image',
   width = 400,
   height = 300,
-  watermark = 'cli.firstmovers.io',
+  watermark = 'sui-cli-web-production.up.railway.app',
   className = '',
   enableTilt = true,
   maxTilt = 15,

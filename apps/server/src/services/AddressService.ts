@@ -1,14 +1,18 @@
 import type { GasCoin, SuiAddress } from '@sui-cli-web/shared';
 import { ConfigParser } from '../cli/ConfigParser';
 import { SuiCliExecutor } from '../cli/SuiCliExecutor';
+import type { PublishedPackageInfo } from '@sui-cli-web/shared';
 import type { TransactionBalanceEffect } from '../utils/suiGrpcClient';
 import {
   getBalanceViaGrpc,
+  getObjectFullViaGrpc,
+  getObjectsAttributesViaGrpc,
   getObjectsJsonViaGrpc,
   getOwnedObjectsViaGrpc,
   getTransactionBalanceEffectsViaGrpc,
   getTransactionTimestampsViaGrpc,
 } from '../utils/suiGrpcClient';
+import { normalizeCliObjectShape } from '../utils/normalizeSuiObject';
 import {
   getAddressBalanceEffects,
   getObjectVersionHistory,
@@ -84,39 +88,6 @@ async function fetchWithTimeout(
   } finally {
     clearTimeout(timeout);
   }
-}
-
-// Batch RPC helper - executes multiple RPC calls in single batch request
-async function batchRpcCall(
-  rpcUrl: string,
-  calls: Array<{ method: string; params: unknown[] }>
-): Promise<unknown[]> {
-  const batchRequest = calls.map((call, idx) => ({
-    jsonrpc: '2.0',
-    id: idx + 1,
-    method: call.method,
-    params: call.params,
-  }));
-
-  const response = await fetchWithTimeout(rpcUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(batchRequest),
-  });
-
-  if (!response.ok) throw new Error(response.statusText);
-
-  const results = (await response.json()) as
-    | Array<{ id: number; result?: unknown }>
-    | { result?: unknown };
-
-  // Results may come back in any order, sort by id
-  if (Array.isArray(results)) {
-    results.sort((a, b) => a.id - b.id);
-    return results.map((r) => r.result);
-  }
-
-  return [(results as { result?: unknown }).result];
 }
 
 export class AddressService {
@@ -581,10 +552,71 @@ export class AddressService {
     return Array.isArray(data) ? data : [];
   }
 
+  /** Object count + published packages in one shot, gRPC-first.
+   *
+   * `/addresses/:address/summary` used to call getRawObjects - the same
+   * `sui client objects` invocation that getObjects() above deliberately
+   * abandoned, for the reason stated in its own comment: it serializes one slow
+   * multi-object RPC call that borderline-exceeds the executor timeout on a
+   * large wallet. The Dashboard fires this route once per wallet, so that cost
+   * was multiplied by the number of wallets and then serialized again by the
+   * browser's per-origin connection cap.
+   *
+   * gRPC's listOwnedObjects returns the full type string for every object, which
+   * is all that is needed to *find* the UpgradeCaps. Only those few objects then
+   * need their decoded fields, in one batched call.
+   *
+   * Falls back to the CLI when there is no active RPC endpoint (localnet) or
+   * gRPC fails, so behaviour is unchanged wherever gRPC is unavailable.
+   */
+  public async getObjectSummary(
+    address: string
+  ): Promise<{ objectCount: number; packages: PublishedPackageInfo[]; rawObjects: any[] | null }> {
+    const rpcUrl = await this.getActiveRpcUrl();
+    if (rpcUrl) {
+      try {
+        const owned = await getOwnedObjectsViaGrpc(address, rpcUrl);
+
+        // Match on the module::name suffix, not the whole type string: gRPC
+        // returns system addresses zero-padded (0x0000…0002::package::UpgradeCap)
+        // where the CLI shape uses the short 0x2 form.
+        const capIds = owned
+          .filter((o) => typeof o.type === 'string' && o.type.endsWith('::package::UpgradeCap'))
+          .map((o) => o.objectId)
+          .filter((id): id is string => Boolean(id));
+
+        const packages: PublishedPackageInfo[] = [];
+        if (capIds.length > 0) {
+          const decoded = await getObjectsJsonViaGrpc(capIds, rpcUrl);
+          for (const d of decoded) {
+            const json = d.json as Record<string, any> | null;
+            const fields = (json?.fields ?? json) as Record<string, any> | undefined;
+            if (fields?.package) {
+              packages.push({
+                packageId: String(fields.package),
+                upgradeCapId: d.objectId,
+                version: String(fields.version ?? '1'),
+                policy: Number(fields.policy ?? 0),
+              });
+            }
+          }
+        }
+
+        return { objectCount: owned.length, packages, rawObjects: null };
+      } catch {
+        // gRPC unavailable for this endpoint - fall through to the CLI.
+      }
+    }
+
+    const rawObjects = await this.getRawObjects(address);
+    return { objectCount: rawObjects.length, packages: [], rawObjects };
+  }
+
   public async getObject(objectId: string): Promise<any> {
-    // RPC first - only path that can return Display-standard metadata (`display.data`),
-    // which the CLI's `client object` output never includes. Falls back to the CLI when
-    // there's no active RPC URL (e.g. localnet) or the RPC call fails outright.
+    // JSON-RPC first - the only path that can return Display-standard metadata
+    // (`display.data`), which neither gRPC nor the CLI ever includes. Still alive on
+    // mainnet; Mysten's public testnet/devnet fullnodes now 404 every legacy JSON-RPC
+    // method, so this is *expected* to fail there and fall through to gRPC below.
     const rpcUrl = await this.getActiveRpcUrl();
     if (rpcUrl) {
       try {
@@ -613,10 +645,26 @@ export class AddressService {
           if (result.result?.data) return result.result.data;
         }
       } catch {
+        // fall through to gRPC
+      }
+
+      // gRPC - the modern replacement for the JSON-RPC call above, and the only
+      // reliable path on testnet/devnet today. Same canonical shape (`type`,
+      // `previousTransaction`, `content.fields`), just without Display metadata -
+      // `sui.rpc.v2.Object` has no such field (see getObjectFullViaGrpc's own doc).
+      try {
+        const full = await getObjectFullViaGrpc(objectId, rpcUrl);
+        if (full) return full;
+      } catch {
         // fall through to CLI
       }
     }
 
+    // CLI - last resort (e.g. localnet with no RPC/gRPC reachable at all). Its JSON
+    // output uses different field names entirely (`objType`/`prevTx`, and flattens
+    // some object kinds directly onto `content` instead of nesting under
+    // `content.fields`) from both paths above - normalize so callers never see a
+    // third shape depending on which transport happened to answer.
     const output = await this.executor.execute(['client', 'object', objectId], { json: true });
 
     // Handle "Object does not exist" case - CLI returns plain text instead of JSON
@@ -624,7 +672,7 @@ export class AddressService {
       throw new Error(`Object ${objectId} does not exist`);
     }
 
-    return JSON.parse(output);
+    return normalizeCliObjectShape(JSON.parse(output));
   }
 
   /**
@@ -965,6 +1013,40 @@ export class AddressService {
       };
     });
   }
+
+  /**
+   * Batch-fetch the richer attributes the "My Objects" expandable rows surface:
+   * owner, version, digest, previous transaction, storage rebate, whether the
+   * type is freely transferable, and a best-effort Display (name/image derived
+   * from the decoded content fields). One gRPC batch call, like getNftMetadata.
+   */
+  public async getObjectsAttributes(objectIds: string[]): Promise<ObjectAttributes[]> {
+    if (objectIds.length === 0) return [];
+
+    const rpcUrl = await this.getActiveRpcUrl();
+    if (!rpcUrl) {
+      throw new Error('No active RPC URL found');
+    }
+
+    const objects = await getObjectsAttributesViaGrpc(objectIds, rpcUrl);
+
+    return objects.map((obj) => {
+      const fields = (obj.json ?? {}) as Record<string, unknown>;
+      const imageUrl = extractImageUrl(fields);
+      const name = extractName(fields);
+      return {
+        objectId: obj.objectId,
+        version: obj.version,
+        digest: obj.digest,
+        type: obj.type,
+        owner: obj.owner,
+        previousTransaction: obj.previousTransaction,
+        storageRebate: obj.storageRebate,
+        hasPublicTransfer: obj.hasPublicTransfer,
+        display: name || imageUrl ? { name, imageUrl } : null,
+      };
+    });
+  }
 }
 
 export interface NftMetadata {
@@ -974,6 +1056,18 @@ export interface NftMetadata {
   name: string | null;
   /** A few primitive fields (rarity, atk, ...) for the no-image fallback card. */
   attributes: { label: string; value: string }[];
+}
+
+export interface ObjectAttributes {
+  objectId: string;
+  version: string | null;
+  digest: string | null;
+  type: string | null;
+  owner: unknown;
+  previousTransaction: string | null;
+  storageRebate: string | null;
+  hasPublicTransfer: boolean | null;
+  display: { name: string | null; imageUrl: string | null } | null;
 }
 
 const IMAGE_FIELD_KEYS = [

@@ -19,6 +19,7 @@ import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { apiClient } from '@/api/client';
 import { Button } from '@/components/ui/button';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 
 interface Recipient {
   id: string;
@@ -99,21 +100,65 @@ export function MultiPay() {
     }
   };
 
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied`);
+  };
+
+  const filledRecipients = recipients.filter((r) => r.address || r.amount);
+  const totalAmount = getTotalAmount();
+
+  const aiJson = JSON.stringify(
+    {
+      recipients: recipients.map((r) => ({ address: r.address, amount: r.amount })),
+      recipientCount: filledRecipients.length,
+      totalAmount,
+      result,
+    },
+    null,
+    2
+  );
+
+  const aiMarkdown = [
+    '# Sui multi-pay',
+    '',
+    `- **Recipients:** ${filledRecipients.length}`,
+    `- **Total amount:** ${totalAmount.toFixed(4)} SUI`,
+    '',
+    '## Recipients',
+    '| # | Address | Amount (SUI) |',
+    '|---|---|---|',
+    ...recipients.map((r, i) => `| ${i + 1} | ${r.address || '(empty)'} | ${r.amount || '0'} |`),
+    result?.success ? `\n## Result\nSuccess — digest \`${result.digest}\`` : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const aiPrompt = `I'm about to send ${totalAmount.toFixed(4)} SUI to ${filledRecipients.length} recipients in a single Sui transaction.\n\n${aiMarkdown}\n\nExplain what this multi-pay transaction will do and flag anything I should double-check before signing.`;
+
   return (
     <div className="space-y-6 p-4 sm:p-6">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center gap-3"
+        className="flex items-center justify-between gap-2"
       >
-        <div className="p-2 bg-purple-500/10 rounded-lg">
-          <Users className="w-5 h-5 text-purple-400" />
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-purple-500/10 rounded-lg">
+            <Users className="w-5 h-5 text-purple-400" />
+          </div>
+          <div>
+            <h1 className="text-lg font-semibold text-foreground">Multi-Pay</h1>
+            <p className="text-xs text-muted-foreground">Send SUI to multiple recipients</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-lg font-semibold text-foreground">Multi-Pay</h1>
-          <p className="text-xs text-muted-foreground">Send SUI to multiple recipients</p>
-        </div>
+        <CopyForAiMenu
+          prompt={aiPrompt}
+          json={aiJson}
+          markdown={aiMarkdown}
+          onCopy={copyToClipboard}
+        />
       </motion.div>
 
       {/* Recipients List */}

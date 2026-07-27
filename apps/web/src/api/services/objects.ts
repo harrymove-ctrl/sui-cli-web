@@ -84,3 +84,26 @@ export async function getNftMetadata(objectIds: string[]) {
     body: JSON.stringify({ objectIds }),
   });
 }
+
+export interface ObjectAttributes {
+  objectId: string;
+  version: string | null;
+  digest: string | null;
+  type: string | null;
+  /** CLI-style owner shape: { AddressOwner } / { ObjectOwner } / { Shared } / "Immutable". */
+  owner: unknown;
+  previousTransaction: string | null;
+  /** MIST. */
+  storageRebate: string | null;
+  /** True iff the type is freely transferable (has Move's `store` ability). */
+  hasPublicTransfer: boolean | null;
+  display: { name: string | null; imageUrl: string | null } | null;
+}
+
+/** Batch-fetch richer per-object attributes for the "My Objects" expandable rows. */
+export async function getObjectsAttributes(objectIds: string[]) {
+  return fetchApi<ObjectAttributes[]>('/objects/attributes', {
+    method: 'POST',
+    body: JSON.stringify({ objectIds }),
+  });
+}

@@ -25,9 +25,9 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ArrowDown, ArrowUp, ChevronsUpDown, GripVertical } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronsUpDown, GripVertical } from 'lucide-react';
 import { useReducedMotion } from 'motion/react';
-import { type ReactNode, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { DataTableCheckbox } from './data-table-checkbox';
 import { ScrollArea } from './scroll-area';
@@ -43,6 +43,14 @@ export interface DataTableColumn<T> {
   minSize?: number;
   maxSize?: number;
   align?: 'left' | 'right' | 'center';
+  /**
+   * When the table is narrower than the summed column widths would fill, the
+   * leftover space is split evenly across every `grow` column so the table
+   * fills its container instead of leaving dead space to the right. `grow`
+   * never shrinks a column below its base `size` - once content overflows the
+   * container it falls back to horizontal scroll.
+   */
+  grow?: boolean;
 }
 
 export interface DataTableProps<T> {
@@ -54,11 +62,21 @@ export interface DataTableProps<T> {
   initialSort?: { columnId: string; desc: boolean };
   onRowClick?: (row: T) => void;
   rowHeight?: number;
+  /**
+   * When provided, each row gets an expand chevron and clicking it (or the row)
+   * toggles a fixed-height panel below the row rendering this content. The
+   * virtualizer accounts for the extra height. Omit it and the table behaves
+   * exactly as before (no expansion) so other tables are unaffected.
+   */
+  renderExpanded?: (row: T) => ReactNode;
+  /** Height in px of the expanded panel (its content scrolls if taller). */
+  expandedRowHeight?: number;
   emptyState?: ReactNode;
   className?: string;
 }
 
 const SELECT_COL_ID = '__select';
+const EXPAND_COL_ID = '__expand';
 
 function alignClass(align?: 'left' | 'right' | 'center') {
   if (align === 'right') return 'text-right justify-end';
@@ -73,12 +91,14 @@ function alignClass(align?: 'left' | 'right' | 'center') {
  */
 function HeaderCell<T>({
   header,
+  width,
   onSortClick,
   sortDirection,
   sortable,
   reduceMotion,
 }: {
   header: Header<T, unknown>;
+  width: number;
   onSortClick?: () => void;
   sortDirection: false | 'asc' | 'desc';
   sortable: boolean;
@@ -91,7 +111,7 @@ function HeaderCell<T>({
   });
 
   const style = {
-    width: header.getSize(),
+    width,
     transform: !reduceMotion && transform ? CSS.Translate.toString(transform) : undefined,
     transition: isDragging && !reduceMotion ? 'transform 120ms ease' : undefined,
     opacity: isDragging ? 0.6 : 1,
@@ -174,12 +194,23 @@ export function DataTable<T>({
   initialSort,
   onRowClick,
   rowHeight = 44,
+  renderExpanded,
+  expandedRowHeight = 320,
   emptyState,
   className,
 }: DataTableProps<T>) {
   const reduceMotion = useReducedMotion() ?? false;
   const scrollRef = useRef<HTMLDivElement>(null);
   const selectionEnabled = Boolean(selectedIds && onSelectionChange);
+  const expandEnabled = Boolean(renderExpanded);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+  const toggleExpand = (id: string) =>
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const [sorting, setSorting] = useState<SortingState>(
     initialSort ? [{ id: initialSort.columnId, desc: initialSort.desc }] : []
@@ -187,6 +218,7 @@ export function DataTable<T>({
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   const [columnOrder, setColumnOrder] = useState<ColumnOrderState>(() => [
     ...(selectionEnabled ? [SELECT_COL_ID] : []),
+    ...(expandEnabled ? [EXPAND_COL_ID] : []),
     ...columns.map((c) => c.id),
   ]);
 
@@ -233,6 +265,35 @@ export function DataTable<T>({
       });
     }
 
+    if (expandEnabled) {
+      cols.push({
+        id: EXPAND_COL_ID,
+        header: () => null,
+        cell: ({ row }) => {
+          const id = getRowId(row.original, row.index);
+          const open = expandedIds.has(id);
+          return (
+            <button
+              type="button"
+              aria-label={open ? 'Collapse row' : 'Expand row'}
+              aria-expanded={open}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleExpand(id);
+              }}
+              className="flex h-6 w-6 items-center justify-center rounded text-tertiary transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <ChevronDown className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} />
+            </button>
+          );
+        },
+        size: 40,
+        minSize: 40,
+        maxSize: 40,
+        enableResizing: false,
+      });
+    }
+
     for (const col of columns) {
       cols.push({
         id: col.id,
@@ -244,12 +305,14 @@ export function DataTable<T>({
         size: col.size ?? 160,
         minSize: col.minSize ?? 60,
         maxSize: col.maxSize ?? 800,
-        meta: { align: col.align },
+        meta: { align: col.align, grow: col.grow },
       });
     }
 
     return cols;
-  }, [columns, selectionEnabled, data, getRowId, selectedIds, onSelectionChange]);
+    // toggleExpand is stable (only calls setState); intentionally omitted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [columns, selectionEnabled, expandEnabled, expandedIds, data, getRowId, selectedIds, onSelectionChange]);
 
   const table = useReactTable({
     data,
@@ -270,9 +333,34 @@ export function DataTable<T>({
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => rowHeight,
+    estimateSize: (index) => {
+      if (!expandEnabled) return rowHeight;
+      const r = rows[index];
+      if (!r) return rowHeight;
+      const id = getRowId(r.original, r.index);
+      return rowHeight + (expandedIds.has(id) ? expandedRowHeight : 0);
+    },
     overscan: 8,
   });
+
+  // Cached row sizes don't re-estimate on their own when a row expands/collapses,
+  // so force a remeasure whenever the expanded set changes.
+  useEffect(() => {
+    if (expandEnabled) rowVirtualizer.measure();
+  }, [expandedIds, expandEnabled, rowVirtualizer]);
+
+  // Track the scroll viewport's inner width so `grow` columns can absorb any
+  // leftover horizontal space (fit-to-width) instead of leaving a dead gap.
+  const [viewportWidth, setViewportWidth] = useState(0);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const update = () => setViewportWidth(el.clientWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -287,7 +375,21 @@ export function DataTable<T>({
     });
   };
 
-  const totalWidth = headerGroup.headers.reduce((sum, h) => sum + h.getSize(), 0);
+  // Base (resizable) width per column, then hand any slack to `grow` columns so
+  // the table fills its container. Slack is only ever positive - when columns
+  // already overflow the viewport, everything falls back to its base size and
+  // the ScrollArea scrolls horizontally.
+  const baseWidths = headerGroup.headers.map((h) => ({
+    id: h.column.id,
+    size: h.getSize(),
+    grow: Boolean((h.column.columnDef.meta as { grow?: boolean } | undefined)?.grow),
+  }));
+  const totalBase = baseWidths.reduce((sum, b) => sum + b.size, 0);
+  const growCount = baseWidths.reduce((n, b) => n + (b.grow ? 1 : 0), 0);
+  const perGrow = growCount > 0 ? Math.max(0, viewportWidth - totalBase) / growCount : 0;
+  const widthById = new Map(baseWidths.map((b) => [b.id, b.grow ? b.size + perGrow : b.size]));
+  const widthFor = (id: string) => widthById.get(id) ?? 0;
+  const totalWidth = totalBase + perGrow * growCount;
 
   if (data.length === 0 && emptyState) {
     return <div className={className}>{emptyState}</div>;
@@ -325,6 +427,7 @@ export function DataTable<T>({
                   <HeaderCell
                     key={header.id}
                     header={header}
+                    width={widthFor(header.column.id)}
                     sortable={header.column.getCanSort()}
                     sortDirection={header.column.getIsSorted()}
                     onSortClick={() => header.column.toggleSorting()}
@@ -341,19 +444,18 @@ export function DataTable<T>({
               const row = rows[virtualRow.index];
               const id = getRowId(row.original, row.index);
               const isSelected = selectionEnabled && selectedIds?.has(id);
+              const isExpanded = expandEnabled && expandedIds.has(id);
+              const clickable = expandEnabled || Boolean(onRowClick);
+              const activate = () => {
+                if (expandEnabled) toggleExpand(id);
+                else onRowClick?.(row.original);
+              };
               return (
-                // biome-ignore lint/a11y/useSemanticElements: see the header row's comment above
+                // Outer is the positioned virtual item; the inner div carries role="row"
+                // so the panel below can sit outside the cell grid without breaking the
+                // role="row" > role="cell" a11y tree.
                 <div
                   key={row.id}
-                  role="row"
-                  tabIndex={onRowClick ? 0 : undefined}
-                  onClick={() => onRowClick?.(row.original)}
-                  onKeyDown={(e) => {
-                    if (onRowClick && (e.key === 'Enter' || e.key === ' ')) {
-                      e.preventDefault();
-                      onRowClick(row.original);
-                    }
-                  }}
                   style={{
                     position: 'absolute',
                     top: 0,
@@ -362,32 +464,55 @@ export function DataTable<T>({
                     height: virtualRow.size,
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
-                  className={cn(
-                    'flex items-center border-b border-border/50 transition-colors',
-                    onRowClick &&
-                      'cursor-pointer hover:bg-accent/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2',
-                    isSelected && 'bg-accent'
-                  )}
+                  className={cn('border-b border-border/50', isSelected && 'bg-accent')}
                 >
-                  {row.getVisibleCells().map((cell) => (
-                    // biome-ignore lint/a11y/useSemanticElements: see the header row's comment above
-                    <div
-                      key={cell.id}
-                      role="cell"
-                      style={{ width: cell.column.getSize() }}
-                      className={cn(
-                        'flex items-center px-3 text-sm text-foreground min-w-0 flex-shrink-0',
-                        alignClass(
-                          (cell.column.columnDef.meta as { align?: 'left' | 'right' | 'center' })
-                            ?.align
-                        )
-                      )}
-                    >
-                      <div className="truncate min-w-0">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  {/* biome-ignore lint/a11y/useSemanticElements: see the header row's comment above */}
+                  <div
+                    role="row"
+                    tabIndex={clickable ? 0 : undefined}
+                    onClick={clickable ? activate : undefined}
+                    onKeyDown={(e) => {
+                      if (clickable && (e.key === 'Enter' || e.key === ' ')) {
+                        e.preventDefault();
+                        activate();
+                      }
+                    }}
+                    style={{ height: rowHeight }}
+                    className={cn(
+                      'flex items-center transition-colors',
+                      clickable &&
+                        'cursor-pointer hover:bg-accent/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2'
+                    )}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      // biome-ignore lint/a11y/useSemanticElements: see the header row's comment above
+                      <div
+                        key={cell.id}
+                        role="cell"
+                        style={{ width: widthFor(cell.column.id) }}
+                        className={cn(
+                          'flex items-center px-3 text-sm text-foreground min-w-0 flex-shrink-0',
+                          alignClass(
+                            (cell.column.columnDef.meta as { align?: 'left' | 'right' | 'center' })
+                              ?.align
+                          )
+                        )}
+                      >
+                        <div className="truncate min-w-0">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </div>
                       </div>
+                    ))}
+                  </div>
+                  {isExpanded && renderExpanded && (
+                    <div
+                      className="overflow-auto border-t border-border/40 bg-muted/20"
+                      style={{ height: expandedRowHeight }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {renderExpanded(row.original)}
                     </div>
-                  ))}
+                  )}
                 </div>
               );
             })}

@@ -1,9 +1,10 @@
 import { extractCoinType, isCoinType } from '@sui-cli-web/shared';
-import { Link2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { ArrowRightLeft, Database, Info, Link2, ListTree, Package } from 'lucide-react';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
 import { getNftMetadata, type NftMetadata } from '@/api/services/objects';
+import { explorePackage, type PackageModules } from '@/api/services/packages';
 import {
   addWalrusMemoryDelegateKey,
   type DecryptResult,
@@ -13,6 +14,9 @@ import {
   removeWalrusMemoryDelegateKey,
 } from '@/api/services/walrusMemory';
 import { DitherAvatar } from '@/components/dither-kit/avatar';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
+import { PackageModulesView } from '@/components/PackageExplorer/PackageModulesView';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { detectNetwork, EXPLORERS, type NetworkType, openInExplorer } from '@/lib/explorer';
 import { useAppStore } from '@/stores/useAppStore';
 import { Spinner } from '../shared/Spinner';
@@ -71,7 +75,7 @@ function extractVecEntries(fieldValue: unknown): { key: string; value: string }[
 export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
-  const [packageSummary, setPackageSummary] = useState<Record<string, unknown> | null>(null);
+  const [packageModules, setPackageModules] = useState<PackageModules | null>(null);
   const [txBlock, setTxBlock] = useState<Record<string, unknown> | null>(null);
   const [blobContent, setBlobContent] = useState<Record<string, unknown> | null>(null);
   const [isLoadingPackage, setIsLoadingPackage] = useState(false);
@@ -82,6 +86,13 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
   const { environments, addresses } = useAppStore();
   const activeEnv = environments.find((e) => e.isActive);
   const currentNetwork: NetworkType = detectNetwork(activeEnv?.alias, activeEnv?.rpc);
+  // Local RPCs (localnet/devstack) have no public explorer; the package view
+  // hides its external link for them. `devstack-*` aliases mis-detect as devnet,
+  // so key off the RPC host rather than the detected network alone.
+  const isLocalNetwork =
+    currentNetwork === 'localnet' ||
+    (activeEnv?.rpc ?? '').includes('127.0.0.1') ||
+    (activeEnv?.rpc ?? '').includes('localhost');
 
   // The list's row-click path hands over a bare gRPC summary (objectId/type/version/
   // owner only - no content, no display, no storageRebate); only the direct-URL/search
@@ -107,7 +118,10 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
 
   const data = enriched ?? initialData;
   const objectId = data.objectId || '';
-  const type = data.type || '';
+  // A Move package has no Move struct type at all - `type`/`content` are both
+  // genuinely absent (not a fetch failure), unlike every other object kind.
+  const isPackageObject = data.type == null && data.content == null && !!data.digest;
+  const type = data.type || (isPackageObject ? 'Move package (no Move struct type)' : '');
   const version = data.version || '';
   const digest = data.digest || '';
   const previousTransaction = data.previousTransaction || '';
@@ -149,6 +163,15 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
   const isCoin = isCoinType(type);
   const coinType = isCoin ? extractCoinType(type) : null;
   const coinBalance = isCoin ? (fields.balance as string | undefined) : null;
+
+  // Which package the "Package" tab explores - generalized beyond just UpgradeCap.
+  // UpgradeCap: the package it controls (its own field - an UpgradeCap's *own*
+  // defining package is always 0x2::package, never worth exploring).
+  // Coin<T>: T's defining package - 0x2::coin::Coin<T> is itself always 0x2 (the
+  // generic wrapper), the interesting package is whoever minted the coin.
+  // Everything else: the object's own defining package (already computed above).
+  const explorablePackageId =
+    linkedPackageId || (isCoin && coinType ? coinType.split('::')[0] : packageId) || null;
 
   // Check if this is a Walrus storage Blob (the actual data object behind a
   // Walrus Memory "memory" - see walrus::blob::Blob for the on-chain struct).
@@ -240,17 +263,16 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
     }
   };
 
-  // Load package summary when tab is selected
+  // Load the package's normalized interface when the tab is selected.
   useEffect(() => {
-    if (activeTab === 'package' && linkedPackageId && !packageSummary) {
+    if (activeTab === 'package' && explorablePackageId && !packageModules) {
       setIsLoadingPackage(true);
-      api
-        .getPackageSummary(linkedPackageId)
-        .then(setPackageSummary)
+      explorePackage(explorablePackageId)
+        .then(setPackageModules)
         .catch(console.error)
         .finally(() => setIsLoadingPackage(false));
     }
-  }, [activeTab, linkedPackageId, packageSummary]);
+  }, [activeTab, explorablePackageId, packageModules]);
 
   // Load transaction when tab is selected
   useEffect(() => {
@@ -350,16 +372,76 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
 
   const ownerInfo = getOwnerDisplay();
 
+  const aiJson = JSON.stringify(data, null, 2);
+
+  const aiMarkdown = [
+    `# ${structName || 'Sui Object'}`,
+    '',
+    `- **Object ID:** \`${objectId}\``,
+    `- **Type:** \`${type}\``,
+    `- **Version:** ${version}`,
+    `- **Owner:** ${ownerInfo.type} (${ownerInfo.value})`,
+    hasResolvedDisplay && data.display?.data
+      ? `\n## Display metadata\n${Object.entries(data.display.data)
+          .map(([key, value]) => `- **${key}:** ${value}`)
+          .join('\n')}`
+      : '',
+    Object.keys(fields).length > 0
+      ? `\n## Fields\n${Object.entries(fields)
+          .map(
+            ([key, value]) =>
+              `- **${key}:** ${typeof value === 'object' ? JSON.stringify(value) : String(value)}`
+          )
+          .join('\n')}`
+      : '',
+    explorablePackageId ? `\n## Linked package\n\`${explorablePackageId}\`` : '',
+    previousTransaction ? `\n## Previous transaction\n\`${previousTransaction}\`` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const aiPrompt = `Here's a Sui on-chain object I'm looking at:\n\n${aiMarkdown}\n\nExplain what this object is, who owns it, and how I might interact with it (e.g. call functions on it, transfer it, or view its Display metadata).`;
+
   const handleOpenExplorer = (type: 'object' | 'tx' | 'address' | 'package', id: string) => {
     openInExplorer(currentNetwork, type, id, EXPLORERS[selectedExplorer].name);
   };
 
-  const tabs: { id: Tab; label: string; show: boolean }[] = [
-    { id: 'overview', label: 'Overview', show: true },
-    { id: 'memory', label: 'Walrus Memory', show: isWalrusBlob },
-    { id: 'fields', label: 'Fields', show: Object.keys(fields).length > 0 },
-    { id: 'package', label: 'Package', show: !!linkedPackageId },
-    { id: 'transaction', label: 'Transaction', show: !!previousTransaction },
+  const tabs: { id: Tab; label: string; icon: ReactNode; caption: string; show: boolean }[] = [
+    {
+      id: 'overview',
+      label: 'Overview',
+      icon: <Info />,
+      caption: 'Object metadata, ownership, and type',
+      show: true,
+    },
+    {
+      id: 'memory',
+      label: 'Walrus Memory',
+      icon: <Database />,
+      caption: 'Walrus blob and memory data linked to this object',
+      show: isWalrusBlob,
+    },
+    {
+      id: 'fields',
+      label: 'Fields',
+      icon: <ListTree />,
+      caption: 'Dynamic fields attached to this object',
+      show: Object.keys(fields).length > 0,
+    },
+    {
+      id: 'package',
+      label: 'Package',
+      icon: <Package />,
+      caption: "Move package this object's type is defined in",
+      show: !!explorablePackageId,
+    },
+    {
+      id: 'transaction',
+      label: 'Transaction',
+      icon: <ArrowRightLeft />,
+      caption: 'Transaction that last touched this object',
+      show: !!previousTransaction,
+    },
   ];
 
   return (
@@ -390,9 +472,14 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
           <div className="text-sm font-medium text-foreground truncate">
             {structName || 'Object Details'}
           </div>
-          <div className="text-xs text-muted-foreground font-mono truncate">
+          <button
+            type="button"
+            onClick={() => onCopy(objectId, 'Object ID')}
+            title="Copy object ID"
+            className="text-xs text-muted-foreground font-mono truncate hover:text-foreground transition-colors text-left"
+          >
             {objectId.slice(0, 20)}...{objectId.slice(-8)}
-          </div>
+          </button>
         </div>
         <button
           type="button"
@@ -415,26 +502,25 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
             />
           </svg>
         </button>
+        <CopyForAiMenu prompt={aiPrompt} json={aiJson} markdown={aiMarkdown} onCopy={onCopy} />
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 px-2 mb-3 border-b border-border pb-2">
-        {tabs
-          .filter((t) => t.show)
-          .map((tab) => (
-            <button
-              type="button"
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                activeTab === tab.id
-                  ? 'bg-foreground text-background'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+      <div className="px-2 mb-3 space-y-1.5">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)} className="w-full">
+          <TabsList>
+            {tabs
+              .filter((t) => t.show)
+              .map((tab) => (
+                <TabsTrigger key={tab.id} value={tab.id} icon={tab.icon}>
+                  {tab.label}
+                </TabsTrigger>
+              ))}
+          </TabsList>
+        </Tabs>
+        <p className="px-1 text-xs text-muted-foreground">
+          {tabs.find((t) => t.id === activeTab)?.caption}
+        </p>
       </div>
 
       {/* Tab Content */}
@@ -1008,11 +1094,17 @@ export function ObjectDetail({ object, onBack, onCopy }: ObjectDetailProps) {
               <div className="flex items-center justify-center py-8">
                 <Spinner />
               </div>
-            ) : packageSummary ? (
-              <PackageSummaryView summary={packageSummary} onCopy={onCopy} />
+            ) : packageModules ? (
+              <PackageModulesView
+                key={packageModules.storageId}
+                pkg={packageModules}
+                network={currentNetwork}
+                isLocalNetwork={isLocalNetwork}
+                onCopy={onCopy}
+              />
             ) : (
               <div className="text-center py-8 text-muted-foreground">
-                Failed to load package summary
+                Failed to load package interface
               </div>
             )}
           </div>
@@ -1564,125 +1656,6 @@ function WalrusMemoryDecryptSection({
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-interface PackageModule {
-  name: string;
-  functions?: Record<string, { visibility?: string; parameters?: unknown[] }>;
-  structs?: Record<string, { abilities?: string[] }>;
-}
-
-interface PackageSummary {
-  packageId: string;
-  modules?: PackageModule[];
-}
-
-function PackageSummaryView({
-  summary,
-  onCopy,
-}: {
-  summary: PackageSummary;
-  onCopy: (text: string, label: string) => void;
-}) {
-  const [expandedModule, setExpandedModule] = useState<string | null>(null);
-
-  return (
-    <div className="space-y-3">
-      <div className="p-3 bg-muted/30 rounded-lg">
-        <div className="text-xs text-muted-foreground mb-1">Package ID</div>
-        <div className="text-sm font-mono text-foreground truncate">{summary.packageId}</div>
-        <button
-          type="button"
-          onClick={() => onCopy(summary.packageId, 'Package ID')}
-          className="mt-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Copy
-        </button>
-      </div>
-
-      <div className="text-xs font-medium text-foreground mb-2">
-        Modules ({summary.modules?.length || 0})
-      </div>
-
-      {summary.modules?.map((module) => (
-        <div key={module.name} className="border border-border rounded-lg overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setExpandedModule(expandedModule === module.name ? null : module.name)}
-            className="w-full flex items-center justify-between p-3 bg-muted/20 hover:bg-muted/40 transition-colors"
-          >
-            <span className="text-sm font-medium text-foreground">{module.name}</span>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">
-                {Object.keys(module.functions || {}).length} functions
-              </span>
-              <svg
-                aria-hidden="true"
-                className={`w-4 h-4 text-muted-foreground transition-transform ${
-                  expandedModule === module.name ? 'rotate-180' : ''
-                }`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            </div>
-          </button>
-
-          {expandedModule === module.name && (
-            <div className="p-3 space-y-2">
-              {/* Structs */}
-              {module.structs && Object.keys(module.structs).length > 0 && (
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground mb-1">Structs</div>
-                  {Object.entries(module.structs).map(([name, struct]) => (
-                    <div key={name} className="text-xs font-mono text-foreground py-1">
-                      <span className="text-foreground">{name}</span>
-                      <span className="text-muted-foreground ml-2">
-                        [{struct.abilities?.join(', ')}]
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Functions */}
-              {module.functions && Object.keys(module.functions).length > 0 && (
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground mb-1 mt-2">
-                    Functions
-                  </div>
-                  {Object.entries(module.functions).map(([name, func]) => (
-                    <div key={name} className="text-xs font-mono py-1 flex items-center gap-2">
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-xs ${
-                          func.visibility === 'Public'
-                            ? 'bg-success/20 text-success'
-                            : 'bg-muted text-muted-foreground'
-                        }`}
-                      >
-                        {func.visibility === 'Public' ? 'pub' : 'priv'}
-                      </span>
-                      <span className="text-foreground">{name}</span>
-                      <span className="text-muted-foreground">
-                        ({func.parameters?.length || 0} params)
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      ))}
     </div>
   );
 }

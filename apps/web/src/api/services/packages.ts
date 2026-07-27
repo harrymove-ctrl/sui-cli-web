@@ -13,6 +13,47 @@ export interface PublishedPackageInfo {
   policy: number;
 }
 
+export interface MoveField {
+  name: string;
+  type: string;
+}
+
+export interface MoveDatatype {
+  name: string;
+  kind: string; // 'struct' | 'enum'
+  abilities: string[];
+  typeParameters: string[];
+  fields: MoveField[];
+  variants?: { name: string; fields: MoveField[] }[];
+}
+
+export interface MoveFunction {
+  name: string;
+  visibility: string; // 'public' | 'private' | 'public(friend)'
+  isEntry: boolean;
+  typeParameters: string[];
+  parameters: string[];
+  returns: string[];
+}
+
+export interface MoveModule {
+  name: string;
+  functions: MoveFunction[];
+  datatypes: MoveDatatype[];
+}
+
+export interface PackageModules {
+  storageId: string;
+  originalId: string;
+  version: string;
+  modules: MoveModule[];
+}
+
+/** Fetch a package's normalized modules (functions + datatypes) for the explorer. */
+export async function explorePackage(packageId: string) {
+  return fetchApi<PackageModules>(`/packages/${encodeURIComponent(packageId)}/explore`);
+}
+
 // API functions
 export async function getPackageSummary(packageId: string) {
   return fetchApi<Record<string, unknown>>(`/packages/${packageId}/summary`);

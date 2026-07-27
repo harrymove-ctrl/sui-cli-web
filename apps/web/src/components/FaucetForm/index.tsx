@@ -1,9 +1,19 @@
 import { clsx } from 'clsx';
-import { AlertTriangle, CheckCircle2, Copy, Droplet, ExternalLink, MessageCircle, X, XCircle } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Copy,
+  Droplet,
+  ExternalLink,
+  MessageCircle,
+  X,
+  XCircle,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 import { useAppStore } from '@/stores/useAppStore';
 import { Spinner } from '../shared/Spinner';
 
@@ -212,6 +222,39 @@ export function FaucetForm() {
     setCustomAddress('');
   };
 
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied`);
+  };
+
+  const aiJson = JSON.stringify(
+    {
+      targetAddress: targetAddress ?? null,
+      network: selectedNetwork,
+      isExternalAddress,
+      activeEnvironment: activeEnv?.alias ?? null,
+      lastResult,
+    },
+    null,
+    2
+  );
+
+  const aiMarkdown = [
+    '# Sui faucet request',
+    '',
+    `- **Address:** ${targetAddress ?? '(none)'}`,
+    `- **Network:** ${selectedNetwork}`,
+    `- **External address:** ${isExternalAddress ? 'yes' : 'no'}`,
+    activeEnv ? `- **Active environment:** ${activeEnv.alias}` : null,
+    lastResult
+      ? `- **Last request:** ${lastResult.success ? 'success' : 'failed'} — ${lastResult.message}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const aiPrompt = `Explain how to fund this Sui address on ${selectedNetwork}: ${targetAddress ?? '(no address)'}.\n\n${aiMarkdown}\n\nWalk me through requesting test tokens and list the best faucet options for this network.`;
+
   if (!targetAddress && !activeAddress) {
     return <div className="px-3 py-8 text-center text-muted-foreground">No address selected</div>;
   }
@@ -231,6 +274,12 @@ export function FaucetForm() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <CopyForAiMenu
+              prompt={aiPrompt}
+              json={aiJson}
+              markdown={aiMarkdown}
+              onCopy={copyToClipboard}
+            />
             {isExternalAddress && (
               <button
                 onClick={clearCustomAddress}
@@ -312,11 +361,7 @@ export function FaucetForm() {
             <span className="text-tertiary">·</span>
             <span>1 SUI per request</span>
           </div>
-          <Button
-            onClick={handleRequest}
-            disabled={isRequesting || isLoading}
-            className="w-full"
-          >
+          <Button onClick={handleRequest} disabled={isRequesting || isLoading} className="w-full">
             {isRequesting ? (
               <>
                 <Spinner size="sm" />

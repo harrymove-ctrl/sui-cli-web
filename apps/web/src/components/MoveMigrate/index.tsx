@@ -2,22 +2,24 @@
  * MoveMigrate - Migrate Move packages to Move 2024
  */
 
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
-  RefreshCw,
-  FileCode,
-  AlertTriangle,
-  CheckCircle2,
-  Loader2,
-  FolderOpen,
-  ArrowRight,
-  Info,
   AlertCircle,
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  FileCode,
+  FolderOpen,
   History,
+  Info,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
+import React, { useState } from 'react';
+import toast from 'react-hot-toast';
 import { apiClient } from '@/api/client';
 import { Button } from '@/components/ui/button';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 
 interface MigrationChange {
   file: string;
@@ -106,6 +108,67 @@ export function MoveMigrate() {
     }
   };
 
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied`);
+  };
+
+  // Copy-for-AI: assemble the current migration state into shareable context
+  const packageName = packagePath.trim()
+    ? packagePath.trim().split('/').pop() || packagePath.trim()
+    : null;
+  const previewChanges = (preview?.changes || []).slice(0, 200);
+  const hasExportable = !!(packagePath.trim() || preview || result || error);
+
+  const aiJson = JSON.stringify(
+    {
+      packagePath: packagePath.trim() || null,
+      packageName,
+      preview: preview
+        ? {
+            success: preview.success,
+            totalFiles: preview.totalFiles,
+            totalChanges: preview.totalChanges,
+            changes: previewChanges,
+          }
+        : null,
+      result: result
+        ? {
+            success: result.success,
+            filesModified: result.filesModified,
+            backupPath: result.backupPath ?? null,
+          }
+        : null,
+      error: error ?? null,
+    },
+    null,
+    2
+  );
+
+  const aiMarkdown = [
+    '# Sui Move 2024 migration',
+    '',
+    `- **Package path:** ${packagePath.trim() || 'not set'}`,
+    packageName ? `- **Package name:** ${packageName}` : null,
+    preview
+      ? `- **Preview:** ${preview.totalChanges} changes across ${preview.totalFiles} files`
+      : null,
+    result?.success ? `- **Migrated:** ${result.filesModified} files modified` : null,
+    result?.backupPath ? `- **Backup:** ${result.backupPath}` : null,
+    error ? `- **Error:** ${error}` : null,
+    previewChanges.length > 0 ? '' : null,
+    previewChanges.length > 0 ? '## Proposed changes' : null,
+    previewChanges.length > 0 ? '| File | Type | Before | After |' : null,
+    previewChanges.length > 0 ? '|---|---|---|---|' : null,
+    ...previewChanges.map(
+      (c) => `| ${c.file}:${c.line} | ${c.type} | \`${c.before}\` | \`${c.after}\` |`
+    ),
+  ]
+    .filter((line) => line !== null)
+    .join('\n');
+
+  const aiPrompt = `Here's my Sui Move 2024 migration state:\n\n${aiMarkdown}\n\nExplain what these edition changes do, whether they're safe to apply, and anything I should double-check before migrating.`;
+
   const getChangeTypeColor = (type: string) => {
     switch (type) {
       case 'syntax':
@@ -125,17 +188,27 @@ export function MoveMigrate() {
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center gap-3"
+        className="flex items-center justify-between gap-2"
       >
-        <div className="p-2 bg-orange-500/20 rounded-lg">
-          <RefreshCw className="w-5 h-5 text-orange-400" />
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-orange-500/20 rounded-lg">
+            <RefreshCw className="w-5 h-5 text-orange-400" />
+          </div>
+          <div>
+            <h1 className="text-lg font-semibold text-foreground">Move 2024 Migration</h1>
+            <p className="text-xs text-muted-foreground">
+              Upgrade your Move packages to the latest edition
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-lg font-semibold text-foreground">Move 2024 Migration</h1>
-          <p className="text-xs text-muted-foreground">
-            Upgrade your Move packages to the latest edition
-          </p>
-        </div>
+        {hasExportable && (
+          <CopyForAiMenu
+            prompt={aiPrompt}
+            json={aiJson}
+            markdown={aiMarkdown}
+            onCopy={copyToClipboard}
+          />
+        )}
       </motion.div>
 
       {/* Info Banner */}
@@ -147,7 +220,10 @@ export function MoveMigrate() {
       >
         <Info className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
         <div className="text-xs text-blue-300/80 space-y-1">
-          <p>Move 2024 introduces new features like method syntax, positional fields, and loop labels.</p>
+          <p>
+            Move 2024 introduces new features like method syntax, positional fields, and loop
+            labels.
+          </p>
           <p>This tool helps migrate your existing code to the new edition.</p>
         </div>
       </motion.div>
@@ -307,8 +383,8 @@ export function MoveMigrate() {
           <span className="text-orange-400">Move 2024 features:</span>
         </p>
         <p>
-          • Method syntax: <span className="text-green-400 font-mono">obj.method()</span> instead
-          of <span className="text-muted-foreground font-mono">module::method(&obj)</span>
+          • Method syntax: <span className="text-green-400 font-mono">obj.method()</span> instead of{' '}
+          <span className="text-muted-foreground font-mono">module::method(&obj)</span>
         </p>
         <p>• Positional fields in structs</p>
         <p>• Loop labels for break/continue</p>

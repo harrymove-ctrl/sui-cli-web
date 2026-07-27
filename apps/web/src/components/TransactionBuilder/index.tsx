@@ -35,6 +35,7 @@ import { EnhancedReplaySummary } from '@/components/TransactionInspector/Enhance
 import { GasBreakdown } from '@/components/TransactionInspector/GasBreakdown';
 import { TransactionSummary } from '@/components/TransactionInspector/TransactionSummary';
 import { Button } from '@/components/ui/button';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { analyzeTransaction } from '@/utils/transactionAnalyzer';
@@ -358,16 +359,120 @@ export function TransactionBuilder() {
 
   const isAnyLoading = inspecting || replaying || executing || executingPtb;
 
+  // Per-tab "Copy for AI" export. The PTB tab is the highest-value case: a user
+  // pasting "explain/debug this programmable transaction" wants the constructed
+  // commands plus any dry-run/preview output. The gas and events tabs render
+  // their own components (each with its own menu), so we hide this one there.
+  const buildAiExport = (): { prompt: string; json?: string } | null => {
+    if (activeTab === 'ptb') {
+      const ptbJson = JSON.stringify(
+        {
+          commands: ptbCommands,
+          options: {
+            gasBudget: ptbGasBudget || 'auto',
+            dryRun: ptbDryRun,
+            preview: ptbPreview,
+          },
+          result: ptbResult ?? null,
+        },
+        null,
+        2
+      );
+      const prompt = [
+        `Explain and debug this Sui programmable transaction block (PTB).`,
+        '',
+        'Commands (executed atomically, in order):',
+        ...ptbCommands.map((cmd, i) => `${i + 1}. ${cmd.type} ${cmd.args.join(' ')}`.trim()),
+        '',
+        `Gas budget: ${ptbGasBudget || 'auto'}${ptbDryRun ? ' | dry-run' : ''}${ptbPreview ? ' | preview-only' : ''}`,
+        ptbResult
+          ? `\nLatest ${ptbResult.preview ? 'preview' : ptbResult.output ? 'dry-run' : 'execution'} result:\n${
+              ptbResult.error
+                ? `ERROR: ${ptbResult.error}`
+                : ptbResult.preview || ptbResult.output || `digest ${ptbResult.digest ?? ''}`
+            }`
+          : '',
+        '',
+        `Explain what each command does, how they compose, and flag anything that looks wrong or unsafe.`,
+      ]
+        .filter(Boolean)
+        .join('\n');
+      return { prompt, json: ptbJson };
+    }
+
+    if (activeTab === 'inspect' && inspectResult?.success) {
+      return {
+        prompt: [
+          `Explain this Sui transaction I inspected (dry-run).`,
+          '',
+          `- Digest: ${inspectDigest.trim()}`,
+          `- Events emitted: ${inspectResult.events?.length ?? 0}`,
+          '',
+          `Summarize what it does, its effects, and anything worth attention.`,
+        ].join('\n'),
+        json: JSON.stringify(
+          {
+            digest: inspectDigest.trim(),
+            results: inspectResult.results,
+            events: inspectResult.events,
+            effects: inspectResult.effects,
+          },
+          null,
+          2
+        ),
+      };
+    }
+
+    if (activeTab === 'replay' && replayResult?.success) {
+      return {
+        prompt: [
+          `Explain this replayed Sui transaction and its execution trace.`,
+          '',
+          `- Digest: ${replayDigest.trim()}`,
+          '',
+          `Walk me through what happened during execution and highlight any issues.`,
+        ].join('\n'),
+        json: JSON.stringify({ digest: replayDigest.trim(), output: replayResult.output }, null, 2),
+      };
+    }
+
+    if (activeTab === 'execute' && executeResult) {
+      return {
+        prompt: [
+          `Explain the outcome of this pre-signed Sui transaction I executed.`,
+          '',
+          executeResult.digest ? `- Digest: ${executeResult.digest}` : '',
+          `- Status: ${executeResult.success ? 'success' : 'failed'}`,
+          executeResult.error ? `- Error: ${executeResult.error}` : '',
+          '',
+          `Explain what the transaction did or why it failed.`,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+        json: JSON.stringify(executeResult, null, 2),
+      };
+    }
+
+    return null;
+  };
+
+  const aiExport = buildAiExport();
+
   return (
     <div className="space-y-6 p-4 max-w-6xl mx-auto">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center gap-3"
+        className="flex items-center justify-between gap-2"
       >
-        <Search className="w-5 h-5 text-[#4da2ff]" />
-        <h1 className="text-lg font-bold text-foreground">Transaction Inspector</h1>
+        <div className="flex items-center gap-3">
+          <Search className="w-5 h-5 text-[#4da2ff]" />
+          <h1 className="text-lg font-bold text-foreground">Transaction Inspector</h1>
+        </div>
+        {aiExport && (
+          <CopyForAiMenu prompt={aiExport.prompt} json={aiExport.json} onCopy={copyToClipboard} />
+        )}
       </motion.div>
 
       {/* Operation Progress */}
@@ -408,50 +513,34 @@ export function TransactionBuilder() {
       >
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           {/* Custom Tab List */}
-          <TabsList className="flex gap-1 p-1 bg-secondary border border-border rounded-lg mb-4 h-auto">
-            <TabsTrigger
-              value="inspect"
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs rounded-md transition-all data-[state=active]:bg-[#4da2ff]/20 data-[state=active]:text-[#4da2ff] data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:text-foreground data-[state=inactive]:bg-transparent"
-            >
-              <Eye className="w-3.5 h-3.5" />
+          <TabsList fullWidth indicatorClassName="bg-[#4da2ff]">
+            <TabsTrigger value="inspect" icon={<Eye />} className="flex-1">
               Inspect
             </TabsTrigger>
-            <TabsTrigger
-              value="replay"
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs rounded-md transition-all data-[state=active]:bg-[#4da2ff]/20 data-[state=active]:text-[#4da2ff] data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:text-foreground data-[state=inactive]:bg-transparent"
-            >
-              <Play className="w-3.5 h-3.5" />
+            <TabsTrigger value="replay" icon={<Play />} className="flex-1">
               Replay
             </TabsTrigger>
-            <TabsTrigger
-              value="execute"
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs rounded-md transition-all data-[state=active]:bg-[#4da2ff]/20 data-[state=active]:text-[#4da2ff] data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:text-foreground data-[state=inactive]:bg-transparent"
-            >
-              <Send className="w-3.5 h-3.5" />
+            <TabsTrigger value="execute" icon={<Send />} className="flex-1">
               Execute
             </TabsTrigger>
-            <TabsTrigger
-              value="ptb"
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs rounded-md transition-all data-[state=active]:bg-[#4da2ff]/20 data-[state=active]:text-[#4da2ff] data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:text-foreground data-[state=inactive]:bg-transparent"
-            >
-              <Layers className="w-3.5 h-3.5" />
+            <TabsTrigger value="ptb" icon={<Layers />} className="flex-1">
               PTB
             </TabsTrigger>
-            <TabsTrigger
-              value="gas"
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs rounded-md transition-all data-[state=active]:bg-[#4da2ff]/20 data-[state=active]:text-[#4da2ff] data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:text-foreground data-[state=inactive]:bg-transparent"
-            >
-              <Fuel className="w-3.5 h-3.5" />
+            <TabsTrigger value="gas" icon={<Fuel />} className="flex-1">
               Gas
             </TabsTrigger>
-            <TabsTrigger
-              value="events"
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs rounded-md transition-all data-[state=active]:bg-[#4da2ff]/20 data-[state=active]:text-[#4da2ff] data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:text-foreground data-[state=inactive]:bg-transparent"
-            >
-              <Activity className="w-3.5 h-3.5" />
+            <TabsTrigger value="events" icon={<Activity />} className="flex-1">
               Events
             </TabsTrigger>
           </TabsList>
+          <p className="px-1 pt-1.5 text-xs text-muted-foreground">
+            {activeTab === 'inspect' && 'Dry-run a transaction before sending it'}
+            {activeTab === 'replay' && 'Re-execute a past transaction from its digest'}
+            {activeTab === 'execute' && 'Build and submit a transaction'}
+            {activeTab === 'ptb' && 'Compose a multi-step programmable transaction block'}
+            {activeTab === 'gas' && 'Estimate and analyze gas costs'}
+            {activeTab === 'events' && 'Query on-chain events by type or package'}
+          </p>
 
           {/* Inspect Tab */}
           <TabsContent value="inspect" className="space-y-4 mt-0">
@@ -609,7 +698,10 @@ export function TransactionBuilder() {
                                 </span>
                                 <div className="space-y-2 max-h-64 overflow-y-auto">
                                   {inspectResult.events.map((event: any, idx: number) => (
-                                    <div key={idx} className="bg-secondary border border-border rounded p-3">
+                                    <div
+                                      key={idx}
+                                      className="bg-secondary border border-border rounded p-3"
+                                    >
                                       <div className="flex items-center justify-between mb-2">
                                         <span className="text-xs text-foreground">
                                           Event #{idx + 1}
@@ -696,8 +788,8 @@ export function TransactionBuilder() {
                 <Lightbulb className="w-4 h-4 text-[#4da2ff] flex-shrink-0 mt-0.5" />
                 <div className="space-y-2 text-xs">
                   <p className="text-foreground">
-                    <span className="text-muted-foreground">Use Case:</span> View detailed information
-                    about executed transactions.
+                    <span className="text-muted-foreground">Use Case:</span> View detailed
+                    information about executed transactions.
                   </p>
                   <div className="pt-2 border-t border-border">
                     <p className="text-muted-foreground mb-1">Try This Sample:</p>
@@ -906,7 +998,10 @@ export function TransactionBuilder() {
                 <Button
                   onClick={handleExecuteSigned}
                   disabled={
-                    !txBytes.trim() || signatures.every((s) => !s.trim()) || executing || isAnyLoading
+                    !txBytes.trim() ||
+                    signatures.every((s) => !s.trim()) ||
+                    executing ||
+                    isAnyLoading
                   }
                   className="w-full"
                 >
@@ -1156,8 +1251,8 @@ export function TransactionBuilder() {
                   Transfer objects
                 </p>
                 <p>
-                  <span className="text-foreground">move-call:</span> pkg::module::func &lt;T&gt; arg1
-                  arg2 - Call function
+                  <span className="text-foreground">move-call:</span> pkg::module::func &lt;T&gt;
+                  arg1 arg2 - Call function
                 </p>
               </div>
             </div>

@@ -2,33 +2,34 @@
  * EventExplorer - Decode and understand Sui events
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
-  Search,
-  Zap,
+  Activity,
+  ArrowRightLeft,
+  BarChart3,
+  Check,
   ChevronDown,
   ChevronRight,
-  Copy,
-  Check,
-  Filter,
-  Activity,
   Coins,
-  ArrowRightLeft,
-  FileCode,
+  Copy,
   Database,
-  TrendingUp,
-  Users,
-  Shield,
-  Sparkles,
   ExternalLink,
+  FileCode,
+  Filter,
   Info,
   Loader2,
-  BarChart3,
+  Search,
+  Shield,
+  Sparkles,
+  TrendingUp,
+  Users,
+  Zap,
 } from 'lucide-react';
+import React, { useCallback, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { apiClient } from '@/api/client';
 import { Button } from '@/components/ui/button';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 
 interface ParsedEvent {
   id: string;
@@ -45,10 +46,26 @@ interface ParsedEvent {
 
 // Known protocol detection
 const KNOWN_PROTOCOLS: Record<string, { name: string; color: string; icon: React.ReactNode }> = {
-  '0x8d97f1cd6ac663735be08d1d2b6d02a159e711586461306ce60a2b7a6a565a9e': { name: 'Pyth Oracle', color: 'text-purple-400', icon: <TrendingUp className="w-4 h-4" /> },
-  '0x5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf': { name: 'Wormhole', color: 'text-blue-400', icon: <Shield className="w-4 h-4" /> },
-  '0xa0eba10b173538c8fecca1dff298e488402cc9ff374f8a12ca7758eebe830b66': { name: 'Cetus DEX', color: 'text-cyan-400', icon: <ArrowRightLeft className="w-4 h-4" /> },
-  '0x91bfbc386a41afcfd9b2533058d7e915a1d3829089cc268ff4333d54d6339ca1': { name: 'Turbos DEX', color: 'text-green-400', icon: <ArrowRightLeft className="w-4 h-4" /> },
+  '0x8d97f1cd6ac663735be08d1d2b6d02a159e711586461306ce60a2b7a6a565a9e': {
+    name: 'Pyth Oracle',
+    color: 'text-purple-400',
+    icon: <TrendingUp className="w-4 h-4" />,
+  },
+  '0x5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf': {
+    name: 'Wormhole',
+    color: 'text-blue-400',
+    icon: <Shield className="w-4 h-4" />,
+  },
+  '0xa0eba10b173538c8fecca1dff298e488402cc9ff374f8a12ca7758eebe830b66': {
+    name: 'Cetus DEX',
+    color: 'text-cyan-400',
+    icon: <ArrowRightLeft className="w-4 h-4" />,
+  },
+  '0x91bfbc386a41afcfd9b2533058d7e915a1d3829089cc268ff4333d54d6339ca1': {
+    name: 'Turbos DEX',
+    color: 'text-green-400',
+    icon: <ArrowRightLeft className="w-4 h-4" />,
+  },
   '0xdee9': { name: 'DeepBook', color: 'text-yellow-400', icon: <BarChart3 className="w-4 h-4" /> },
   '0x2': { name: 'Sui Framework', color: 'text-blue-400', icon: <FileCode className="w-4 h-4" /> },
   '0x3': { name: 'Sui System', color: 'text-blue-400', icon: <Database className="w-4 h-4" /> },
@@ -57,28 +74,28 @@ const KNOWN_PROTOCOLS: Record<string, { name: string; color: string; icon: React
 // Event type descriptions
 const EVENT_DESCRIPTIONS: Record<string, string> = {
   // DeFi
-  'SwapEvent': 'Token swap executed',
-  'AddLiquidityEvent': 'Liquidity added to pool',
-  'RemoveLiquidityEvent': 'Liquidity removed from pool',
-  'FlashLoanEvent': 'Flash loan executed',
-  'BorrowEvent': 'Asset borrowed',
-  'RepayEvent': 'Loan repaid',
-  'LiquidateEvent': 'Position liquidated',
+  SwapEvent: 'Token swap executed',
+  AddLiquidityEvent: 'Liquidity added to pool',
+  RemoveLiquidityEvent: 'Liquidity removed from pool',
+  FlashLoanEvent: 'Flash loan executed',
+  BorrowEvent: 'Asset borrowed',
+  RepayEvent: 'Loan repaid',
+  LiquidateEvent: 'Position liquidated',
   // Oracle
-  'PriceFeedUpdateEvent': 'Price feed updated',
-  'TemporalNumericValueFeedUpdateEvent': 'Oracle price update',
-  'PriceInfoObject': 'Price information stored',
+  PriceFeedUpdateEvent: 'Price feed updated',
+  TemporalNumericValueFeedUpdateEvent: 'Oracle price update',
+  PriceInfoObject: 'Price information stored',
   // NFT
-  'MintEvent': 'NFT minted',
-  'TransferEvent': 'Asset transferred',
-  'BurnEvent': 'Asset burned',
+  MintEvent: 'NFT minted',
+  TransferEvent: 'Asset transferred',
+  BurnEvent: 'Asset burned',
   // Staking
-  'StakeEvent': 'Tokens staked',
-  'UnstakeEvent': 'Tokens unstaked',
-  'ClaimRewardsEvent': 'Rewards claimed',
+  StakeEvent: 'Tokens staked',
+  UnstakeEvent: 'Tokens unstaked',
+  ClaimRewardsEvent: 'Rewards claimed',
   // General
-  'PackagePublish': 'Contract deployed',
-  'Upgrade': 'Contract upgraded',
+  PackagePublish: 'Contract deployed',
+  Upgrade: 'Contract upgraded',
 };
 
 function truncateAddress(address: string, chars = 6): string {
@@ -109,7 +126,10 @@ function getEventDescription(eventName: string): string {
   }
 
   // Generate from name
-  const words = eventName.replace(/([A-Z])/g, ' $1').trim().split(' ');
+  const words = eventName
+    .replace(/([A-Z])/g, ' $1')
+    .trim()
+    .split(' ');
   return words.join(' ').toLowerCase();
 }
 
@@ -118,13 +138,18 @@ function getEventIcon(eventName: string): React.ReactNode {
   if (name.includes('swap')) return <ArrowRightLeft className="w-4 h-4" />;
   if (name.includes('transfer')) return <Coins className="w-4 h-4" />;
   if (name.includes('mint')) return <Sparkles className="w-4 h-4" />;
-  if (name.includes('price') || name.includes('oracle') || name.includes('feed')) return <TrendingUp className="w-4 h-4" />;
+  if (name.includes('price') || name.includes('oracle') || name.includes('feed'))
+    return <TrendingUp className="w-4 h-4" />;
   if (name.includes('stake')) return <Database className="w-4 h-4" />;
   if (name.includes('liquidity')) return <Users className="w-4 h-4" />;
   return <Zap className="w-4 h-4" />;
 }
 
-function EventCard({ event, isExpanded, onToggle }: {
+function EventCard({
+  event,
+  isExpanded,
+  onToggle,
+}: {
   event: ParsedEvent;
   isExpanded: boolean;
   onToggle: () => void;
@@ -172,9 +197,7 @@ function EventCard({ event, isExpanded, onToggle }: {
           <div className="text-xs text-tertiary">{description}</div>
         </div>
 
-        <div className="text-xs text-tertiary flex-shrink-0">
-          {event.module}
-        </div>
+        <div className="text-xs text-tertiary flex-shrink-0">{event.module}</div>
       </button>
 
       {/* Expanded Content */}
@@ -192,9 +215,18 @@ function EventCard({ event, isExpanded, onToggle }: {
                 <div className="p-2 bg-secondary rounded-lg">
                   <div className="text-xs text-tertiary">Package</div>
                   <div className="flex items-center gap-1 mt-1">
-                    <code className="text-xs text-muted-foreground truncate font-mono">{truncateAddress(event.packageId, 8)}</code>
-                    <button onClick={() => copyToClipboard(event.packageId, 'pkg')} className="text-tertiary hover:text-muted-foreground">
-                      {copied === 'pkg' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                    <code className="text-xs text-muted-foreground truncate font-mono">
+                      {truncateAddress(event.packageId, 8)}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(event.packageId, 'pkg')}
+                      className="text-tertiary hover:text-muted-foreground"
+                    >
+                      {copied === 'pkg' ? (
+                        <Check className="w-3 h-3" />
+                      ) : (
+                        <Copy className="w-3 h-3" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -202,9 +234,18 @@ function EventCard({ event, isExpanded, onToggle }: {
                 <div className="p-2 bg-secondary rounded-lg">
                   <div className="text-xs text-tertiary">Sender</div>
                   <div className="flex items-center gap-1 mt-1">
-                    <code className="text-xs text-muted-foreground truncate font-mono">{truncateAddress(event.sender, 8)}</code>
-                    <button onClick={() => copyToClipboard(event.sender, 'sender')} className="text-tertiary hover:text-muted-foreground">
-                      {copied === 'sender' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                    <code className="text-xs text-muted-foreground truncate font-mono">
+                      {truncateAddress(event.sender, 8)}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(event.sender, 'sender')}
+                      className="text-tertiary hover:text-muted-foreground"
+                    >
+                      {copied === 'sender' ? (
+                        <Check className="w-3 h-3" />
+                      ) : (
+                        <Copy className="w-3 h-3" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -214,11 +255,20 @@ function EventCard({ event, isExpanded, onToggle }: {
               <div className="p-2 bg-secondary rounded-lg">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs text-tertiary">Event Type</span>
-                  <button onClick={() => copyToClipboard(event.type, 'type')} className="text-tertiary hover:text-muted-foreground">
-                    {copied === 'type' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                  <button
+                    onClick={() => copyToClipboard(event.type, 'type')}
+                    className="text-tertiary hover:text-muted-foreground"
+                  >
+                    {copied === 'type' ? (
+                      <Check className="w-3 h-3" />
+                    ) : (
+                      <Copy className="w-3 h-3" />
+                    )}
                   </button>
                 </div>
-                <code className="text-xs text-muted-foreground break-all font-mono">{event.type}</code>
+                <code className="text-xs text-muted-foreground break-all font-mono">
+                  {event.type}
+                </code>
               </div>
 
               {/* Event Data */}
@@ -227,7 +277,9 @@ function EventCard({ event, isExpanded, onToggle }: {
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs text-tertiary">Event Data</span>
                     <button
-                      onClick={() => copyToClipboard(JSON.stringify(event.parsedFields, null, 2), 'data')}
+                      onClick={() =>
+                        copyToClipboard(JSON.stringify(event.parsedFields, null, 2), 'data')
+                      }
                       className="text-xs text-tertiary hover:text-muted-foreground flex items-center gap-1"
                     >
                       <Copy className="w-3 h-3" />
@@ -285,23 +337,25 @@ export function EventExplorer() {
   };
 
   const toggleExpanded = (id: string) => {
-    setExpandedIds(prev => {
+    setExpandedIds((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
   };
 
-  const filteredEvents = events.filter(event => {
-    if (filter.module && !event.module.toLowerCase().includes(filter.module.toLowerCase())) return false;
-    if (filter.eventName && !event.eventName.toLowerCase().includes(filter.eventName.toLowerCase())) return false;
+  const filteredEvents = events.filter((event) => {
+    if (filter.module && !event.module.toLowerCase().includes(filter.module.toLowerCase()))
+      return false;
+    if (filter.eventName && !event.eventName.toLowerCase().includes(filter.eventName.toLowerCase()))
+      return false;
     return true;
   });
 
   // Group events by type for summary
   const eventSummary = useMemo(() => {
     const summary: Record<string, { count: number; protocol: any }> = {};
-    events.forEach(event => {
+    events.forEach((event) => {
       const key = event.eventName;
       if (!summary[key]) {
         summary[key] = { count: 0, protocol: detectProtocol(event.packageId) };
@@ -314,20 +368,77 @@ export function EventExplorer() {
   // Detect main protocols involved
   const protocolsInvolved = useMemo(() => {
     const protocols = new Set<string>();
-    events.forEach(event => {
+    events.forEach((event) => {
       const protocol = detectProtocol(event.packageId);
       if (protocol) protocols.add(protocol.name);
     });
     return Array.from(protocols);
   }, [events]);
 
+  const copyForAi = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied`);
+  };
+
+  // AI export of the current event query and its results (capped so we don't
+  // dump thousands of events into a prompt).
+  const EVENT_EXPORT_CAP = 200;
+  const aiJson = useMemo(() => {
+    if (filteredEvents.length === 0) return undefined;
+    return JSON.stringify(
+      {
+        digest: digest.trim(),
+        filter,
+        protocols: protocolsInvolved,
+        eventTypeBreakdown: Object.fromEntries(
+          Object.entries(eventSummary).map(([name, data]) => [name, data.count])
+        ),
+        totalEvents: filteredEvents.length,
+        events: filteredEvents.slice(0, EVENT_EXPORT_CAP).map((e) => ({
+          type: e.type,
+          module: e.module,
+          eventName: e.eventName,
+          packageId: e.packageId,
+          sender: e.sender,
+          fields: e.parsedFields,
+        })),
+      },
+      null,
+      2
+    );
+  }, [filteredEvents, digest, filter, protocolsInvolved, eventSummary]);
+
+  const aiPrompt = useMemo(() => {
+    if (filteredEvents.length === 0) return '';
+    const shown = Math.min(filteredEvents.length, EVENT_EXPORT_CAP);
+    return [
+      `Explain what happened in this Sui transaction based on its emitted events.`,
+      '',
+      `- Digest: ${digest.trim()}`,
+      `- Events: ${filteredEvents.length}${shown < filteredEvents.length ? ` (showing first ${shown})` : ''}`,
+      protocolsInvolved.length > 0 ? `- Protocols: ${protocolsInvolved.join(', ')}` : '',
+      '',
+      'Event breakdown:',
+      ...Object.entries(eventSummary).map(([name, data]) => `- ${name} ×${data.count}`),
+      '',
+      `Walk me through what this transaction did and call out anything notable.`,
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }, [filteredEvents, digest, protocolsInvolved, eventSummary]);
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="p-4 border-b border-border">
-        <div className="flex items-center gap-2 mb-3">
-          <Zap className="w-5 h-5 text-yellow-400" />
-          <h2 className="text-lg font-semibold text-foreground">Event Explorer</h2>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <Zap className="w-5 h-5 text-yellow-400" />
+            <h2 className="text-lg font-semibold text-foreground">Event Explorer</h2>
+          </div>
+          {filteredEvents.length > 0 && (
+            <CopyForAiMenu prompt={aiPrompt} json={aiJson} onCopy={copyForAi} />
+          )}
         </div>
 
         <div className="flex gap-2">
@@ -355,7 +466,7 @@ export function EventExplorer() {
               <input
                 type="text"
                 value={filter.module}
-                onChange={(e) => setFilter(f => ({ ...f, module: e.target.value }))}
+                onChange={(e) => setFilter((f) => ({ ...f, module: e.target.value }))}
                 placeholder="Filter by module..."
                 className="w-full pl-8 pr-3 py-1.5 bg-secondary border border-border rounded-lg text-xs text-foreground placeholder:text-tertiary focus:outline-none"
               />
@@ -363,7 +474,7 @@ export function EventExplorer() {
             <input
               type="text"
               value={filter.eventName}
-              onChange={(e) => setFilter(f => ({ ...f, eventName: e.target.value }))}
+              onChange={(e) => setFilter((f) => ({ ...f, eventName: e.target.value }))}
               placeholder="Filter by event name..."
               className="flex-1 px-3 py-1.5 bg-secondary border border-border rounded-lg text-xs text-foreground placeholder:text-tertiary focus:outline-none"
             />
@@ -403,11 +514,15 @@ export function EventExplorer() {
                 <div className="text-xs text-muted-foreground">Events</div>
               </div>
               <div className="text-center p-2 bg-secondary rounded-lg">
-                <div className="text-2xl font-bold text-foreground">{Object.keys(eventSummary).length}</div>
+                <div className="text-2xl font-bold text-foreground">
+                  {Object.keys(eventSummary).length}
+                </div>
                 <div className="text-xs text-muted-foreground">Event Types</div>
               </div>
               <div className="text-center p-2 bg-secondary rounded-lg">
-                <div className="text-2xl font-bold text-foreground">{protocolsInvolved.length || '-'}</div>
+                <div className="text-2xl font-bold text-foreground">
+                  {protocolsInvolved.length || '-'}
+                </div>
                 <div className="text-xs text-muted-foreground">Protocols</div>
               </div>
             </div>
@@ -415,8 +530,11 @@ export function EventExplorer() {
             {/* Protocols */}
             {protocolsInvolved.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {protocolsInvolved.map(name => (
-                  <span key={name} className="text-xs px-2 py-1 bg-accent rounded-full text-muted-foreground">
+                {protocolsInvolved.map((name) => (
+                  <span
+                    key={name}
+                    className="text-xs px-2 py-1 bg-accent rounded-full text-muted-foreground"
+                  >
                     {name}
                   </span>
                 ))}
@@ -448,11 +566,13 @@ export function EventExplorer() {
               {filteredEvents.length} event{filteredEvents.length !== 1 ? 's' : ''}
             </span>
             <button
-              onClick={() => setExpandedIds(prev =>
-                prev.size === filteredEvents.length
-                  ? new Set()
-                  : new Set(filteredEvents.map(e => e.id))
-              )}
+              onClick={() =>
+                setExpandedIds((prev) =>
+                  prev.size === filteredEvents.length
+                    ? new Set()
+                    : new Set(filteredEvents.map((e) => e.id))
+                )
+              }
               className="text-xs text-tertiary hover:text-muted-foreground transition-colors"
             >
               {expandedIds.size === filteredEvents.length ? 'Collapse All' : 'Expand All'}
@@ -485,8 +605,14 @@ export function EventExplorer() {
             <div className="space-y-2">
               <div className="text-xs text-muted-foreground">Try these examples:</div>
               {[
-                { digest: '7SZsZ8RzL7JcteKbcJh4D5xXjz6vGkuxNzj6wJtB73Dv', label: 'Pyth Oracle Update' },
-                { digest: '95iEUzhvYWZoceBtgq7LkMsZxhrtfK3iJQk7AFV6Xgnk', label: 'DeFi Transaction' },
+                {
+                  digest: '7SZsZ8RzL7JcteKbcJh4D5xXjz6vGkuxNzj6wJtB73Dv',
+                  label: 'Pyth Oracle Update',
+                },
+                {
+                  digest: '95iEUzhvYWZoceBtgq7LkMsZxhrtfK3iJQk7AFV6Xgnk',
+                  label: 'DeFi Transaction',
+                },
               ].map((example) => (
                 <button
                   key={example.digest}
@@ -506,12 +632,22 @@ export function EventExplorer() {
           <div className="bg-secondary rounded-xl p-4 border border-dashed border-border">
             <div className="flex items-center gap-2 mb-2">
               <Info className="w-4 h-4 text-tertiary" />
-              <span className="text-xs font-medium text-muted-foreground">Understanding Events</span>
+              <span className="text-xs font-medium text-muted-foreground">
+                Understanding Events
+              </span>
             </div>
             <div className="text-xs text-tertiary space-y-1">
-              <p><span className="text-yellow-400">Events</span> are logs emitted by smart contracts during execution</p>
-              <p><span className="text-purple-400">Oracle events</span> update price feeds from external data sources</p>
-              <p><span className="text-cyan-400">Swap events</span> indicate token exchanges on DEXes</p>
+              <p>
+                <span className="text-yellow-400">Events</span> are logs emitted by smart contracts
+                during execution
+              </p>
+              <p>
+                <span className="text-purple-400">Oracle events</span> update price feeds from
+                external data sources
+              </p>
+              <p>
+                <span className="text-cyan-400">Swap events</span> indicate token exchanges on DEXes
+              </p>
               <p>Click any event to see its full data and copy values</p>
             </div>
           </div>

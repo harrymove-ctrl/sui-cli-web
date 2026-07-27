@@ -408,3 +408,40 @@ export async function getObjectVersionHistory(
 
   return hops;
 }
+
+/**
+ * GraphQL replacement for the JSON-RPC `suix_getCoinMetadata` call, which
+ * 404s on Mysten's public testnet/devnet fullnodes along with every other
+ * legacy JSON-RPC method. There is no gRPC equivalent - `sui.rpc.v2.Object`
+ * carries a coin's `balance` but nothing about the `CoinMetadata<T>` object
+ * itself (name/symbol/decimals/icon), so GraphQL is the only live source for
+ * this on those networks. Returns `null` on any failure (network down, coin
+ * type has no registered metadata, etc.) so callers can fall back to a
+ * synthesized default the way a thrown RPC error already triggered.
+ */
+export async function getCoinMetadataViaGraphQL(
+  coinType: string,
+  rpcUrl: string
+): Promise<{ decimals: number; name: string; symbol: string; description?: string; iconUrl?: string } | null> {
+  const graphqlUrl = getGraphqlUrl(rpcUrl);
+  if (!graphqlUrl) return null;
+
+  const data = await runQuery(
+    graphqlUrl,
+    `query CoinMetadata($coinType: String!) {
+        coinMetadata(coinType: $coinType) { decimals name symbol description iconUrl }
+      }`,
+    { coinType }
+  );
+
+  const metadata = data?.coinMetadata;
+  if (!metadata) return null;
+
+  return {
+    decimals: metadata.decimals,
+    name: metadata.name,
+    symbol: metadata.symbol,
+    description: metadata.description || undefined,
+    iconUrl: metadata.iconUrl || undefined,
+  };
+}

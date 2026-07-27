@@ -63,7 +63,11 @@ export function RecentActivity({ onChainHistory = [], activeWalletAlias }: Recen
             <p className="text-sm text-muted-foreground">
               No local build/deploy activity yet — actions in Move Studio will show up here.
             </p>
-            <Button variant="outline" onClick={() => navigate('/app/move')}>
+            <Button
+              variant="outline"
+              onClick={() => navigate('/app/move')}
+              className="border-[#4da2ff]/40 text-[#4da2ff] hover:bg-[#4da2ff]/10 hover:text-[#4da2ff]"
+            >
               Open Move Studio
             </Button>
           </div>
@@ -73,8 +77,10 @@ export function RecentActivity({ onChainHistory = [], activeWalletAlias }: Recen
               const Icon = OPERATION_ICONS[entry.type];
               const packageName = entry.packagePath.split('/').filter(Boolean).pop() || entry.packagePath;
               return (
-                <div key={entry.id} className="flex items-center gap-3 px-3 py-2 rounded-lg">
-                  <Icon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <div key={entry.id} className="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors hover:bg-[#4da2ff]/5">
+                  <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[#4da2ff]/10">
+                    <Icon className="w-4 h-4 text-[#4da2ff]" />
+                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-foreground truncate">
                       {OPERATION_LABELS[entry.type]} · {packageName}
@@ -117,8 +123,10 @@ export function RecentActivity({ onChainHistory = [], activeWalletAlias }: Recen
         ) : (
           <div className="space-y-1">
             {onChainHistory.map((entry) => (
-              <div key={entry.timestamp} className="flex items-center gap-3 px-3 py-2 rounded-lg">
-                <ArrowLeftRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              <div key={entry.timestamp} className="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors hover:bg-[#4da2ff]/5">
+                <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[#4da2ff]/10">
+                  <ArrowLeftRight className="w-4 h-4 text-[#4da2ff]" />
+                </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm text-foreground truncate">
                     Balance changed to {entry.balance.toFixed(4)} SUI

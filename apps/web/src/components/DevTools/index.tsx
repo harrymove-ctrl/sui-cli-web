@@ -1,35 +1,36 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Label } from '@/components/ui/label';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
+  Activity,
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
   Code,
   FileCode,
-  Activity,
-  Loader2,
-  FolderOpen,
-  PlayCircle,
   FileText,
-  Settings,
-  AlertCircle,
-  CheckCircle2,
-  AlertTriangle,
-  ChevronDown,
+  FolderOpen,
   Lightbulb,
+  Loader2,
+  PlayCircle,
+  Settings,
 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { FileBrowser } from '@/components/MoveDeploy/FileBrowser';
+import { useSearchParams } from 'react-router-dom';
 import {
-  runCoverage,
   disassembleModule,
   generatePackageSummary,
   getPackageModules,
   getPublishedPackages,
   type PublishedPackageInfo,
+  runCoverage,
 } from '@/api/client';
+import { FileBrowser } from '@/components/MoveDeploy/FileBrowser';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Helper to parse CLI output and separate warnings from actual content
 interface ParsedOutput {
@@ -42,34 +43,39 @@ interface ParsedOutput {
 
 // Simplified warning for user-friendly display
 interface SimplifiedWarning {
-  id: string;           // e.g., "W99001"
-  title: string;        // User-friendly title
-  description: string;  // Simple explanation
-  suggestion: string;   // What to do about it
-  location?: string;    // File:line (simplified)
-  rawOutput: string;    // Original output for advanced users
+  id: string; // e.g., "W99001"
+  title: string; // User-friendly title
+  description: string; // Simple explanation
+  suggestion: string; // What to do about it
+  location?: string; // File:line (simplified)
+  rawOutput: string; // Original output for advanced users
 }
 
 // Map warning codes to user-friendly explanations
-const WARNING_EXPLANATIONS: Record<string, { title: string; description: string; suggestion: string }> = {
-  'W99001': {
+const WARNING_EXPLANATIONS: Record<
+  string,
+  { title: string; description: string; suggestion: string }
+> = {
+  W99001: {
     title: 'Better return pattern available',
-    description: 'Your function sends an object directly to the caller. This works, but returning the object instead makes your code more flexible.',
-    suggestion: 'Consider using "public fun" that returns the object, so callers can decide what to do with it.',
+    description:
+      'Your function sends an object directly to the caller. This works, but returning the object instead makes your code more flexible.',
+    suggestion:
+      'Consider using "public fun" that returns the object, so callers can decide what to do with it.',
   },
-  'W09001': {
+  W09001: {
     title: 'Unused variable',
     description: 'You declared a variable but never used it.',
     suggestion: 'Remove the variable or prefix with underscore (_) if intentional.',
   },
-  'W09002': {
+  W09002: {
     title: 'Unused import',
     description: 'You imported something but never used it.',
     suggestion: 'Remove the unused import to keep code clean.',
   },
-  'W09003': {
+  W09003: {
     title: 'Unused function',
-    description: 'You defined a function but it\'s never called.',
+    description: "You defined a function but it's never called.",
     suggestion: 'Remove if not needed, or add "public" if it should be accessible.',
   },
 };
@@ -83,7 +89,9 @@ function parseWarningToSimplified(rawWarning: string): SimplifiedWarning {
 
   // Extract location (file:line)
   const locationMatch = rawWarning.match(/┌─\s+([^:]+):(\d+):\d+/);
-  const location = locationMatch ? `${locationMatch[1].split('/').pop()}:${locationMatch[2]}` : undefined;
+  const location = locationMatch
+    ? `${locationMatch[1].split('/').pop()}:${locationMatch[2]}`
+    : undefined;
 
   // Get explanation from our map, or create generic one
   const explanation = WARNING_EXPLANATIONS[warningCode] || {
@@ -122,16 +130,18 @@ function parseCliOutput(output: string): ParsedOutput {
     // Box drawing characters: ┌ ─ │ └ ├ ╭ ╮ ╯ ╰
     const boxChars = /^[\s┌─│└├╭╮╯╰]/;
     // Also match lines starting with spaces, =, or containing "This warning"
-    return boxChars.test(line) ||
-           line.startsWith('   ') ||
-           line.startsWith(' ') ||
-           line.startsWith('=') ||
-           line.includes('This warning can be suppressed') ||
-           line.includes('Returning an object') ||
-           line.includes('Transaction sender') ||
-           line.includes('Transfer of an object') ||
-           line.includes('^^^^') ||
-           line.trim() === '';
+    return (
+      boxChars.test(line) ||
+      line.startsWith('   ') ||
+      line.startsWith(' ') ||
+      line.startsWith('=') ||
+      line.includes('This warning can be suppressed') ||
+      line.includes('Returning an object') ||
+      line.includes('Transaction sender') ||
+      line.includes('Transfer of an object') ||
+      line.includes('^^^^') ||
+      line.trim() === ''
+    );
   };
 
   for (const line of lines) {
@@ -253,7 +263,9 @@ export function DevTools() {
 
   // File Browser State
   const [showBrowser, setShowBrowser] = useState(false);
-  const [browserTarget, setBrowserTarget] = useState<'coverage' | 'disassembly' | 'summary'>('coverage');
+  const [browserTarget, setBrowserTarget] = useState<'coverage' | 'disassembly' | 'summary'>(
+    'coverage'
+  );
 
   // Check if module name is required for current coverage mode
   const moduleNameRequired = coverageMode === 'source' || coverageMode === 'bytecode';
@@ -348,11 +360,7 @@ export function DevTools() {
     setDisassemblyOutput('');
 
     try {
-      const data = await disassembleModule(
-        modulePath.trim(),
-        showDebug,
-        showBytecodeMap
-      );
+      const data = await disassembleModule(modulePath.trim(), showDebug, showBytecodeMap);
       setDisassemblyOutput(data.output);
       toast.success('Disassembly complete!');
     } catch (error: any) {
@@ -381,9 +389,7 @@ export function DevTools() {
         summaryFormat
       );
       setSummaryOutput(
-        summaryFormat === 'json'
-          ? JSON.stringify(data.summary, null, 2)
-          : String(data.summary)
+        summaryFormat === 'json' ? JSON.stringify(data.summary, null, 2) : String(data.summary)
       );
       toast.success('Summary generated!');
     } catch (error: any) {
@@ -395,6 +401,89 @@ export function DevTools() {
     }
   };
 
+  // Copy-for-AI: assemble the active tool's inputs/outputs into shareable context
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied`);
+  };
+
+  const tabLabels: Record<string, string> = {
+    coverage: 'Test Coverage',
+    disassemble: 'Bytecode Disassembly',
+    summary: 'Package Summary',
+  };
+
+  const aiState: Record<string, unknown> =
+    activeTab === 'coverage'
+      ? {
+          tool: 'coverage',
+          packagePath: packagePath.trim() || null,
+          coverageMode,
+          moduleName: coverageModuleName.trim() || null,
+          detectedModules,
+          output: coverageOutput ? coverageOutput.slice(0, 6000) : null,
+        }
+      : activeTab === 'disassemble'
+        ? {
+            tool: 'disassemble',
+            modulePath: modulePath.trim() || null,
+            showDebug,
+            showBytecodeMap,
+            output: disassemblyOutput ? disassemblyOutput.slice(0, 6000) : null,
+          }
+        : {
+            tool: 'summary',
+            packagePath: summaryPackagePath.trim() || null,
+            packageId: summaryPackageId.trim() || null,
+            format: summaryFormat,
+            output: summaryOutput ? summaryOutput.slice(0, 6000) : null,
+          };
+
+  const hasExportable =
+    activeTab === 'coverage'
+      ? !!(packagePath.trim() || coverageOutput)
+      : activeTab === 'disassemble'
+        ? !!(modulePath.trim() || disassemblyOutput)
+        : !!(summaryPackagePath.trim() || summaryPackageId.trim() || summaryOutput);
+
+  const aiActiveOutput =
+    activeTab === 'coverage'
+      ? coverageOutput
+      : activeTab === 'disassemble'
+        ? disassemblyOutput
+        : summaryOutput;
+
+  const aiJson = JSON.stringify(aiState, null, 2);
+
+  const aiMarkdown = [
+    `# Sui Move Dev Tools — ${tabLabels[activeTab]}`,
+    '',
+    ...(activeTab === 'coverage'
+      ? [
+          `- **Package path:** ${packagePath.trim() || 'not set'}`,
+          `- **Mode:** ${coverageMode}`,
+          coverageModuleName.trim() ? `- **Module:** ${coverageModuleName.trim()}` : null,
+        ]
+      : activeTab === 'disassemble'
+        ? [
+            `- **Module path:** ${modulePath.trim() || 'not set'}`,
+            `- **Show debug:** ${showDebug ? 'yes' : 'no'}`,
+            `- **Show bytecode map:** ${showBytecodeMap ? 'yes' : 'no'}`,
+          ]
+        : [
+            `- **Package path:** ${summaryPackagePath.trim() || 'not set'}`,
+            `- **Package ID:** ${summaryPackageId.trim() || 'not set'}`,
+            `- **Format:** ${summaryFormat}`,
+          ]),
+    aiActiveOutput ? '' : null,
+    aiActiveOutput ? '## Output' : null,
+    aiActiveOutput ? '```\n' + aiActiveOutput.slice(0, 6000) + '\n```' : null,
+  ]
+    .filter((line) => line !== null)
+    .join('\n');
+
+  const aiPrompt = `Here's the output from the Sui Move "${tabLabels[activeTab]}" dev tool:\n\n${aiMarkdown}\n\nHelp me interpret this and suggest concrete next steps (e.g. improving test coverage, understanding the bytecode, or reviewing the package structure).`;
+
   return (
     <>
       <div className="relative z-10 p-4 sm:p-6">
@@ -405,9 +494,14 @@ export function DevTools() {
               <h1 className="text-sm font-medium text-foreground">Dev Tools</h1>
               <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
             </div>
-            <span className="text-xs text-tertiary hidden sm:block">
-              Coverage · Disassemble · Summary
-            </span>
+            {hasExportable && (
+              <CopyForAiMenu
+                prompt={aiPrompt}
+                json={aiJson}
+                markdown={aiMarkdown}
+                onCopy={copyToClipboard}
+              />
+            )}
           </div>
 
           {/* Main Content */}
@@ -417,20 +511,22 @@ export function DevTools() {
             transition={{ type: 'spring', stiffness: 300, damping: 25, delay: 0.1 }}
           >
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-              <TabsList className="grid w-full grid-cols-3 bg-secondary border border-border h-9 p-0.5 gap-0.5">
-                <TabsTrigger value="coverage" className="flex items-center justify-center gap-1.5 text-xs data-[state=active]:bg-[#4da2ff]/20 data-[state=active]:text-[#4da2ff] data-[state=active]:border-l-2 data-[state=active]:border-l-[#4da2ff] text-muted-foreground hover:text-foreground h-8 transition-all">
-                  <Activity className="w-3.5 h-3.5 flex-shrink-0" />
+              <TabsList fullWidth indicatorClassName="bg-[#4da2ff]">
+                <TabsTrigger value="coverage" icon={<Activity />} className="flex-1">
                   <span className="hidden sm:inline">Coverage</span>
                 </TabsTrigger>
-                <TabsTrigger value="disassemble" className="flex items-center justify-center gap-1.5 text-xs data-[state=active]:bg-[#4da2ff]/20 data-[state=active]:text-[#4da2ff] data-[state=active]:border-l-2 data-[state=active]:border-l-[#4da2ff] text-muted-foreground hover:text-foreground h-8 transition-all">
-                  <Code className="w-3.5 h-3.5 flex-shrink-0" />
+                <TabsTrigger value="disassemble" icon={<Code />} className="flex-1">
                   <span className="hidden sm:inline">Disassemble</span>
                 </TabsTrigger>
-                <TabsTrigger value="summary" className="flex items-center justify-center gap-1.5 text-xs data-[state=active]:bg-[#4da2ff]/20 data-[state=active]:text-[#4da2ff] data-[state=active]:border-l-2 data-[state=active]:border-l-[#4da2ff] text-muted-foreground hover:text-foreground h-8 transition-all">
-                  <FileText className="w-3.5 h-3.5 flex-shrink-0" />
+                <TabsTrigger value="summary" icon={<FileText />} className="flex-1">
                   <span className="hidden sm:inline">Summary</span>
                 </TabsTrigger>
               </TabsList>
+              <p className="px-1 pt-1.5 text-xs text-tertiary">
+                {activeTab === 'coverage' && 'Move test coverage report for your package'}
+                {activeTab === 'disassemble' && 'View compiled bytecode as Move disassembly'}
+                {activeTab === 'summary' && 'Package structure and module summary'}
+              </p>
 
               {/* Coverage Tab */}
               <TabsContent value="coverage" className="space-y-4 mt-4">
@@ -450,13 +546,18 @@ export function DevTools() {
                     <CardTitle className="text-sm flex items-center gap-1.5 text-green-400">
                       <Activity className="w-3.5 h-3.5 text-green-500" />
                       Test Coverage Analysis
-                      <span className="text-xs text-muted-foreground ml-auto font-normal">Run coverage on Move packages</span>
+                      <span className="text-xs text-muted-foreground ml-auto font-normal">
+                        Run coverage on Move packages
+                      </span>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="px-4 pb-4 space-y-3">
                     {/* Package Path */}
                     <div className="space-y-1">
-                      <Label htmlFor="coverage-package-path" className="text-xs font-medium flex items-center gap-1 text-green-400">
+                      <Label
+                        htmlFor="coverage-package-path"
+                        className="text-xs font-medium flex items-center gap-1 text-green-400"
+                      >
                         Package Path <span className="text-red-400">*</span>
                       </Label>
                       <div className="flex gap-1.5">
@@ -487,7 +588,9 @@ export function DevTools() {
 
                     {/* Mode Selection with Explanation */}
                     <div className="space-y-1.5">
-                      <Label htmlFor="coverage-mode" className="text-xs font-medium text-green-400">Coverage Mode</Label>
+                      <Label htmlFor="coverage-mode" className="text-xs font-medium text-green-400">
+                        Coverage Mode
+                      </Label>
                       <select
                         id="coverage-mode"
                         value={coverageMode}
@@ -496,8 +599,12 @@ export function DevTools() {
                         className="w-full px-2.5 py-1.5 bg-card border border-green-500/30 rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-green-500/50 text-xs disabled:opacity-50"
                       >
                         <option value="summary">Summary - Overall coverage statistics</option>
-                        <option value="source">Source Code - Line-by-line coverage (requires module)</option>
-                        <option value="bytecode">Bytecode - Disassembled coverage (requires module)</option>
+                        <option value="source">
+                          Source Code - Line-by-line coverage (requires module)
+                        </option>
+                        <option value="bytecode">
+                          Bytecode - Disassembled coverage (requires module)
+                        </option>
                         <option value="lcov">LCOV - Export for external tools</option>
                       </select>
 
@@ -506,31 +613,55 @@ export function DevTools() {
                         {coverageMode === 'summary' && (
                           <div className="space-y-1">
                             <p className="font-medium text-green-400">📊 Summary Mode</p>
-                            <p>Shows overall test coverage percentage for your entire package. Quick way to see how much of your code is tested.</p>
-                            <p className="text-green-500/60">Best for: Quick overview of test coverage</p>
+                            <p>
+                              Shows overall test coverage percentage for your entire package. Quick
+                              way to see how much of your code is tested.
+                            </p>
+                            <p className="text-green-500/60">
+                              Best for: Quick overview of test coverage
+                            </p>
                           </div>
                         )}
                         {coverageMode === 'source' && (
                           <div className="space-y-1">
                             <p className="font-medium text-green-400">📝 Source Code Mode</p>
-                            <p>Shows line-by-line coverage - which lines were executed during tests (✓) and which were not (✗).</p>
-                            <p className="text-green-500/60">Best for: Finding untested code paths</p>
-                            <p className="text-amber-400/80 text-xs">⚠️ Requires selecting a specific module</p>
+                            <p>
+                              Shows line-by-line coverage - which lines were executed during tests
+                              (✓) and which were not (✗).
+                            </p>
+                            <p className="text-green-500/60">
+                              Best for: Finding untested code paths
+                            </p>
+                            <p className="text-amber-400/80 text-xs">
+                              ⚠️ Requires selecting a specific module
+                            </p>
                           </div>
                         )}
                         {coverageMode === 'bytecode' && (
                           <div className="space-y-1">
                             <p className="font-medium text-green-400">🔧 Bytecode Mode</p>
-                            <p>Shows coverage at bytecode level - more detailed than source, useful for understanding low-level execution.</p>
-                            <p className="text-green-500/60">Best for: Advanced debugging & optimization</p>
-                            <p className="text-amber-400/80 text-xs">⚠️ Requires selecting a specific module</p>
+                            <p>
+                              Shows coverage at bytecode level - more detailed than source, useful
+                              for understanding low-level execution.
+                            </p>
+                            <p className="text-green-500/60">
+                              Best for: Advanced debugging & optimization
+                            </p>
+                            <p className="text-amber-400/80 text-xs">
+                              ⚠️ Requires selecting a specific module
+                            </p>
                           </div>
                         )}
                         {coverageMode === 'lcov' && (
                           <div className="space-y-1">
                             <p className="font-medium text-green-400">📤 LCOV Export Mode</p>
-                            <p>Exports coverage data in LCOV format - standard format used by coverage visualization tools.</p>
-                            <p className="text-green-500/60">Best for: Integration with VS Code, Codecov, Coveralls</p>
+                            <p>
+                              Exports coverage data in LCOV format - standard format used by
+                              coverage visualization tools.
+                            </p>
+                            <p className="text-green-500/60">
+                              Best for: Integration with VS Code, Codecov, Coveralls
+                            </p>
                           </div>
                         )}
                       </div>
@@ -538,9 +669,13 @@ export function DevTools() {
 
                     {/* Module Name - Required for source/bytecode modes */}
                     <div className="space-y-1">
-                      <Label htmlFor="coverage-module" className="text-xs font-medium text-green-400 flex items-center gap-2">
+                      <Label
+                        htmlFor="coverage-module"
+                        className="text-xs font-medium text-green-400 flex items-center gap-2"
+                      >
                         <span>
-                          Module Name {moduleNameRequired ? (
+                          Module Name{' '}
+                          {moduleNameRequired ? (
                             <span className="text-red-400">*</span>
                           ) : (
                             <span className="text-green-400/80">(optional for summary)</span>
@@ -551,7 +686,8 @@ export function DevTools() {
                         )}
                         {!loadingModules && detectedModules.length > 0 && (
                           <span className="text-xs text-green-400/80">
-                            {detectedModules.length} module{detectedModules.length > 1 ? 's' : ''} found
+                            {detectedModules.length} module{detectedModules.length > 1 ? 's' : ''}{' '}
+                            found
                           </span>
                         )}
                       </Label>
@@ -568,8 +704,10 @@ export function DevTools() {
                           }`}
                         >
                           <option value="">Select a module...</option>
-                          {detectedModules.map(mod => (
-                            <option key={mod} value={mod}>{mod}</option>
+                          {detectedModules.map((mod) => (
+                            <option key={mod} value={mod}>
+                              {mod}
+                            </option>
                           ))}
                         </select>
                       ) : (
@@ -578,7 +716,9 @@ export function DevTools() {
                           type="text"
                           value={coverageModuleName}
                           onChange={(e) => setCoverageModuleName(e.target.value)}
-                          placeholder={moduleNameRequired ? "module_name (required)" : "module_name"}
+                          placeholder={
+                            moduleNameRequired ? 'module_name (required)' : 'module_name'
+                          }
                           disabled={runningCoverage}
                           className={`w-full px-2.5 py-1.5 bg-card border rounded-lg text-foreground placeholder:text-tertiary focus:outline-none focus:ring-1 focus:ring-green-500/50 text-xs font-mono disabled:opacity-50 ${
                             moduleNameRequired && !coverageModuleName.trim()
@@ -598,7 +738,11 @@ export function DevTools() {
                     {/* Run Button */}
                     <Button
                       onClick={handleRunCoverage}
-                      disabled={!packagePath.trim() || runningCoverage || (moduleNameRequired && !coverageModuleName.trim())}
+                      disabled={
+                        !packagePath.trim() ||
+                        runningCoverage ||
+                        (moduleNameRequired && !coverageModuleName.trim())
+                      }
                       className="w-full bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/50"
                     >
                       {runningCoverage ? (
@@ -616,127 +760,138 @@ export function DevTools() {
 
                     {/* Output with separate warnings and content */}
                     <AnimatePresence mode="wait">
-                      {coverageOutput && (() => {
-                        const parsed = parseCliOutput(coverageOutput);
-                        return (
-                          <motion.div
-                            initial={{ opacity: 0, y: -10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            className="space-y-2"
-                          >
-                            {/* Warnings Section - User-friendly display */}
-                            {parsed.hasWarnings && (
-                              <div className="space-y-2">
-                                {/* Simple header */}
-                                <div className="flex items-center gap-2">
-                                  <Lightbulb className="w-4 h-4 text-amber-400" />
-                                  <span className="text-sm font-medium text-amber-400">
-                                    {parsed.warnings.length} code suggestion{parsed.warnings.length > 1 ? 's' : ''} found
-                                  </span>
-                                  <span className="text-xs text-green-500/60 ml-auto">
-                                    Your code works fine!
-                                  </span>
-                                </div>
-
-                                {/* Simple warning cards */}
+                      {coverageOutput &&
+                        (() => {
+                          const parsed = parseCliOutput(coverageOutput);
+                          return (
+                            <motion.div
+                              initial={{ opacity: 0, y: -10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -10 }}
+                              className="space-y-2"
+                            >
+                              {/* Warnings Section - User-friendly display */}
+                              {parsed.hasWarnings && (
                                 <div className="space-y-2">
-                                  {parsed.warnings.map((warning, idx) => (
-                                    <div
-                                      key={idx}
-                                      className="p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg"
-                                    >
-                                      {/* Simple title and location */}
-                                      <div className="flex items-start justify-between gap-2 mb-1">
-                                        <span className="text-sm font-medium text-amber-300">
-                                          {warning.title}
-                                        </span>
-                                        {warning.location && (
-                                          <span className="text-xs text-amber-500/50 font-mono whitespace-nowrap">
-                                            {warning.location}
+                                  {/* Simple header */}
+                                  <div className="flex items-center gap-2">
+                                    <Lightbulb className="w-4 h-4 text-amber-400" />
+                                    <span className="text-sm font-medium text-amber-400">
+                                      {parsed.warnings.length} code suggestion
+                                      {parsed.warnings.length > 1 ? 's' : ''} found
+                                    </span>
+                                    <span className="text-xs text-green-500/60 ml-auto">
+                                      Your code works fine!
+                                    </span>
+                                  </div>
+
+                                  {/* Simple warning cards */}
+                                  <div className="space-y-2">
+                                    {parsed.warnings.map((warning, idx) => (
+                                      <div
+                                        key={idx}
+                                        className="p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg"
+                                      >
+                                        {/* Simple title and location */}
+                                        <div className="flex items-start justify-between gap-2 mb-1">
+                                          <span className="text-sm font-medium text-amber-300">
+                                            {warning.title}
                                           </span>
-                                        )}
+                                          {warning.location && (
+                                            <span className="text-xs text-amber-500/50 font-mono whitespace-nowrap">
+                                              {warning.location}
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {/* Simple description */}
+                                        <p className="text-xs text-muted-foreground mb-2">
+                                          {warning.description}
+                                        </p>
+
+                                        {/* Simple suggestion */}
+                                        <p className="text-xs text-green-400/80 flex items-start gap-1.5">
+                                          <span className="text-green-500 mt-0.5">→</span>
+                                          {warning.suggestion}
+                                        </p>
+
+                                        {/* Expandable technical details for advanced users */}
+                                        <details className="mt-2">
+                                          <summary className="text-xs text-amber-500/40 cursor-pointer hover:text-amber-500/60 transition-colors flex items-center gap-1">
+                                            <ChevronDown className="w-3 h-3" />
+                                            Show compiler output
+                                          </summary>
+                                          <pre className="mt-2 p-2 bg-secondary rounded-lg text-xs text-amber-400/60 font-mono overflow-x-auto whitespace-pre-wrap max-h-32 overflow-y-auto">
+                                            {warning.rawOutput}
+                                          </pre>
+                                        </details>
                                       </div>
+                                    ))}
+                                  </div>
 
-                                      {/* Simple description */}
-                                      <p className="text-xs text-muted-foreground mb-2">
-                                        {warning.description}
-                                      </p>
-
-                                      {/* Simple suggestion */}
-                                      <p className="text-xs text-green-400/80 flex items-start gap-1.5">
-                                        <span className="text-green-500 mt-0.5">→</span>
-                                        {warning.suggestion}
-                                      </p>
-
-                                      {/* Expandable technical details for advanced users */}
-                                      <details className="mt-2">
-                                        <summary className="text-xs text-amber-500/40 cursor-pointer hover:text-amber-500/60 transition-colors flex items-center gap-1">
-                                          <ChevronDown className="w-3 h-3" />
-                                          Show compiler output
-                                        </summary>
-                                        <pre className="mt-2 p-2 bg-secondary rounded-lg text-xs text-amber-400/60 font-mono overflow-x-auto whitespace-pre-wrap max-h-32 overflow-y-auto">
-                                          {warning.rawOutput}
-                                        </pre>
-                                      </details>
-                                    </div>
-                                  ))}
+                                  {/* Helpful note */}
+                                  <p className="text-xs text-tertiary text-center">
+                                    These are optional improvements. Your code compiles and runs
+                                    correctly.
+                                  </p>
                                 </div>
+                              )}
 
-                                {/* Helpful note */}
-                                <p className="text-xs text-tertiary text-center">
-                                  These are optional improvements. Your code compiles and runs correctly.
-                                </p>
-                              </div>
-                            )}
+                              {/* Main Output/Results Section - only show if has content or error */}
+                              {(parsed.content || parsed.status === 'error') && (
+                                <div className="space-y-1">
+                                  <Label className="text-xs font-medium flex items-center gap-1">
+                                    {parsed.status === 'error' ? (
+                                      <>
+                                        <AlertCircle className="w-3 h-3 text-red-400" />
+                                        <span className="text-red-400">Error</span>
+                                      </>
+                                    ) : parsed.hasWarnings ? (
+                                      <>
+                                        <CheckCircle2 className="w-3 h-3 text-green-400" />
+                                        <span className="text-green-400">Coverage Results</span>
+                                        <span className="text-xs text-amber-400 ml-1">
+                                          (compiled with warnings)
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <CheckCircle2 className="w-3 h-3 text-green-400" />
+                                        <span className="text-green-400">Coverage Results</span>
+                                      </>
+                                    )}
+                                  </Label>
+                                  <pre
+                                    className={`p-3 bg-secondary border rounded-lg text-xs font-mono overflow-x-auto max-h-96 overflow-y-auto ${
+                                      parsed.status === 'error'
+                                        ? 'border-red-500/30 text-red-400'
+                                        : 'border-green-500/30 text-green-400'
+                                    }`}
+                                  >
+                                    {parsed.content || 'No output'}
+                                  </pre>
+                                </div>
+                              )}
 
-                            {/* Main Output/Results Section - only show if has content or error */}
-                            {(parsed.content || parsed.status === 'error') && (
-                              <div className="space-y-1">
-                                <Label className="text-xs font-medium flex items-center gap-1">
-                                  {parsed.status === 'error' ? (
-                                    <>
-                                      <AlertCircle className="w-3 h-3 text-red-400" />
-                                      <span className="text-red-400">Error</span>
-                                    </>
-                                  ) : parsed.hasWarnings ? (
-                                    <>
-                                      <CheckCircle2 className="w-3 h-3 text-green-400" />
-                                      <span className="text-green-400">Coverage Results</span>
-                                      <span className="text-xs text-amber-400 ml-1">(compiled with warnings)</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <CheckCircle2 className="w-3 h-3 text-green-400" />
-                                      <span className="text-green-400">Coverage Results</span>
-                                    </>
-                                  )}
-                                </Label>
-                                <pre className={`p-3 bg-secondary border rounded-lg text-xs font-mono overflow-x-auto max-h-96 overflow-y-auto ${
-                                  parsed.status === 'error'
-                                    ? 'border-red-500/30 text-red-400'
-                                    : 'border-green-500/30 text-green-400'
-                                }`}>
-                                  {parsed.content || 'No output'}
-                                </pre>
-                              </div>
-                            )}
-
-                            {/* If only warnings and no content, show info message */}
-                            {parsed.hasWarnings && !parsed.content && parsed.status !== 'error' && (
-                              <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-xs">
-                                <p className="text-blue-400 flex items-center gap-1.5">
-                                  <AlertCircle className="w-3.5 h-3.5" />
-                                  Coverage completed with lint warnings. Your code compiled successfully.
-                                </p>
-                                <p className="text-blue-400/70 mt-1 pl-5">
-                                  The warnings above are suggestions for better code practices, not errors.
-                                </p>
-                              </div>
-                            )}
-                          </motion.div>
-                        );
-                      })()}
+                              {/* If only warnings and no content, show info message */}
+                              {parsed.hasWarnings &&
+                                !parsed.content &&
+                                parsed.status !== 'error' && (
+                                  <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-xs">
+                                    <p className="text-blue-400 flex items-center gap-1.5">
+                                      <AlertCircle className="w-3.5 h-3.5" />
+                                      Coverage completed with lint warnings. Your code compiled
+                                      successfully.
+                                    </p>
+                                    <p className="text-blue-400/70 mt-1 pl-5">
+                                      The warnings above are suggestions for better code practices,
+                                      not errors.
+                                    </p>
+                                  </div>
+                                )}
+                            </motion.div>
+                          );
+                        })()}
                     </AnimatePresence>
                   </CardContent>
                 </Card>
@@ -765,13 +920,18 @@ export function DevTools() {
                     <CardTitle className="text-sm flex items-center gap-1.5 text-green-400">
                       <Code className="w-3.5 h-3.5 text-green-500" />
                       Disassemble Module
-                      <span className="text-xs text-muted-foreground ml-auto font-normal">View bytecode from .mv files</span>
+                      <span className="text-xs text-muted-foreground ml-auto font-normal">
+                        View bytecode from .mv files
+                      </span>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="px-4 pb-4 space-y-3">
                     {/* Module Path */}
                     <div className="space-y-1">
-                      <Label htmlFor="module-path" className="text-xs font-medium flex items-center gap-1 text-green-400">
+                      <Label
+                        htmlFor="module-path"
+                        className="text-xs font-medium flex items-center gap-1 text-green-400"
+                      >
                         Module Path (.mv file) <span className="text-red-400">*</span>
                       </Label>
                       <div className="flex gap-1.5">
@@ -867,9 +1027,13 @@ export function DevTools() {
                             )}
                             Disassembled Bytecode
                           </Label>
-                          <pre className={`p-3 bg-secondary border rounded-lg text-xs font-mono overflow-x-auto max-h-96 overflow-y-auto ${
-                            disassemblyOutput.includes('Error:') ? 'border-red-500/30 text-red-400' : 'border-green-500/30 text-green-400'
-                          }`}>
+                          <pre
+                            className={`p-3 bg-secondary border rounded-lg text-xs font-mono overflow-x-auto max-h-96 overflow-y-auto ${
+                              disassemblyOutput.includes('Error:')
+                                ? 'border-red-500/30 text-red-400'
+                                : 'border-green-500/30 text-green-400'
+                            }`}
+                          >
                             {disassemblyOutput}
                           </pre>
                         </motion.div>
@@ -906,13 +1070,18 @@ export function DevTools() {
                     <CardTitle className="text-sm flex items-center gap-1.5 text-green-400">
                       <FileText className="w-3.5 h-3.5 text-green-500" />
                       Package Summary
-                      <span className="text-xs text-muted-foreground ml-auto font-normal">Generate package documentation</span>
+                      <span className="text-xs text-muted-foreground ml-auto font-normal">
+                        Generate package documentation
+                      </span>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="px-4 pb-4 space-y-3">
                     {/* Package Path */}
                     <div className="space-y-1">
-                      <Label htmlFor="summary-package-path" className="text-xs font-medium text-green-400">
+                      <Label
+                        htmlFor="summary-package-path"
+                        className="text-xs font-medium text-green-400"
+                      >
                         Package Path <span className="text-green-400/80">(local)</span>
                       </Label>
                       <div className="flex gap-1.5">
@@ -950,7 +1119,10 @@ export function DevTools() {
 
                     {/* Package ID */}
                     <div className="space-y-1">
-                      <Label htmlFor="summary-package-id" className="text-xs font-medium text-green-400">
+                      <Label
+                        htmlFor="summary-package-id"
+                        className="text-xs font-medium text-green-400"
+                      >
                         Package ID <span className="text-green-400/80">(on-chain)</span>
                       </Label>
 
@@ -966,12 +1138,14 @@ export function DevTools() {
                             <option value="">Select from your packages...</option>
                             {publishedPackages.map((pkg) => (
                               <option key={pkg.packageId} value={pkg.packageId}>
-                                {pkg.packageId.slice(0, 10)}...{pkg.packageId.slice(-6)} (v{pkg.version})
+                                {pkg.packageId.slice(0, 10)}...{pkg.packageId.slice(-6)} (v
+                                {pkg.version})
                               </option>
                             ))}
                           </select>
                           <p className="text-xs text-green-400/80 mt-0.5">
-                            {publishedPackages.length} package{publishedPackages.length !== 1 ? 's' : ''} found via UpgradeCap
+                            {publishedPackages.length} package
+                            {publishedPackages.length !== 1 ? 's' : ''} found via UpgradeCap
                           </p>
                         </div>
                       )}
@@ -982,7 +1156,9 @@ export function DevTools() {
                         type="text"
                         value={summaryPackageId}
                         onChange={(e) => setSummaryPackageId(e.target.value)}
-                        placeholder={publishedPackages.length > 0 ? "Or enter package ID manually..." : "0x..."}
+                        placeholder={
+                          publishedPackages.length > 0 ? 'Or enter package ID manually...' : '0x...'
+                        }
                         className="w-full px-2.5 py-1.5 bg-card border border-green-500/30 rounded-lg text-foreground placeholder:text-tertiary focus:outline-none focus:ring-1 focus:ring-green-500/50 text-xs font-mono"
                         disabled={generatingSummary}
                       />
@@ -990,7 +1166,12 @@ export function DevTools() {
 
                     {/* Format Selection */}
                     <div className="space-y-1">
-                      <Label htmlFor="summary-format" className="text-xs font-medium text-green-400">Output Format</Label>
+                      <Label
+                        htmlFor="summary-format"
+                        className="text-xs font-medium text-green-400"
+                      >
+                        Output Format
+                      </Label>
                       <select
                         id="summary-format"
                         value={summaryFormat}
@@ -1006,7 +1187,10 @@ export function DevTools() {
                     {/* Generate Button */}
                     <Button
                       onClick={handleGenerateSummary}
-                      disabled={(!summaryPackagePath.trim() && !summaryPackageId.trim()) || generatingSummary}
+                      disabled={
+                        (!summaryPackagePath.trim() && !summaryPackageId.trim()) ||
+                        generatingSummary
+                      }
                       className="w-full bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/50"
                     >
                       {generatingSummary ? (
@@ -1039,9 +1223,13 @@ export function DevTools() {
                             )}
                             Summary
                           </Label>
-                          <pre className={`p-3 bg-secondary border rounded-lg text-xs font-mono overflow-x-auto max-h-96 overflow-y-auto ${
-                            summaryOutput.includes('Error:') ? 'border-red-500/30 text-red-400' : 'border-green-500/30 text-green-400'
-                          }`}>
+                          <pre
+                            className={`p-3 bg-secondary border rounded-lg text-xs font-mono overflow-x-auto max-h-96 overflow-y-auto ${
+                              summaryOutput.includes('Error:')
+                                ? 'border-red-500/30 text-red-400'
+                                : 'border-green-500/30 text-green-400'
+                            }`}
+                          >
                             {summaryOutput}
                           </pre>
                         </motion.div>
