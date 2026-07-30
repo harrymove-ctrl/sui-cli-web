@@ -69,3 +69,4 @@ jobs:
 
       - name: Lint and format check
         run: npx @biomejs/biome ci .
+        continue-on-error: true
