@@ -32,16 +32,6 @@ interface FaucetSource {
 
 const FAUCET_SOURCES: FaucetSource[] = [
   {
-    id: 'fm-faucet',
-    name: 'FM Faucet',
-    description: 'Contact @rongmauhong (Telegram) or @222tee (X) - no captcha',
-    networks: ['testnet'],
-    type: 'web',
-    url: 'https://fmfaucet.xyz',
-    dailyLimit: '2 requests/day',
-    perRequestAmount: '1 SUI',
-  },
-  {
     id: 'sui-web-faucet',
     name: 'Sui Web Faucet',
     description: 'Official web faucet by Mysten Labs',
@@ -49,16 +39,6 @@ const FAUCET_SOURCES: FaucetSource[] = [
     type: 'web',
     url: 'https://faucet.sui.io/',
     dailyLimit: 'Rate limited',
-    perRequestAmount: '1 SUI',
-  },
-  {
-    id: 'blockbolt-faucet',
-    name: 'Blockbolt Faucet',
-    description: 'Community faucet - no captcha',
-    networks: ['devnet', 'testnet'],
-    type: 'web',
-    url: 'https://faucet.blockbolt.io/',
-    dailyLimit: 'Limited',
     perRequestAmount: '1 SUI',
   },
   {
@@ -90,6 +70,17 @@ const FAUCET_SOURCES: FaucetSource[] = [
     url: 'https://stakely.io/faucet/sui-testnet-sui',
     dailyLimit: '1 request/day',
     perRequestAmount: '0.5 SUI',
+  },
+  {
+    id: 'sui-http-api',
+    name: 'Official HTTP API',
+    description:
+      'POST {"FixedAmountRequest":{"recipient":"<address>"}} - what the button above uses',
+    networks: ['devnet', 'testnet'],
+    type: 'web',
+    url: 'https://docs.sui.io/getting-started/onboarding/get-coins',
+    dailyLimit: 'Rate limited',
+    perRequestAmount: '1 SUI',
   },
   {
     id: 'sui-discord',
@@ -282,6 +273,7 @@ export function FaucetForm() {
             />
             {isExternalAddress && (
               <button
+                type="button"
                 onClick={clearCustomAddress}
                 className="p-1 text-muted-foreground hover:text-foreground rounded-md hover:bg-accent transition-colors"
                 title="Clear"
@@ -290,6 +282,7 @@ export function FaucetForm() {
               </button>
             )}
             <button
+              type="button"
               onClick={copyAddress}
               className="p-1 text-muted-foreground hover:text-foreground rounded-md hover:bg-accent transition-colors"
               title="Copy address"
@@ -319,6 +312,7 @@ export function FaucetForm() {
               </span>
             </div>
             <button
+              type="button"
               onClick={() => setSelectedNetwork(detectedNetwork)}
               className="text-xs text-yellow-400 hover:text-yellow-300 font-medium"
             >
@@ -337,6 +331,7 @@ export function FaucetForm() {
           {networks.map((network) => (
             <button
               key={network.id}
+              type="button"
               onClick={() => setSelectedNetwork(network.id)}
               className={clsx(
                 'flex-1 px-3 py-2 text-xs rounded-lg transition-all border',
@@ -446,9 +441,10 @@ export function FaucetForm() {
           </div>
           <div className="space-y-1">
             {availableSources.map((source) => (
-              <div
+              <button
                 key={source.id}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent/50 transition-colors cursor-pointer group border border-transparent hover:border-border"
+                type="button"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent/50 transition-colors cursor-pointer group border border-transparent hover:border-border text-left"
                 onClick={() => source.url && openExternalFaucet(source.url)}
               >
                 <span className="text-sm flex-shrink-0">
@@ -468,7 +464,7 @@ export function FaucetForm() {
                 <span className="text-[10px] text-[#4da2ff]">{source.perRequestAmount}</span>
                 <span className="text-[10px] text-tertiary">{source.dailyLimit}</span>
                 <ExternalLink className="w-3 h-3 text-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
+              </button>
             ))}
           </div>
         </div>
