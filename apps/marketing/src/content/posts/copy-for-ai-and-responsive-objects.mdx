@@ -16,7 +16,7 @@ sections:
 
 A short wrap-up of what shipped today. Two changes, both about the same thing: getting out of your way when you want to move from *looking* at on-chain state to *doing* something with it.
 
-## Copy for AI, on every page {#copy-for-ai}
+## Copy for AI, on every page
 
 Sui CLI Web already turns raw JSON into something you can read. But the moment you want a second opinion - "what is this object?", "explain this PTB", "is this multi-sig set up right?" - you were back to copying fields by hand into a chat window.
 
@@ -32,7 +32,7 @@ The context is tailored per page. On the transaction inspector it hands over the
 
 One deliberate boundary: on the key-management and address pages, **only public data ever leaves the app** - addresses, public keys, key schemes, multi-sig thresholds. Private keys, mnemonics, and seed phrases are never included in any payload. Everything still runs locally; nothing is sent anywhere until *you* paste it.
 
-## An object explorer that fits your screen {#responsive-objects}
+## An object explorer that fits your screen
 
 The **My Objects** view is a proper data table - sortable, resizable, reorderable columns that stay smooth even at thousands of objects. But a fixed-width table has a bad habit: on a narrow window it either overflows into a horizontal scroll or leaves a big dead gap where short values don't fill their column.
 
@@ -43,7 +43,7 @@ Two fixes:
 
 And yes - the object list got its own **Copy for AI** button too, so you can hand your whole filtered set of objects to an agent in one click.
 
-## What's next {#whats-next}
+## What's next
 
 More of the same philosophy: less friction between reading state and acting on it. If there's a page where you wish the AI hand-off were smarter, or a view that still feels cramped, that's exactly the kind of feedback that shapes the next update.
 
