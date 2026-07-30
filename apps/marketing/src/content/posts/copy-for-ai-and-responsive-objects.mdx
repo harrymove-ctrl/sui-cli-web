@@ -1,0 +1,50 @@
+---
+title: "What's New: Copy for AI Everywhere + a Responsive Object Explorer"
+description: "Every page in Sui CLI Web can now hand its state to an AI agent, and the object list fits any screen - table on desktop, compact list on mobile."
+publishDate: 2026-07-24
+category: wrapup
+tags: ["changelog", "sui", "ai", "developer-experience", "responsive", "objects"]
+author: "Harry Phan"
+sections:
+  - id: copy-for-ai
+    title: "Copy for AI, on every page"
+  - id: responsive-objects
+    title: "An object explorer that fits your screen"
+  - id: whats-next
+    title: "What's next"
+---
+
+A short wrap-up of what shipped today. Two changes, both about the same thing: getting out of your way when you want to move from *looking* at on-chain state to *doing* something with it.
+
+## Copy for AI, on every page
+
+Sui CLI Web already turns raw JSON into something you can read. But the moment you want a second opinion - "what is this object?", "explain this PTB", "is this multi-sig set up right?" - you were back to copying fields by hand into a chat window.
+
+Not anymore. A **Copy for AI** button now lives in the header of every major page: objects, coins, transfers, the transaction inspector, gas analysis, key management, Move deploy, security tools, and the rest. Each one understands the page you're on and gives you three ready-made options:
+
+- **Copy prompt** - a natural-language description of exactly what you're looking at, ready to paste.
+- **Copy as JSON** - the underlying structured data, capped so a wallet with thousands of objects doesn't blow up your clipboard.
+- **Copy page as markdown** - a clean, human-readable rendering.
+
+There are also one-click **Open in ChatGPT** and **Open in Claude** shortcuts that carry the prompt straight into a fresh chat.
+
+The context is tailored per page. On the transaction inspector it hands over the full programmable transaction - commands, arguments, gas budget, and the latest dry-run result - so an agent can actually reason about it. On the object detail view it describes the type, owner, and Display metadata.
+
+One deliberate boundary: on the key-management and address pages, **only public data ever leaves the app** - addresses, public keys, key schemes, multi-sig thresholds. Private keys, mnemonics, and seed phrases are never included in any payload. Everything still runs locally; nothing is sent anywhere until *you* paste it.
+
+## An object explorer that fits your screen
+
+The **My Objects** view is a proper data table - sortable, resizable, reorderable columns that stay smooth even at thousands of objects. But a fixed-width table has a bad habit: on a narrow window it either overflows into a horizontal scroll or leaves a big dead gap where short values don't fill their column.
+
+Two fixes:
+
+- **Fit-to-width** - the Object ID column now stretches to fill whatever space is available, so the table uses the full panel instead of stranding empty pixels on the right. When there genuinely isn't room, it falls back to a horizontal scroll as before.
+- **Collapse on small screens** - below a phone-sized width, the multi-column table swaps for a compact one-line-per-object list: type icon, name, a shortened ID, and version. Tap through to the same detail view.
+
+And yes - the object list got its own **Copy for AI** button too, so you can hand your whole filtered set of objects to an agent in one click.
+
+## What's next
+
+More of the same philosophy: less friction between reading state and acting on it. If there's a page where you wish the AI hand-off were smarter, or a view that still feels cramped, that's exactly the kind of feedback that shapes the next update.
+
+Happy building.

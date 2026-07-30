@@ -1,13 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { useAppStore } from '@/stores/useAppStore';
-import { getApiBaseUrl } from '@/api/client';
-import { Spinner } from '../shared/Spinner';
+import { AlertCircle, ArrowLeft, CheckCircle, ChevronDown, Send, Wallet } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Send, AlertCircle, CheckCircle, ChevronDown, Wallet } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { getApiBaseUrl } from '@/api/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
+import { useAppStore } from '@/stores/useAppStore';
+import { Spinner } from '../shared/Spinner';
 
 interface CoinMetadata {
   coinType: string;
@@ -231,6 +232,47 @@ export function CoinTransfer() {
     }
   };
 
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied`);
+  };
+
+  const decimals = metadata?.decimals ?? 9;
+  const symbol = metadata?.symbol ?? 'Coin';
+
+  const aiJson = JSON.stringify(
+    {
+      operation: 'transfer',
+      coinType: coinTypeParam,
+      symbol,
+      coinObjectId: coinIdParam,
+      balance: formatBalance(coinBalance, decimals),
+      from: activeAddress?.address ?? null,
+      to: toAddress || null,
+      amount: amount || null,
+      estimatedGas: estimatedGas || null,
+    },
+    null,
+    2
+  );
+
+  const aiMarkdown = [
+    '# Sui coin transfer',
+    '',
+    `- **Coin type:** ${coinTypeParam}`,
+    `- **Symbol:** ${symbol}`,
+    `- **Coin object:** ${coinIdParam}`,
+    `- **Balance:** ${formatBalance(coinBalance, decimals)} ${symbol}`,
+    `- **From:** ${activeAddress?.alias || activeAddress?.address || 'not connected'}`,
+    `- **To:** ${toAddress || '(not set)'}`,
+    `- **Amount:** ${amount ? `${amount} ${symbol}` : '(not set)'}`,
+    estimatedGas ? `- **Estimated gas:** ${estimatedGas} SUI` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const aiPrompt = `I'm transferring ${symbol} on Sui.\n\n${aiMarkdown}\n\nSanity-check the recipient address format and that the amount doesn't exceed the coin balance (leaving room for gas).`;
+
   if (!coinIdParam || !coinTypeParam) {
     return (
       <div className="px-3 py-8 text-center text-muted-foreground">
@@ -253,19 +295,22 @@ export function CoinTransfer() {
   return (
     <div className="px-2 py-2 max-w-lg mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate(-1)}
-          aria-label="Go back"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
-        <div>
-          <h1 className="text-lg font-semibold">Transfer {metadata?.symbol || 'Coin'}</h1>
-          <p className="text-xs text-muted-foreground">Send to any address</p>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3 min-w-0">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Go back">
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold">Transfer {metadata?.symbol || 'Coin'}</h1>
+            <p className="text-xs text-muted-foreground">Send to any address</p>
+          </div>
         </div>
+        <CopyForAiMenu
+          prompt={aiPrompt}
+          json={aiJson}
+          markdown={aiMarkdown}
+          onCopy={copyToClipboard}
+        />
       </div>
 
       {/* Coin Info */}

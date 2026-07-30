@@ -461,3 +461,85 @@ export const FAUCET_SOURCES: FaucetSource[] = [
     perRequestAmount: 'Varies',
   },
 ];
+
+// ---------------------------------------------------------------------------
+// Devstack bridge
+//
+// Devstack (@mysten-incubation/devstack) is a local Sui development stack: it
+// boots a node, funds named accounts, publishes Move packages and writes a
+// deployment manifest describing all of it. We never depend on the package -
+// it requires Node >= 24, a Docker daemon and @mysten/sui v2, and its own docs
+// call the API unstable. We only *read* a stack the user already runs, the same
+// way we read the `sui` CLI: shell out, ask for `--json`, parse the envelope.
+// ---------------------------------------------------------------------------
+
+/** Envelope every devstack CLI verb prints under `--json`. */
+export interface DevstackEnvelope<T = unknown> {
+  schemaVersion: number;
+  ok: boolean;
+  command: string;
+  elapsedMs: number;
+  data: T;
+}
+
+/** One preflight check from `devstack doctor --json`. */
+export interface DevstackDoctorReport {
+  name: string;
+  description: string;
+  /** A failing check with required:false degrades the stack; required:true blocks it. */
+  required: boolean;
+  status: 'ok' | 'warn' | 'error' | string;
+  detail: string;
+}
+
+export interface DevstackCapabilities {
+  /** False means the user simply does not have devstack - not an error. */
+  installed: boolean;
+  /** Resolved binary path, when installed. */
+  binaryPath?: string;
+  version?: string;
+  /** Where the binary came from, so the UI can explain what it found. */
+  source?: 'workspace' | 'path';
+  /** Devstack declares engines.node >= 24; the server itself supports >= 18. */
+  node: { current: string; meetsDevstackRequirement: boolean };
+  /** Populated from `devstack doctor --json` - empty when devstack is absent. */
+  reports: DevstackDoctorReport[];
+  /** True when every required doctor check passes. */
+  ready: boolean;
+  /** Human-readable reasons the stack cannot be used right now. */
+  blockers: string[];
+}
+
+/** A network entry inside a stack's deployment.json. */
+export interface DevstackNetwork {
+  network: string;
+  rpc: string;
+  chainId?: string;
+  faucet?: string;
+  graphql?: string;
+  local?: boolean;
+  /** Published Move packages: name -> package id. */
+  packages: Record<string, string>;
+}
+
+/** The parsed `.devstack/stacks/<stack>/deployment.json`. */
+export interface DevstackDeployment {
+  /** Directory the stack was resolved from. */
+  projectDir: string;
+  app: string;
+  stack: string;
+  stateDir: string;
+  defaultNetwork: string;
+  networks: Record<string, DevstackNetwork>;
+  /** Named accounts devstack funded: name -> address. */
+  accounts: Record<string, string>;
+}
+
+export interface DevstackAttachResult {
+  /** The `sui client` env alias that now points at the stack. */
+  alias: string;
+  rpc: string;
+  network: string;
+  /** True when the alias already existed and was reused rather than created. */
+  reused: boolean;
+}

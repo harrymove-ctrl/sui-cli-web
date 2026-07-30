@@ -3,10 +3,11 @@ import { Archive, Copy, ExternalLink, KeyRound, Package, Plus, Trash2 } from 'lu
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { UserGlassIcon } from '@/components/icons/UserGlassIcon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { UserGlassIcon } from '@/components/icons/UserGlassIcon';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 import { Tooltip } from '@/components/ui/tooltip';
 import {
   buildExplorerUrl,
@@ -186,11 +187,8 @@ const AddressCard = memo(
 
           {/* Balance */}
           <div className="text-right flex-shrink-0">
-            <div
-              className={clsx('text-sm', addr.isActive ? 'text-[#4da2ff]' : 'text-foreground')}
-            >
-              {formatBalance(addr.balance)}{' '}
-              <span className="text-muted-foreground">SUI</span>
+            <div className={clsx('text-sm', addr.isActive ? 'text-[#4da2ff]' : 'text-foreground')}>
+              {formatBalance(addr.balance)} <span className="text-muted-foreground">SUI</span>
             </div>
           </div>
 
@@ -327,7 +325,9 @@ export function AddressList() {
   );
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [exportTarget, setExportTarget] = useState<{ address: string; alias?: string } | null>(null);
+  const [exportTarget, setExportTarget] = useState<{ address: string; alias?: string } | null>(
+    null
+  );
 
   // Initial load
   useEffect(() => {
@@ -398,6 +398,50 @@ export function AddressList() {
       return balB - balA;
     });
   }, [addresses, debouncedSearchQuery, metadata]);
+
+  // Copy-for-AI export. Public only: address, alias, active flag, balance -
+  // never private keys, recovery phrases, or local notes/labels.
+  const copyToClipboard = useCallback((text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied`);
+  }, []);
+
+  const aiExport = useMemo(() => {
+    const publicAddresses = sortedAddresses.map((a) => ({
+      address: a.address,
+      alias: a.alias ?? null,
+      active: a.isActive,
+      balanceSui: a.balance ?? null,
+    }));
+    const active = publicAddresses.find((a) => a.active);
+    const prompt = [
+      `I'm working with a Sui wallet that has ${publicAddresses.length} address${publicAddresses.length !== 1 ? 'es' : ''} on the ${currentNetwork} network.`,
+      active
+        ? `The active address is ${active.address}${active.alias ? ` (alias "${active.alias}")` : ''}.`
+        : '',
+      'Addresses:',
+      ...publicAddresses.map(
+        (a) =>
+          `- ${a.address}${a.alias ? ` (${a.alias})` : ''}${a.active ? ' [active]' : ''} - ${a.balanceSui ?? '0'} SUI`
+      ),
+      '',
+      'Help me understand and work with these addresses.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+    const json = JSON.stringify({ network: currentNetwork, addresses: publicAddresses }, null, 2);
+    const markdown = [
+      `# Sui Wallet Addresses (${currentNetwork})`,
+      '',
+      '| Address | Alias | Active | Balance (SUI) |',
+      '| --- | --- | --- | --- |',
+      ...publicAddresses.map(
+        (a) =>
+          `| \`${a.address}\` | ${a.alias ?? '-'} | ${a.active ? 'yes' : 'no'} | ${a.balanceSui ?? '0'} |`
+      ),
+    ].join('\n');
+    return { prompt, json, markdown };
+  }, [sortedAddresses, currentNetwork]);
 
   // Memoize handlers to prevent re-renders
   const handleSwitch = useCallback(
@@ -605,6 +649,14 @@ export function AddressList() {
               {isSearching && <span className="text-warning animate-pulse">searching...</span>}
             </div>
             <div className="flex items-center gap-3">
+              {sortedAddresses.length > 0 && (
+                <CopyForAiMenu
+                  prompt={aiExport.prompt}
+                  json={aiExport.json}
+                  markdown={aiExport.markdown}
+                  onCopy={copyToClipboard}
+                />
+              )}
               <Tooltip content="Export/import metadata" side="bottom">
                 <button
                   onClick={() => setShowExportImport(!showExportImport)}

@@ -22,7 +22,9 @@ var index_exports = {};
 __export(index_exports, {
   API_BASE_URL: () => API_BASE_URL,
   CATEGORIES: () => CATEGORIES,
+  COMMON_SERVER_PORTS: () => COMMON_SERVER_PORTS,
   DEFAULT_COMMANDS: () => DEFAULT_COMMANDS,
+  DEFAULT_SERVER_PORT: () => DEFAULT_SERVER_PORT,
   FAUCET_SOURCES: () => FAUCET_SOURCES,
   NETWORKS: () => NETWORKS,
   extractCoinType: () => extractCoinType,
@@ -30,6 +32,8 @@ __export(index_exports, {
   isCoinType: () => isCoinType
 });
 module.exports = __toCommonJS(index_exports);
+var COMMON_SERVER_PORTS = [3001, 3002, 3003, 3004, 3005, 4001, 4002, 8001, 8080];
+var DEFAULT_SERVER_PORT = 3001;
 var CATEGORIES = {
   ADDRESS: "Addresses",
   ENVIRONMENT: "Environment",
@@ -181,7 +185,9 @@ var FAUCET_SOURCES = [
 0 && (module.exports = {
   API_BASE_URL,
   CATEGORIES,
+  COMMON_SERVER_PORTS,
   DEFAULT_COMMANDS,
+  DEFAULT_SERVER_PORT,
   FAUCET_SOURCES,
   NETWORKS,
   extractCoinType,

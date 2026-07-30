@@ -1,0 +1,52 @@
+/* react-grid-layout theming for the customizable dashboard.
+   Vendor stylesheets first, then our overrides so the drag/resize affordances
+   match the app's tokens and only appear while the grid is in edit mode. */
+@import 'react-grid-layout/css/styles.css';
+@import 'react-resizable/css/styles.css';
+
+/* Smooth position/size transitions when items reflow, but never while the user
+   is actively dragging/resizing the item itself (RGL adds .react-draggable-dragging /
+   .resizing on that node) - transitioning then makes the drag feel laggy. */
+.dashboard-grid .react-grid-item {
+  transition: transform 200ms ease, width 200ms ease, height 200ms ease;
+}
+.dashboard-grid .react-grid-item.react-draggable-dragging,
+.dashboard-grid .react-grid-item.resizing {
+  transition: none;
+  z-index: 30;
+  cursor: grabbing;
+}
+
+/* The drop target preview shown under a dragged item. */
+.dashboard-grid .react-grid-item.react-grid-placeholder {
+  background: hsl(var(--primary) / 0.18);
+  border: 1.5px dashed hsl(var(--primary) / 0.5);
+  border-radius: 0.75rem;
+  opacity: 1;
+}
+
+/* Edit-mode affordances - hidden entirely when not editing so normal viewing is
+   clean and nothing is accidentally draggable. */
+.dashboard-grid:not(.is-editing) .react-resizable-handle {
+  display: none;
+}
+.dashboard-grid.is-editing .react-grid-item {
+  cursor: grab;
+  outline: 1.5px dashed hsl(var(--border));
+  outline-offset: 2px;
+  border-radius: 0.75rem;
+}
+.dashboard-grid.is-editing .react-grid-item:hover {
+  outline-color: hsl(var(--primary) / 0.6);
+}
+
+/* Recolor the default SE resize handle (a background-image arrow) to a theme dot. */
+.dashboard-grid.is-editing .react-resizable-handle::after {
+  border-right-color: hsl(var(--primary) / 0.7);
+  border-bottom-color: hsl(var(--primary) / 0.7);
+  width: 8px;
+  height: 8px;
+}
+.dashboard-grid .react-resizable-handle {
+  background-image: none;
+}

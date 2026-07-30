@@ -1,3 +1,4 @@
+import type { CoinInfo, CoinMetadata, CoinOperationResult } from '@sui-cli-web/shared';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertCircle,
@@ -16,9 +17,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import { Button } from '@/components/ui/button';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 import { showErrorToast, showSuccessToast } from '@/lib/toast';
 import { useAppStore } from '@/stores/useAppStore';
-import type { CoinInfo, CoinMetadata, CoinOperationResult } from '@sui-cli-web/shared';
 
 // Format balance with proper decimals
 function formatBalance(balance: string, decimals: number): string {
@@ -157,9 +158,7 @@ export function CoinSplit() {
     if (value && !/^\d*\.?\d*$/.test(value)) return;
 
     const rawValue = value ? toRawAmount(value, decimals) : '';
-    setSplitAmounts(
-      splitAmounts.map((a) => (a.id === id ? { ...a, value, rawValue } : a))
-    );
+    setSplitAmounts(splitAmounts.map((a) => (a.id === id ? { ...a, value, rawValue } : a)));
     setShowPreview(false);
     setDryRunResult(null);
   };
@@ -258,6 +257,52 @@ export function CoinSplit() {
 
   const isAnyLoading = isLoading || isEstimating || isSplitting;
 
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    showSuccessToast({ message: `${label} copied` });
+  };
+
+  const aiJson = JSON.stringify(
+    {
+      operation: 'split',
+      coinType: coinTypeParam,
+      symbol,
+      decimals,
+      sourceCoin: coin
+        ? {
+            coinObjectId: coin.coinObjectId,
+            version: coin.version,
+            balance: formatBalance(coin.balance, decimals),
+          }
+        : null,
+      splitAmounts: splitAmounts
+        .filter((a) => a.rawValue)
+        .map((a) => ({ value: a.value, raw: a.rawValue })),
+      splitTotal: formatBalance(totalSplitAmount.toString(), decimals),
+      remaining: formatBalance(remainingBalance.toString(), decimals),
+    },
+    null,
+    2
+  );
+
+  const aiMarkdown = [
+    '# Sui coin split',
+    '',
+    `- **Coin type:** ${coinTypeParam}`,
+    `- **Symbol:** ${symbol}`,
+    coin ? `- **Source coin:** ${coin.coinObjectId}` : '',
+    coin ? `- **Source balance:** ${formatBalance(coin.balance, decimals)} ${symbol}` : '',
+    `- **Split total:** ${formatBalance(totalSplitAmount.toString(), decimals)} ${symbol}`,
+    `- **Remaining:** ${formatBalance(remainingBalance.toString(), decimals)} ${symbol}`,
+    '',
+    '## Split into',
+    ...splitAmounts.filter((a) => a.value).map((a, i) => `${i + 1}. ${a.value} ${symbol}`),
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const aiPrompt = `I'm splitting a ${symbol} coin on Sui.\n\n${aiMarkdown}\n\nCheck that these split amounts make sense, don't exceed the source balance, and leave enough behind for gas.`;
+
   if (!coinIdParam || !coinTypeParam) {
     return (
       <div className="p-4 text-center">
@@ -285,7 +330,17 @@ export function CoinSplit() {
             <Scissors className="w-5 h-5 text-foreground" />
             <h1 className="text-lg font-semibold text-foreground">Split Coin</h1>
           </div>
-          <span className="text-muted-foreground text-sm hidden sm:block ml-auto">{symbol}</span>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-muted-foreground text-sm hidden sm:block">{symbol}</span>
+            {coin && (
+              <CopyForAiMenu
+                prompt={aiPrompt}
+                json={aiJson}
+                markdown={aiMarkdown}
+                onCopy={copyToClipboard}
+              />
+            )}
+          </div>
         </motion.div>
 
         {isLoading ? (
@@ -293,9 +348,7 @@ export function CoinSplit() {
             <div className="w-6 h-6 border-2 border-foreground border-t-transparent rounded-full animate-spin" />
           </div>
         ) : !coin ? (
-          <div className="text-center py-8 text-muted-foreground">
-            Coin not found
-          </div>
+          <div className="text-center py-8 text-muted-foreground">Coin not found</div>
         ) : (
           <>
             {/* Source Coin Card */}
@@ -354,7 +407,12 @@ export function CoinSplit() {
                   { key: '5equal', label: '5 Equal' },
                   { key: '10equal', label: '10 Equal' },
                 ].map(({ key, label }) => (
-                  <Button key={key} size="sm" variant="secondary" onClick={() => applyPreset(key as any)}>
+                  <Button
+                    key={key}
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => applyPreset(key as any)}
+                  >
                     {label}
                   </Button>
                 ))}
@@ -501,7 +559,9 @@ export function CoinSplit() {
                       {splitResult.success ? (
                         <>
                           <CheckCircle2 className="w-5 h-5 text-foreground" />
-                          <span className="text-sm font-medium text-foreground">Split successful</span>
+                          <span className="text-sm font-medium text-foreground">
+                            Split successful
+                          </span>
                         </>
                       ) : (
                         <>
@@ -579,7 +639,11 @@ export function CoinSplit() {
                         </Button>
 
                         {/* Back to Coins */}
-                        <Button variant="outline" className="w-full" onClick={() => navigate('/app/coins')}>
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => navigate('/app/coins')}
+                        >
                           Back to Coins
                         </Button>
                       </>

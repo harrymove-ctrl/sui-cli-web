@@ -143,18 +143,12 @@ export interface OwnedObjectSummary {
 function mapProtoOwner(o: any): unknown {
   if (!o) return null;
   switch (o.kind) {
-    case 1:
-      return { AddressOwner: o.address };
-    case 2:
-      return { ObjectOwner: o.address };
-    case 3:
-      return { Shared: { initial_shared_version: o.version?.toString() } };
-    case 4:
-      return 'Immutable';
-    case 5:
-      return { AddressOwner: o.address };
-    default:
-      return null;
+    case 1: return { AddressOwner: o.address };
+    case 2: return { ObjectOwner: o.address };
+    case 3: return { Shared: { initial_shared_version: o.version?.toString() } };
+    case 4: return 'Immutable';
+    case 5: return { AddressOwner: o.address };
+    default: return null;
   }
 }
 
@@ -194,10 +188,7 @@ export async function getOwnedObjectsViaGrpc(
         previousTransaction: o.previousTransaction ?? null,
       });
     }
-    pageToken =
-      response.nextPageToken && response.nextPageToken.length > 0
-        ? response.nextPageToken
-        : undefined;
+    pageToken = response.nextPageToken && response.nextPageToken.length > 0 ? response.nextPageToken : undefined;
   } while (pageToken);
   return out;
 }
@@ -273,9 +264,7 @@ export async function getOwnedCoinsViaGrpc(
       });
     }
     pageToken =
-      response.nextPageToken && response.nextPageToken.length > 0
-        ? response.nextPageToken
-        : undefined;
+      response.nextPageToken && response.nextPageToken.length > 0 ? response.nextPageToken : undefined;
   } while (pageToken);
   return out;
 }
@@ -286,6 +275,88 @@ export interface ObjectJsonSummary {
   previousTransaction: string | null;
   /** Decoded Move struct fields as JSON (the gRPC `json` field rendering). */
   json: unknown;
+}
+
+/** Same canonical shape `AddressService.getObject`'s JSON-RPC path already
+ * returns, so callers don't need to know which transport served a given
+ * object. `content` is `null` for Move packages (they have no Move struct
+ * fields; `package` metadata lives on the raw gRPC object we don't surface
+ * here since nothing currently reads it). */
+export interface FullObjectViaGrpc {
+  objectId: string;
+  version: string;
+  digest: string;
+  /** `null` for packages - `sui.rpc.v2.Object.object_type` is literally the
+   * string "package" for those, which is not a real Move type to show. */
+  type: string | null;
+  owner: unknown;
+  previousTransaction: string | null;
+  storageRebate: string;
+  content: {
+    dataType: 'moveObject';
+    type: string;
+    hasPublicTransfer: boolean;
+    fields: Record<string, unknown>;
+  } | null;
+}
+
+/**
+ * Single-object equivalent of `getObjectsJsonViaGrpc`, used as the primary
+ * data source for "object detail" fetches now that Mysten's public
+ * testnet/devnet fullnodes 404 every legacy JSON-RPC method (mainnet still
+ * serves `sui_getObject` - this path works there too, gRPC is just faster).
+ * Returns `null` for a missing/deleted/pruned object rather than throwing,
+ * so callers can fall back to the CLI the same way a thrown RPC error would
+ * have triggered fallback before.
+ *
+ * Deliberately does NOT attempt Display-standard metadata (`display.data`) -
+ * that is a JSON-RPC/GraphQL-only computation with no gRPC equivalent
+ * (`sui.rpc.v2.Object` has no `display` field at all). Callers that need it
+ * layer a GraphQL lookup on top of this instead of expecting it here.
+ */
+export async function getObjectFullViaGrpc(
+  objectId: string,
+  rpcUrl: string
+): Promise<FullObjectViaGrpc | null> {
+  const client = getGrpcClient(rpcUrl);
+  const { response } = await client.ledgerService.getObject({
+    objectId,
+    readMask: {
+      paths: [
+        'object_id',
+        'version',
+        'digest',
+        'owner',
+        'object_type',
+        'has_public_transfer',
+        'previous_transaction',
+        'storage_rebate',
+        'json',
+      ],
+    },
+  });
+  const obj = response.object;
+  if (!obj?.objectId) return null;
+
+  const isPackage = obj.objectType === 'package';
+  return {
+    objectId: obj.objectId,
+    version: obj.version != null ? obj.version.toString() : '0',
+    digest: obj.digest ?? '',
+    type: isPackage ? null : (obj.objectType ?? null),
+    owner: mapProtoOwner(obj.owner),
+    previousTransaction: obj.previousTransaction ?? null,
+    storageRebate: obj.storageRebate != null ? obj.storageRebate.toString() : '0',
+    content:
+      isPackage || !obj.objectType
+        ? null
+        : {
+            dataType: 'moveObject',
+            type: obj.objectType,
+            hasPublicTransfer: obj.hasPublicTransfer ?? false,
+            fields: obj.json ? (protobufValueToJs(obj.json) as Record<string, unknown>) : {},
+          },
+  };
 }
 
 /**
@@ -337,6 +408,89 @@ export async function getObjectsJsonViaGrpc(
   return results.flat();
 }
 
+export interface ObjectAttributesViaGrpc {
+  objectId: string;
+  version: string | null;
+  digest: string | null;
+  /** `null` for Move packages (their object_type is literally "package"). */
+  type: string | null;
+  /** CLI-style owner shape ({ AddressOwner } / { Shared } / "Immutable" / ...). */
+  owner: unknown;
+  previousTransaction: string | null;
+  /** MIST. */
+  storageRebate: string | null;
+  /** True iff the type has Move's `store` ability (freely transferable). */
+  hasPublicTransfer: boolean | null;
+  /** Decoded Move content fields, kept so callers can derive Display (name/image). */
+  json: unknown | null;
+}
+
+/**
+ * Batch-fetch the richer per-object attributes the "My Objects" expandable rows
+ * show (owner, storage rebate, digest, has-public-transfer, previous tx) plus the
+ * decoded content json (for a best-effort Display name/image). One
+ * `batchGetObjects` per chunk, same shape as {@link getObjectsJsonViaGrpc} but
+ * with a fuller read mask. Missing/pruned objects are simply omitted.
+ */
+export async function getObjectsAttributesViaGrpc(
+  objectIds: string[],
+  rpcUrl: string
+): Promise<ObjectAttributesViaGrpc[]> {
+  const client = getGrpcClient(rpcUrl);
+  const unique = [...new Set(objectIds)].filter(Boolean);
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < unique.length; i += BATCH_SIZE) {
+    chunks.push(unique.slice(i, i + BATCH_SIZE));
+  }
+
+  const results = await Promise.all(
+    chunks.map(async (chunk) => {
+      try {
+        const { response } = await client.ledgerService.batchGetObjects({
+          requests: chunk.map((objectId) => ({ objectId })),
+          readMask: {
+            paths: [
+              'object_id',
+              'object_type',
+              'version',
+              'digest',
+              'owner',
+              'previous_transaction',
+              'storage_rebate',
+              'has_public_transfer',
+              'json',
+            ],
+          },
+        });
+        const out: ObjectAttributesViaGrpc[] = [];
+        for (const result of response.objects) {
+          if (result.result.oneofKind !== 'object') continue;
+          const obj = result.result.object;
+          if (!obj.objectId) continue;
+          const isPackage = obj.objectType === 'package';
+          out.push({
+            objectId: obj.objectId,
+            version: obj.version != null ? obj.version.toString() : null,
+            digest: obj.digest ?? null,
+            type: isPackage ? null : (obj.objectType ?? null),
+            owner: mapProtoOwner(obj.owner),
+            previousTransaction: obj.previousTransaction ?? null,
+            storageRebate: obj.storageRebate != null ? obj.storageRebate.toString() : null,
+            hasPublicTransfer: obj.hasPublicTransfer ?? null,
+            json: obj.json ? protobufValueToJs(obj.json) : null,
+          });
+        }
+        return out;
+      } catch {
+        return [] as ObjectAttributesViaGrpc[];
+      }
+    })
+  );
+
+  return results.flat();
+}
+
 /**
  * Batch-fetch just the checkpoint timestamp for a set of transaction digests -
  * a cheaper sibling of {@link getTransactionBalanceEffectsViaGrpc} for callers
@@ -376,6 +530,187 @@ export async function getTransactionTimestampsViaGrpc(
   );
 
   return Object.fromEntries(results.flat());
+}
+
+// ---------------------------------------------------------------------------
+// Move package introspection (Package Explorer)
+//
+// `MovePackageService.GetPackage` returns a fully normalized package: modules
+// with their functions and datatypes (structs/enums), each already decoded from
+// bytecode. This is why the Package Explorer prefers it over regex-scraping the
+// CLI's `disassembled` output - the shapes below are the proto enums, compared
+// by their numeric wire values so we don't have to import the generated enums.
+// ---------------------------------------------------------------------------
+
+const ABILITY_NAMES: Record<number, string> = { 1: 'copy', 2: 'drop', 3: 'store', 4: 'key' };
+const VISIBILITY_NAMES: Record<number, string> = { 1: 'private', 2: 'public', 3: 'public(friend)' };
+const DATATYPE_KIND_NAMES: Record<number, string> = { 1: 'struct', 2: 'enum' };
+// OpenSignatureBody.Type wire values -> primitive Move type name.
+const PRIMITIVE_TYPE_NAMES: Record<number, string> = {
+  1: 'address',
+  2: 'bool',
+  3: 'u8',
+  4: 'u16',
+  5: 'u32',
+  6: 'u64',
+  7: 'u128',
+  8: 'u256',
+};
+const TYPE_VECTOR = 9;
+const TYPE_DATATYPE = 10;
+const TYPE_PARAMETER = 11;
+const REFERENCE_IMMUTABLE = 1;
+const REFERENCE_MUTABLE = 2;
+
+export interface MoveField {
+  name: string;
+  type: string;
+}
+
+export interface MoveDatatype {
+  name: string;
+  kind: string; // 'struct' | 'enum'
+  abilities: string[];
+  typeParameters: string[]; // e.g. ['T0', 'phantom T1']
+  fields: MoveField[]; // struct fields, or flattened for single-variant enums
+  variants?: { name: string; fields: MoveField[] }[];
+}
+
+export interface MoveFunction {
+  name: string;
+  visibility: string; // 'public' | 'private' | 'public(friend)'
+  isEntry: boolean;
+  typeParameters: string[];
+  parameters: string[];
+  returns: string[];
+}
+
+export interface MoveModule {
+  name: string;
+  functions: MoveFunction[];
+  datatypes: MoveDatatype[];
+}
+
+export interface PackageModulesViaGrpc {
+  storageId: string;
+  originalId: string;
+  version: string;
+  modules: MoveModule[];
+}
+
+/** Shorten a fully-qualified `<addr>::module::Name` so the leading package
+ * address is truncated but the module + type name stay readable. */
+function shortenTypeName(typeName: string): string {
+  const [addr, ...rest] = typeName.split('::');
+  if (rest.length === 0) return typeName;
+  const shortAddr = addr && addr.length > 12 ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : addr;
+  return [shortAddr, ...rest].join('::');
+}
+
+/** Render an `OpenSignatureBody` (a field/param type without the reference
+ * prefix) into a readable Move type string. `typeParams` names the enclosing
+ * datatype/function's generic parameters so `TYPE_PARAMETER` renders as `T0`. */
+function renderSignatureBody(body: any, typeParams: string[]): string {
+  if (!body) return 'unknown';
+  const type = body.type ?? 0;
+  if (PRIMITIVE_TYPE_NAMES[type]) return PRIMITIVE_TYPE_NAMES[type];
+  if (type === TYPE_VECTOR) {
+    const inner = body.typeParameterInstantiation?.[0];
+    return `vector<${inner ? renderSignatureBody(inner, typeParams) : 'unknown'}>`;
+  }
+  if (type === TYPE_DATATYPE) {
+    const base = shortenTypeName(body.typeName ?? 'unknown');
+    const args = body.typeParameterInstantiation ?? [];
+    if (args.length === 0) return base;
+    return `${base}<${args.map((a: any) => renderSignatureBody(a, typeParams)).join(', ')}>`;
+  }
+  if (type === TYPE_PARAMETER) {
+    const idx = body.typeParameter ?? 0;
+    return typeParams[idx] ?? `T${idx}`;
+  }
+  return 'unknown';
+}
+
+/** Render an `OpenSignature` (function param/return: a body plus an optional
+ * `&`/`&mut` reference prefix). */
+function renderSignature(sig: any, typeParams: string[]): string {
+  const body = renderSignatureBody(sig?.body, typeParams);
+  if (sig?.reference === REFERENCE_MUTABLE) return `&mut ${body}`;
+  if (sig?.reference === REFERENCE_IMMUTABLE) return `&${body}`;
+  return body;
+}
+
+/** Name a datatype's generic parameters `T0`, `T1`, ... prefixing `phantom`
+ * where declared, so they read the way they appear in Move source. */
+function renderTypeParameters(typeParameters: any[]): string[] {
+  return (typeParameters ?? []).map((tp: any, i: number) =>
+    tp?.isPhantom ? `phantom T${i}` : `T${i}`
+  );
+}
+
+function mapDatatype(dt: any): MoveDatatype {
+  const typeParamNames = renderTypeParameters(dt.typeParameters).map((n) => n.replace('phantom ', ''));
+  const mapFields = (fields: any[]): MoveField[] =>
+    (fields ?? []).map((f: any) => ({
+      name: f.name ?? '',
+      type: renderSignatureBody(f.type, typeParamNames),
+    }));
+  return {
+    name: dt.name ?? '',
+    kind: DATATYPE_KIND_NAMES[dt.kind ?? 0] ?? 'struct',
+    abilities: (dt.abilities ?? []).map((a: number) => ABILITY_NAMES[a]).filter(Boolean),
+    typeParameters: renderTypeParameters(dt.typeParameters),
+    fields: mapFields(dt.fields),
+    variants:
+      dt.variants && dt.variants.length > 0
+        ? dt.variants.map((v: any) => ({ name: v.name ?? '', fields: mapFields(v.fields) }))
+        : undefined,
+  };
+}
+
+function mapFunction(fn: any): MoveFunction {
+  const typeParamNames = renderTypeParameters(fn.typeParameters).map((n) => n.replace('phantom ', ''));
+  return {
+    name: fn.name ?? '',
+    visibility: VISIBILITY_NAMES[fn.visibility ?? 0] ?? 'private',
+    isEntry: fn.isEntry ?? false,
+    typeParameters: renderTypeParameters(fn.typeParameters),
+    parameters: (fn.parameters ?? []).map((p: any) => renderSignature(p, typeParamNames)),
+    returns: (fn.returns ?? []).map((r: any) => renderSignature(r, typeParamNames)),
+  };
+}
+
+/**
+ * Fetch a package's normalized modules (functions + datatypes) over gRPC.
+ * Returns `null` when the package is not found, so the route can surface a 404
+ * instead of a 500 the same way the object-detail path does.
+ */
+export async function getPackageModulesViaGrpc(
+  packageId: string,
+  rpcUrl: string
+): Promise<PackageModulesViaGrpc | null> {
+  const client = getGrpcClient(rpcUrl);
+  const { response } = await client.movePackageService.getPackage({ packageId });
+  const pkg = response.package;
+  if (!pkg?.storageId) return null;
+
+  const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
+  const modules: MoveModule[] = (pkg.modules ?? [])
+    .map(
+      (m: any): MoveModule => ({
+        name: m.name ?? '',
+        functions: (m.functions ?? []).map(mapFunction).sort(byName),
+        datatypes: (m.datatypes ?? []).map(mapDatatype).sort(byName),
+      })
+    )
+    .sort(byName);
+
+  return {
+    storageId: pkg.storageId,
+    originalId: pkg.originalId ?? pkg.storageId,
+    version: pkg.version != null ? pkg.version.toString() : '1',
+    modules,
+  };
 }
 
 /** `google.protobuf.Value` (protobuf-ts `Value` message) -> plain JS value. */

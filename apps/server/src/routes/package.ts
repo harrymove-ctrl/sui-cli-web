@@ -10,8 +10,25 @@ import {
   validateTypeArgs,
 } from '../utils/validation';
 import { handleRouteError } from '../utils/errorHandler';
+import { ConfigParser } from '../cli/ConfigParser';
+import {
+  getPackageModulesViaGrpc,
+  type PackageModulesViaGrpc,
+} from '../utils/suiGrpcClient';
 
 const packageService = new PackageService();
+const configParser = ConfigParser.getInstance();
+
+/** Resolve the active environment's fullnode URL for gRPC introspection. */
+async function getActiveRpcUrl(): Promise<string | null> {
+  try {
+    const config = await configParser.getConfig();
+    const activeEnv = config?.envs.find((e) => e.alias === config.active_env);
+    return activeEnv?.rpc || null;
+  } catch {
+    return null;
+  }
+}
 
 export async function packageRoutes(fastify: FastifyInstance) {
   // Get user's published packages (via UpgradeCap objects)
@@ -39,6 +56,32 @@ export async function packageRoutes(fastify: FastifyInstance) {
       return handleRouteError(error, reply);
     }
   });
+  // Explore a package: normalized modules (functions + datatypes) via gRPC.
+  fastify.get<{
+    Params: { id: string };
+    Reply: ApiResponse<PackageModulesViaGrpc>;
+  }>('/packages/:id/explore', async (request, reply) => {
+    try {
+      const packageId = validateObjectId(request.params.id, 'packageId');
+
+      const rpcUrl = await getActiveRpcUrl();
+      if (!rpcUrl) {
+        reply.status(503);
+        return { success: false, error: 'No active Sui environment configured' };
+      }
+
+      const result = await getPackageModulesViaGrpc(packageId, rpcUrl);
+      if (!result) {
+        reply.status(404);
+        return { success: false, error: 'Package not found' };
+      }
+
+      return { success: true, data: result };
+    } catch (error) {
+      return handleRouteError(error, reply);
+    }
+  });
+
   // Publish a Move package
   fastify.post<{
     Body: {

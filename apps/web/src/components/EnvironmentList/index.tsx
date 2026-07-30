@@ -1,10 +1,11 @@
 import { clsx } from 'clsx';
 import { Plus, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { getChainIdentifier } from '@/api/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 import { useAppStore } from '@/stores/useAppStore';
 import { Spinner } from '../shared/Spinner';
 
@@ -58,6 +59,44 @@ export function EnvironmentList() {
     const query = searchQuery.toLowerCase();
     return env.alias.toLowerCase().includes(query) || env.rpc.toLowerCase().includes(query);
   });
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied`);
+  };
+
+  // Copy-for-AI export. Public only: env name, rpc url, active flag - all of
+  // which are plain network config, no secrets.
+  const aiExport = useMemo(() => {
+    const envs = filteredEnvs.map((e) => ({
+      name: e.alias,
+      rpcUrl: e.rpc,
+      active: e.isActive,
+    }));
+    const active = envs.find((e) => e.active);
+    const prompt = [
+      `I'm using the Sui CLI with ${envs.length} configured environment${envs.length !== 1 ? 's' : ''}.`,
+      active ? `The active environment is "${active.name}" (${active.rpcUrl}).` : '',
+      chainId
+        ? `Active chain identifier: ${chainId}${chainNetwork ? ` (${chainNetwork})` : ''}.`
+        : '',
+      'Environments:',
+      ...envs.map((e) => `- ${e.name}: ${e.rpcUrl}${e.active ? ' [active]' : ''}`),
+      '',
+      'Help me work with these Sui network environments.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+    const json = JSON.stringify({ chainId, chainNetwork, environments: envs }, null, 2);
+    const markdown = [
+      '# Sui CLI Environments',
+      '',
+      '| Name | RPC URL | Active |',
+      '| --- | --- | --- |',
+      ...envs.map((e) => `| ${e.name} | \`${e.rpcUrl}\` | ${e.active ? 'yes' : 'no'} |`),
+    ].join('\n');
+    return { prompt, json, markdown };
+  }, [filteredEnvs, chainId, chainNetwork]);
 
   const handleSwitch = async (alias: string) => {
     try {
@@ -113,6 +152,21 @@ export function EnvironmentList() {
 
   return (
     <div className="space-y-4">
+      {/* Header */}
+      {filteredEnvs.length > 0 && (
+        <div className="flex items-center justify-between gap-2 px-1">
+          <span className="text-sm text-muted-foreground">
+            {filteredEnvs.length} environment{filteredEnvs.length !== 1 ? 's' : ''}
+          </span>
+          <CopyForAiMenu
+            prompt={aiExport.prompt}
+            json={aiExport.json}
+            markdown={aiExport.markdown}
+            onCopy={copyToClipboard}
+          />
+        </div>
+      )}
+
       {/* Chain Identifier Display */}
       {chainId && (
         <div className="px-3 py-2 rounded-lg border border-border bg-secondary/50">
@@ -177,7 +231,11 @@ export function EnvironmentList() {
           </div>
         </div>
       ) : (
-        <Button variant="outline" onClick={() => setShowAddForm(true)} className="w-full border-dashed">
+        <Button
+          variant="outline"
+          onClick={() => setShowAddForm(true)}
+          className="w-full border-dashed"
+        >
           <Plus className="w-4 h-4" />
           Add New Environment
         </Button>

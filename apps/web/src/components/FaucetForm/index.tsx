@@ -1,9 +1,19 @@
 import { clsx } from 'clsx';
-import { AlertTriangle, CheckCircle2, Copy, Droplet, ExternalLink, MessageCircle, X, XCircle } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Copy,
+  Droplet,
+  ExternalLink,
+  MessageCircle,
+  X,
+  XCircle,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 import { useAppStore } from '@/stores/useAppStore';
 import { Spinner } from '../shared/Spinner';
 
@@ -22,16 +32,6 @@ interface FaucetSource {
 
 const FAUCET_SOURCES: FaucetSource[] = [
   {
-    id: 'fm-faucet',
-    name: 'FM Faucet',
-    description: 'Contact @rongmauhong (Telegram) or @222tee (X) - no captcha',
-    networks: ['testnet'],
-    type: 'web',
-    url: 'https://fmfaucet.xyz',
-    dailyLimit: '2 requests/day',
-    perRequestAmount: '1 SUI',
-  },
-  {
     id: 'sui-web-faucet',
     name: 'Sui Web Faucet',
     description: 'Official web faucet by Mysten Labs',
@@ -39,16 +39,6 @@ const FAUCET_SOURCES: FaucetSource[] = [
     type: 'web',
     url: 'https://faucet.sui.io/',
     dailyLimit: 'Rate limited',
-    perRequestAmount: '1 SUI',
-  },
-  {
-    id: 'blockbolt-faucet',
-    name: 'Blockbolt Faucet',
-    description: 'Community faucet - no captcha',
-    networks: ['devnet', 'testnet'],
-    type: 'web',
-    url: 'https://faucet.blockbolt.io/',
-    dailyLimit: 'Limited',
     perRequestAmount: '1 SUI',
   },
   {
@@ -80,6 +70,17 @@ const FAUCET_SOURCES: FaucetSource[] = [
     url: 'https://stakely.io/faucet/sui-testnet-sui',
     dailyLimit: '1 request/day',
     perRequestAmount: '0.5 SUI',
+  },
+  {
+    id: 'sui-http-api',
+    name: 'Official HTTP API',
+    description:
+      'POST {"FixedAmountRequest":{"recipient":"<address>"}} - what the button above uses',
+    networks: ['devnet', 'testnet'],
+    type: 'web',
+    url: 'https://docs.sui.io/getting-started/onboarding/get-coins',
+    dailyLimit: 'Rate limited',
+    perRequestAmount: '1 SUI',
   },
   {
     id: 'sui-discord',
@@ -212,6 +213,39 @@ export function FaucetForm() {
     setCustomAddress('');
   };
 
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied`);
+  };
+
+  const aiJson = JSON.stringify(
+    {
+      targetAddress: targetAddress ?? null,
+      network: selectedNetwork,
+      isExternalAddress,
+      activeEnvironment: activeEnv?.alias ?? null,
+      lastResult,
+    },
+    null,
+    2
+  );
+
+  const aiMarkdown = [
+    '# Sui faucet request',
+    '',
+    `- **Address:** ${targetAddress ?? '(none)'}`,
+    `- **Network:** ${selectedNetwork}`,
+    `- **External address:** ${isExternalAddress ? 'yes' : 'no'}`,
+    activeEnv ? `- **Active environment:** ${activeEnv.alias}` : null,
+    lastResult
+      ? `- **Last request:** ${lastResult.success ? 'success' : 'failed'} — ${lastResult.message}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const aiPrompt = `Explain how to fund this Sui address on ${selectedNetwork}: ${targetAddress ?? '(no address)'}.\n\n${aiMarkdown}\n\nWalk me through requesting test tokens and list the best faucet options for this network.`;
+
   if (!targetAddress && !activeAddress) {
     return <div className="px-3 py-8 text-center text-muted-foreground">No address selected</div>;
   }
@@ -231,8 +265,15 @@ export function FaucetForm() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <CopyForAiMenu
+              prompt={aiPrompt}
+              json={aiJson}
+              markdown={aiMarkdown}
+              onCopy={copyToClipboard}
+            />
             {isExternalAddress && (
               <button
+                type="button"
                 onClick={clearCustomAddress}
                 className="p-1 text-muted-foreground hover:text-foreground rounded-md hover:bg-accent transition-colors"
                 title="Clear"
@@ -241,6 +282,7 @@ export function FaucetForm() {
               </button>
             )}
             <button
+              type="button"
               onClick={copyAddress}
               className="p-1 text-muted-foreground hover:text-foreground rounded-md hover:bg-accent transition-colors"
               title="Copy address"
@@ -270,6 +312,7 @@ export function FaucetForm() {
               </span>
             </div>
             <button
+              type="button"
               onClick={() => setSelectedNetwork(detectedNetwork)}
               className="text-xs text-yellow-400 hover:text-yellow-300 font-medium"
             >
@@ -288,6 +331,7 @@ export function FaucetForm() {
           {networks.map((network) => (
             <button
               key={network.id}
+              type="button"
               onClick={() => setSelectedNetwork(network.id)}
               className={clsx(
                 'flex-1 px-3 py-2 text-xs rounded-lg transition-all border',
@@ -312,11 +356,7 @@ export function FaucetForm() {
             <span className="text-tertiary">·</span>
             <span>1 SUI per request</span>
           </div>
-          <Button
-            onClick={handleRequest}
-            disabled={isRequesting || isLoading}
-            className="w-full"
-          >
+          <Button onClick={handleRequest} disabled={isRequesting || isLoading} className="w-full">
             {isRequesting ? (
               <>
                 <Spinner size="sm" />
@@ -401,9 +441,10 @@ export function FaucetForm() {
           </div>
           <div className="space-y-1">
             {availableSources.map((source) => (
-              <div
+              <button
                 key={source.id}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent/50 transition-colors cursor-pointer group border border-transparent hover:border-border"
+                type="button"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent/50 transition-colors cursor-pointer group border border-transparent hover:border-border text-left"
                 onClick={() => source.url && openExternalFaucet(source.url)}
               >
                 <span className="text-sm flex-shrink-0">
@@ -423,7 +464,7 @@ export function FaucetForm() {
                 <span className="text-[10px] text-[#4da2ff]">{source.perRequestAmount}</span>
                 <span className="text-[10px] text-tertiary">{source.dailyLimit}</span>
                 <ExternalLink className="w-3 h-3 text-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
+              </button>
             ))}
           </div>
         </div>

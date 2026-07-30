@@ -55,7 +55,7 @@ export function TerminalSuccessDisplay({
       className="relative"
     >
       {/* Terminal Container */}
-      <div className="relative bg-black/20 backdrop-blur-md border border-success/30 rounded-lg overflow-hidden font-mono shadow-2xl shadow-success/20">
+      <div className="relative bg-card/95 backdrop-blur-md border border-success/30 rounded-lg overflow-hidden font-mono shadow-2xl shadow-success/20">
         {/* Scanlines overlay */}
         <div className="absolute inset-0 pointer-events-none opacity-30"
           style={{
@@ -104,7 +104,6 @@ export function TerminalSuccessDisplay({
               </motion.div>
               <div>
                 <div className="text-success text-sm font-semibold tracking-wide"
-                  style={{ textShadow: '0 0 10px rgba(52, 199, 89, 0.5)' }}
                 >
                   ✓ {title}
                 </div>
@@ -118,12 +117,12 @@ export function TerminalSuccessDisplay({
             {/* Command Output */}
             <div className="space-y-0 text-xs">
               <div className="text-success/60">┌─ COMMAND OUTPUT ────────────────────────────────┐</div>
-              <div className="bg-black/40 border-l-2 border-r-2 border-success/20 px-4 py-3 space-y-1.5">
+              <div className="bg-muted border-l-2 border-r-2 border-success/20 px-4 py-3 space-y-1.5">
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.2 }}
-                  className="text-success"
+                  className="text-foreground"
                 >
                   $ {command}
                 </motion.div>
@@ -131,8 +130,7 @@ export function TerminalSuccessDisplay({
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.3 }}
-                  className="text-success/90 flex items-center gap-2"
-                  style={{ textShadow: '0 0 8px rgba(52, 199, 89, 0.3)' }}
+                  className="text-success flex items-center gap-2"
                 >
                   <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
                   <span>{message}</span>
@@ -151,7 +149,7 @@ export function TerminalSuccessDisplay({
                 className="space-y-0 text-xs"
               >
                 <div className="flex items-center justify-between">
-                  <div className="text-cyan-400/80 font-semibold tracking-wide">
+                  <div className="text-primary font-semibold tracking-wide">
                     {field.label}:
                   </div>
                   <div className="flex items-center gap-2">
@@ -170,7 +168,7 @@ export function TerminalSuccessDisplay({
                             ✓
                           </motion.span>
                         ) : (
-                          <Copy className="w-3 h-3 text-cyan-400/60 group-hover:text-cyan-400" />
+                          <Copy className="w-3 h-3 text-primary/70 group-hover:text-primary" />
                         )}
                       </button>
                     )}
@@ -182,16 +180,15 @@ export function TerminalSuccessDisplay({
                         className="p-1.5 hover:bg-success/20 rounded transition-colors group"
                         title="Open in explorer"
                       >
-                        <ExternalLink className="w-3 h-3 text-cyan-400/60 group-hover:text-cyan-400" />
+                        <ExternalLink className="w-3 h-3 text-primary/70 group-hover:text-primary" />
                       </a>
                     )}
                   </div>
                 </div>
-                <div className="bg-black/40 border border-success/20 rounded px-3 py-2 mt-1">
-                  <code className="text-success/90 text-xs break-all"
+                <div className="bg-muted border border-success/20 rounded px-3 py-2 mt-1">
+                  <code className="text-foreground text-xs break-all"
                     style={{
                       fontFamily: 'JetBrains Mono, Menlo, Monaco, Courier New, monospace',
-                      textShadow: '0 0 8px rgba(52, 199, 89, 0.2)'
                     }}
                   >
                     {truncateAddress(field.value)}
@@ -233,11 +230,10 @@ export function TerminalSuccessDisplay({
                     >
                       <div className="space-y-0 text-xs">
                         <div className="text-success/60">┌─ RAW JSON OUTPUT ───────────────────────────────┐</div>
-                        <div className="bg-black/60 border-l-2 border-r-2 border-success/20 px-4 py-3 max-h-[300px] overflow-y-auto custom-scrollbar">
-                          <pre className="text-success/70 text-xs whitespace-pre-wrap break-words"
+                        <div className="bg-muted border-l-2 border-r-2 border-success/20 px-4 py-3 max-h-[300px] overflow-y-auto custom-scrollbar">
+                          <pre className="text-foreground/80 text-xs whitespace-pre-wrap break-words"
                             style={{
                               fontFamily: 'JetBrains Mono, Menlo, Monaco, Courier New, monospace',
-                              textShadow: '0 0 8px rgba(52, 199, 89, 0.2)'
                             }}
                           >
                             {typeof rawOutput === 'string'

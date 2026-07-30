@@ -1,13 +1,25 @@
-name: CI Workflow
+name: CI
+
+# Feedback for pull requests and for every push to the mainline. The
+# build-and-test job is the one that matters: it is the same set of checks the
+# deploy workflow gates on, so a green tick here means the same commit can ship.
+# Lint runs alongside but is advisory (see the job) because the tree carries a
+# large backlog of pre-existing findings that a feature branch should not have
+# to clear before it can merge.
 
 on:
   push:
-    branches: [ "master", "main" ]
+    branches: ["master", "main"]
   pull_request:
-    branches: [ "master", "main" ]
+    branches: ["master", "main"]
+
+# A newer push to the same branch makes an in-flight run obsolete.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-and-check:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -16,21 +28,45 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          # Node 20, not 18: vitest 4 requires ^20 || ^22 || >=24, so the test
+          # step below will not even start on the old pin.
+          node-version: "20"
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Type check (Shared)
-        run: npm run build -w @sui-cli-web/shared
-
-      - name: Build (All)
+      - name: Build (all workspaces)
+        # This is also the typecheck that counts - tsup and vite fail the build
+        # on a real type error in shared, server or web.
         run: npm run build
 
-      # Advisory for now: the repo carries a large pre-existing biome backlog
-      # (formatting, import order, a11y) unrelated to most PRs. Keep the report
-      # visible in the logs without failing the build until it's cleaned up.
-      - name: Lint and Format Code
+      - name: Test (server - unit + e2e)
+        # No `sui` binary is installed on the runner on purpose: a present-but-
+        # unconfigured CLI blocks on an interactive prompt, while an absent one
+        # fails fast. The e2e suite is written to assert only the shape of the
+        # "sui missing" state, so it is deterministic here.
+        run: npm test -w sui-cli-web-server
+
+  lint:
+    runs-on: ubuntu-latest
+    # Advisory only: the tree has a standing biome backlog, so a red result here
+    # must not wall off a branch. It stays in the pipeline so new violations are
+    # visible in the log rather than invisible.
+    continue-on-error: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint and format check
         run: npx @biomejs/biome ci .
         continue-on-error: true

@@ -1,4 +1,4 @@
-import { type ComponentProps, useEffect, useRef } from "react"
+import { type ComponentProps, forwardRef, useEffect, useRef } from "react"
 import { cn } from "./lib"
 import { rgb } from "./palette"
 import {
@@ -81,15 +81,11 @@ function paintButton(
  * brighter; pressing lifts it further. Standalone: shares only the pixel
  * primitives and palette with the rest of the kit.
  */
-export function DitherButton({
-  color = "blue",
-  variant = "gradient",
-  bloom = "off",
-  className,
-  children,
-  ...props
-}: DitherButtonProps) {
-  const buttonRef = useRef<HTMLButtonElement>(null)
+export const DitherButton = forwardRef<HTMLButtonElement, DitherButtonProps>(function DitherButton(
+  { color = "blue", variant = "gradient", bloom = "off", className, children, ...props },
+  forwardedRef
+) {
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const bloomRef = useRef<HTMLCanvasElement>(null)
 
@@ -186,10 +182,20 @@ export function DitherButton({
 
   return (
     <button
-      ref={buttonRef}
+      ref={(node) => {
+        // Keep the internal ref (canvas sizing/hover reads it) AND satisfy any
+        // forwarded ref - radix's `asChild` trigger needs this to anchor its menu.
+        buttonRef.current = node
+        if (typeof forwardedRef === "function") forwardedRef(node)
+        else if (forwardedRef) forwardedRef.current = node
+      }}
       type="button"
       className={cn(
-        "relative isolate overflow-hidden rounded-md px-4 py-2 font-mono text-xs text-foreground transition-opacity focus-visible:ring-1 focus-visible:ring-foreground/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40",
+        // `shrink-0` + `whitespace-nowrap`: the canvas fill needs
+        // `overflow-hidden`, which means a squeezed flex row would silently clip
+        // the label instead of letting it spill. Refuse to shrink, and the label
+        // stays whole (the toolbar row wraps instead).
+        "relative isolate shrink-0 overflow-hidden whitespace-nowrap rounded-md px-4 py-2 font-mono text-xs text-foreground transition-opacity focus-visible:ring-1 focus-visible:ring-foreground/40 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40",
         className
       )}
       {...props}
@@ -208,7 +214,11 @@ export function DitherButton({
           style={bloomStyle}
         />
       )}
-      <span className="relative">{children}</span>
+      {/* Inline-flex row: without it an icon + label stack vertically, because
+          the svg is display:block (preflight) inside a plain span — the flex
+          classes callers put on the button can't reach through this wrapper. */}
+      <span className="relative inline-flex items-center justify-center gap-1.5">{children}</span>
     </button>
   )
-}
+})
+DitherButton.displayName = "DitherButton"

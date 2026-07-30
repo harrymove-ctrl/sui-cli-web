@@ -1,7 +1,86 @@
 import { motion } from 'framer-motion';
-import { XCircle, Copy, RotateCcw } from 'lucide-react';
+import { Copy, RotateCcw, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
+
+/**
+ * The Sui CLI writes warnings and build progress to the same stream as real
+ * failures, so the raw text is mostly noise. A publish that fails on a protocol
+ * mismatch reads as:
+ *
+ *   Publish failed: [warning] CLI's protocol version is 123, but ...
+ *   Consider installing the latest version of the CLI - https://...
+ *   INCLUDING DEPENDENCY MoveStdlib
+ *   BUILDING my_project
+ *
+ * - none of which is the error. Split the stream so each part can be shown for
+ * what it is, and so an empty `problem` can be called out honestly rather than
+ * dressing up a warning as the cause.
+ */
+export function splitCliOutput(raw: string): {
+  problem: string[];
+  warnings: string[];
+  progress: string[];
+} {
+  const problem: string[] = [];
+  const warnings: string[] = [];
+  const progress: string[] = [];
+  // Warnings wrap onto unprefixed continuation lines; keep attaching them until
+  // a blank line or a line that clearly starts something else.
+  let inWarning = false;
+
+  for (const rawLine of raw.split('\n')) {
+    const line = rawLine.replace(/^Publish failed:\s*/i, '').replace(/^Upgrade failed:\s*/i, '');
+    const trimmed = line.trim();
+
+    if (/^\[?warning\]?/i.test(trimmed)) {
+      warnings.push(trimmed.replace(/^\[warning\]\s*/i, ''));
+      inWarning = true;
+      continue;
+    }
+    if (/^(INCLUDING|BUILDING|FETCHING|UPDATING|COMPILING)\b/i.test(trimmed)) {
+      progress.push(trimmed);
+      inWarning = false;
+      continue;
+    }
+    if (!trimmed) continue;
+    // A blank line does NOT end the warning block: the CLI separates its
+    // protocol-mismatch warning from its follow-up advice with one, and that
+    // advice was landing in `problem` as if it were the failure. Only a real
+    // error-looking line ends it.
+    const looksLikeError =
+      /^(error|failed|caused by|panicked|thread '|unable to|cannot|could not)\b/i.test(trimmed) ||
+      /:\d+:\d+/.test(trimmed);
+    if (inWarning && !looksLikeError) {
+      warnings.push(trimmed);
+      continue;
+    }
+    inWarning = false;
+    problem.push(trimmed);
+  }
+
+  return { problem, warnings, progress };
+}
+
+/** Render a line, turning bare URLs into real links. */
+function withLinks(line: string) {
+  const parts = line.split(/(https?:\/\/[^\s]+)/g);
+  return parts.map((part, i) =>
+    /^https?:\/\//.test(part) ? (
+      <a
+        key={i}
+        href={part}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline underline-offset-2 hover:text-foreground"
+      >
+        {part}
+      </a>
+    ) : (
+      <span key={i}>{part}</span>
+    )
+  );
+}
 
 interface TerminalErrorDisplayProps {
   error: string;
@@ -14,7 +93,7 @@ export function TerminalErrorDisplay({
   error,
   title = 'ERROR',
   onRetry,
-  suggestions = []
+  suggestions = [],
 }: TerminalErrorDisplayProps) {
   const [showCopied, setShowCopied] = useState(false);
 
@@ -29,49 +108,6 @@ export function TerminalErrorDisplay({
     }
   };
 
-  // Parse error to highlight important parts
-  const parseErrorLine = (line: string) => {
-    const trimmed = line.trim();
-
-    // Detect line type
-    const isErrorKeyword = /^(error|Error|ERROR)[\[\]:]/i.test(trimmed);
-    const isWarning = /^(warning|Warning)[\[\]:]/i.test(trimmed);
-    const isNote = /^\[Note\]|^Note:/i.test(trimmed);
-    const isLocation = /at .+:\d+:\d+/i.test(trimmed) || /─+>/.test(trimmed);
-    const isCommand = trimmed.startsWith('$') || trimmed.startsWith('sui ');
-    const isBuilding = /^(BUILDING|INCLUDING|DEPENDENCY)/i.test(trimmed);
-
-    return {
-      text: line,
-      type: isErrorKeyword ? 'error' :
-            isWarning ? 'warning' :
-            isNote ? 'note' :
-            isLocation ? 'location' :
-            isCommand ? 'command' :
-            isBuilding ? 'building' :
-            'normal'
-    };
-  };
-
-  const getLineStyle = (type: string) => {
-    switch (type) {
-      case 'error':
-        return 'text-red-400 font-bold';
-      case 'warning':
-        return 'text-amber-400 font-semibold';
-      case 'note':
-        return 'text-blue-400/90';
-      case 'location':
-        return 'text-purple-400/80';
-      case 'command':
-        return 'text-blue-400/80';
-      case 'building':
-        return 'text-cyan-400/80';
-      default:
-        return 'text-red-500';
-    }
-  };
-
   // Generate smart suggestions based on error content
   const getSmartSuggestions = () => {
     if (suggestions.length > 0) return suggestions;
@@ -80,7 +116,9 @@ export function TerminalErrorDisplay({
     const smartSuggestions: string[] = [];
 
     if (errorLower.includes('dependency') || errorLower.includes('dependencies')) {
-      smartSuggestions.push('Run with --skip-dependency-verification flag if dependency sources are outdated');
+      smartSuggestions.push(
+        'Run with --skip-dependency-verification flag if dependency sources are outdated'
+      );
       smartSuggestions.push('Update dependency versions in Move.toml');
     }
     if (errorLower.includes('unexpected token') || errorLower.includes('syntax')) {
@@ -100,12 +138,14 @@ export function TerminalErrorDisplay({
       smartSuggestions.push('Check all module dependencies are included');
     }
 
-    return smartSuggestions.length > 0 ? smartSuggestions : [
-      'Check the error details above for specific issues',
-      'Verify your Move package structure is correct',
-      'Ensure you have the latest Sui CLI version',
-      'Try running the command manually to see full output'
-    ];
+    return smartSuggestions.length > 0
+      ? smartSuggestions
+      : [
+          'Check the error details above for specific issues',
+          'Verify your Move package structure is correct',
+          'Ensure you have the latest Sui CLI version',
+          'Try running the command manually to see full output',
+        ];
   };
 
   return (
@@ -117,60 +157,59 @@ export function TerminalErrorDisplay({
     >
       {/* Terminal Container */}
       <div
-        className="relative bg-black/20 backdrop-blur-md border border-red-500/60 rounded-lg overflow-hidden font-mono shadow-2xl shadow-red-500/60"
+        className="relative bg-card/95 backdrop-blur-md border border-error/40 rounded-lg overflow-hidden font-mono shadow-2xl shadow-error/20"
         style={{
-          boxShadow: '0 0 30px rgba(239, 68, 68, 0.5), inset 0 0 30px rgba(239, 68, 68, 0.15)'
+          boxShadow: '0 0 24px rgba(255, 69, 58, 0.18)',
         }}
       >
         {/* Scanlines overlay */}
         <div
           className="absolute inset-0 pointer-events-none opacity-50"
           style={{
-            backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(239, 68, 68, 0.1) 2px, rgba(239, 68, 68, 0.1) 4px)',
+            backgroundImage:
+              'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255, 69, 58, 0.04) 2px, rgba(255, 69, 58, 0.04) 4px)',
           }}
         />
 
         {/* Terminal glow effect */}
         <div className="absolute inset-0 pointer-events-none opacity-70">
-          <div className="absolute inset-0 bg-gradient-to-b from-red-500/20 via-transparent to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-t from-red-500/20 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-b from-error/10 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-error/10 via-transparent to-transparent" />
         </div>
 
         {/* Content */}
         <div className="relative z-10">
           {/* Terminal Header */}
-          <div className="border-b border-red-500/40 bg-red-950/40 px-4 py-3">
+          <div className="border-b border-error/40 bg-error/10 px-4 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <motion.div
                   initial={{ scale: 0 }}
                   animate={{
                     scale: 1,
-                    rotate: [0, -5, 5, -5, 5, 0]
+                    rotate: [0, -5, 5, -5, 5, 0],
                   }}
                   transition={{
-                    scale: { type: "spring", stiffness: 200 },
-                    rotate: { duration: 0.5, delay: 0.2 }
+                    scale: { type: 'spring', stiffness: 200 },
+                    rotate: { duration: 0.5, delay: 0.2 },
                   }}
                 >
-                  <XCircle className="w-5 h-5 text-red-500"
+                  <XCircle
+                    className="w-5 h-5 text-error"
                     style={{
                       filter: 'drop-shadow(0 0 8px rgba(239, 68, 68, 0.8))',
                     }}
                   />
                 </motion.div>
                 <div>
-                  <div className="text-red-500 text-sm font-bold tracking-wide"
-                    style={{ textShadow: '0 0 12px rgba(239, 68, 68, 0.7)' }}
-                  >
-                    ✗ {title}
-                  </div>
-                  <div className="text-red-500/70 text-xs mt-0.5">Operation failed</div>
+                  <div className="text-error text-sm font-bold tracking-wide">✗ {title}</div>
+                  <div className="text-error/70 text-xs mt-0.5">Operation failed</div>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={copyError}
-                className="p-2 hover:bg-red-500/20 rounded transition-colors group relative"
+                className="p-2 hover:bg-error/15 rounded transition-colors group relative"
                 title="Copy error"
               >
                 {showCopied ? (
@@ -182,7 +221,7 @@ export function TerminalErrorDisplay({
                     ✓
                   </motion.span>
                 ) : (
-                  <Copy className="w-4 h-4 text-red-500/70 group-hover:text-red-500" />
+                  <Copy className="w-4 h-4 text-error/70 group-hover:text-error" />
                 )}
               </button>
             </div>
@@ -190,56 +229,100 @@ export function TerminalErrorDisplay({
 
           {/* Terminal Body */}
           <div className="p-4 space-y-4">
-            {/* ASCII Box with Error */}
-            <div className="space-y-0 text-xs">
-              <div className="text-red-500/70 font-semibold">┌─ ERROR DETAILS ─────────────────────────────────┐</div>
-              <div className="bg-black/40 border-l-2 border-r-2 border-red-500/30 px-4 py-3 space-y-1 max-h-[400px] overflow-y-auto">
-                {error.split('\n').map((line, idx) => {
-                  const parsed = parseErrorLine(line);
-                  return (
-                    <motion.div
-                      key={idx}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: idx * 0.02 }}
-                      className={`${getLineStyle(parsed.type)} leading-relaxed`}
-                      style={{
-                        textShadow: parsed.type === 'error' ? '0 0 12px rgba(239, 68, 68, 0.6)' :
-                                   parsed.type === 'warning' ? '0 0 10px rgba(251, 191, 36, 0.4)' :
-                                   '0 0 8px rgba(239, 68, 68, 0.3)',
-                        fontFamily: 'JetBrains Mono, Menlo, Monaco, Courier New, monospace'
-                      }}
-                    >
-                      {parsed.text || '\u00A0'}
-                    </motion.div>
-                  );
-                })}
-              </div>
-              <div className="text-red-500/70 font-semibold">└─────────────────────────────────────────────────┘</div>
-            </div>
+            {(() => {
+              const { problem, warnings, progress } = splitCliOutput(error);
+              return (
+                <>
+                  {/* What actually went wrong */}
+                  <div className="space-y-0 text-xs">
+                    <div className="text-error/70 font-semibold">
+                      ┌─ ERROR DETAILS ─────────────────────────────────┐
+                    </div>
+                    <div className="bg-muted border-l-2 border-r-2 border-error/25 px-4 py-3 space-y-1 max-h-[400px] overflow-y-auto">
+                      {problem.length > 0 ? (
+                        problem.map((line, idx) => (
+                          <div key={idx} className="text-error leading-relaxed font-mono">
+                            {withLinks(line)}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-muted-foreground leading-relaxed">
+                          The CLI didn't report a specific error - it only emitted the warnings
+                          below. That usually means the command failed during the build step.
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-error/70 font-semibold">
+                      └─────────────────────────────────────────────────┘
+                    </div>
+                  </div>
+
+                  {/* Warnings are not the failure - give them their own colour. */}
+                  {warnings.length > 0 && (
+                    <div className="space-y-0 text-xs">
+                      <div className="text-warning/80 font-semibold">
+                        ┌─ WARNINGS ──────────────────────────────────────┐
+                      </div>
+                      <div className="bg-muted border-l-2 border-r-2 border-warning/25 px-4 py-3 space-y-1">
+                        {warnings.map((line, idx) => (
+                          <div key={idx} className="text-warning leading-relaxed">
+                            {withLinks(line)}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="text-warning/80 font-semibold">
+                        └─────────────────────────────────────────────────┘
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Progress is context, not a problem - collapsed by default. */}
+                  {progress.length > 0 && (
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                        Build log ({progress.length} line{progress.length !== 1 ? 's' : ''})
+                      </summary>
+                      <div className="mt-1 bg-muted rounded px-3 py-2 space-y-0.5">
+                        {progress.map((line, idx) => (
+                          <div key={idx} className="text-muted-foreground font-mono">
+                            {line}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </>
+              );
+            })()}
 
             {/* Suggestions */}
             {(() => {
               const smartSuggestions = getSmartSuggestions();
-              return smartSuggestions.length > 0 && (
-                <div className="space-y-0 text-xs">
-                  <div className="text-amber-400/70 font-semibold">┌─ SUGGESTIONS ───────────────────────────────────┐</div>
-                  <div className="bg-black/40 border-l-2 border-r-2 border-amber-500/20 px-4 py-3 space-y-2">
-                    {smartSuggestions.map((suggestion, idx) => (
-                      <motion.div
-                        key={idx}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.3 + idx * 0.1 }}
-                        className="flex items-start gap-2 text-amber-400/90"
-                      >
-                        <span className="text-amber-500 flex-shrink-0">💡</span>
-                        <span>{suggestion}</span>
-                      </motion.div>
-                    ))}
+              return (
+                smartSuggestions.length > 0 && (
+                  <div className="space-y-0 text-xs">
+                    <div className="text-amber-400/70 font-semibold">
+                      ┌─ SUGGESTIONS ───────────────────────────────────┐
+                    </div>
+                    <div className="bg-muted border-l-2 border-r-2 border-warning/25 px-4 py-3 space-y-2">
+                      {smartSuggestions.map((suggestion, idx) => (
+                        <motion.div
+                          key={idx}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.3 + idx * 0.1 }}
+                          className="flex items-start gap-2 text-amber-400/90"
+                        >
+                          <span className="text-amber-500 flex-shrink-0">💡</span>
+                          <span>{suggestion}</span>
+                        </motion.div>
+                      ))}
+                    </div>
+                    <div className="text-amber-400/70 font-semibold">
+                      └─────────────────────────────────────────────────┘
+                    </div>
                   </div>
-                  <div className="text-amber-400/70 font-semibold">└─────────────────────────────────────────────────┘</div>
-                </div>
+                )
               );
             })()}
 
@@ -250,8 +333,7 @@ export function TerminalErrorDisplay({
                   onClick={onRetry}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  className="flex-1 px-4 py-2.5 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 rounded text-red-400 text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                  style={{ textShadow: '0 0 10px rgba(239, 68, 68, 0.5)' }}
+                  className="flex-1 px-4 py-2.5 bg-error/15 hover:bg-error/25 border border-error/40 rounded text-error text-sm font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   <RotateCcw className="w-4 h-4" />
                   [R]etry
@@ -274,7 +356,7 @@ export function TerminalErrorDisplay({
           initial={{ opacity: 0 }}
           animate={{ opacity: [0, 0.5, 0] }}
           transition={{ duration: 0.3, repeat: 2, repeatDelay: 0.5 }}
-          className="absolute inset-0 pointer-events-none bg-red-500/10"
+          className="absolute inset-0 pointer-events-none bg-error/10"
         />
       </div>
 

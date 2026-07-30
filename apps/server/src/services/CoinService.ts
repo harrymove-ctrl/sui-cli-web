@@ -1,15 +1,16 @@
+import { SuiCliExecutor } from '../cli/SuiCliExecutor';
+import { ConfigParser } from '../cli/ConfigParser';
 import type {
+  CoinInfo,
   CoinGroup,
   CoinGroupedResponse,
-  CoinInfo,
   CoinMetadata,
   CoinOperationResult,
 } from '@sui-cli-web/shared';
 import { getShortSymbol } from '@sui-cli-web/shared';
-import { ConfigParser } from '../cli/ConfigParser';
-import { SuiCliExecutor } from '../cli/SuiCliExecutor';
 import { getKnownToken, getTokenPriority, isVerifiedToken } from '../utils/knownTokens';
 import { getAllBalancesViaGrpc, getOwnedCoinsViaGrpc } from '../utils/suiGrpcClient';
+import { getCoinMetadataViaGraphQL } from './GraphQLService';
 
 // Constants
 const MIST_PER_SUI = 1_000_000_000;
@@ -239,7 +240,24 @@ export class CoinService {
       throw new Error('No active RPC URL configured');
     }
 
-    return this.fetchCoinsByType(address, coinType, rpcUrl);
+    // JSON-RPC first, gRPC fallback - same reasoning as `getCoinsGrouped` above:
+    // `suix_getCoins` 404s on Mysten's public testnet/devnet fullnodes, and unlike
+    // `getCoinsGrouped` this method previously had no fallback at all, so it threw
+    // outright on those networks instead of degrading.
+    try {
+      return await this.fetchCoinsByType(address, coinType, rpcUrl);
+    } catch {
+      const owned = await getOwnedCoinsViaGrpc(address, rpcUrl);
+      return owned
+        .filter((c) => c.coinType === coinType)
+        .map((c) => ({
+          coinObjectId: c.coinObjectId,
+          coinType: c.coinType,
+          balance: c.balance,
+          version: c.version,
+          digest: c.digest,
+        }));
+    }
   }
 
   /**
@@ -318,7 +336,19 @@ export class CoinService {
       metadataCache.set(coinType, { data: metadata, timestamp: Date.now() });
 
       return metadata;
-    } catch (error) {
+    } catch {
+      // JSON-RPC unreachable (`suix_getCoinMetadata` 404s on Mysten's public
+      // testnet/devnet fullnodes, same as every other legacy JSON-RPC method) -
+      // there's no gRPC equivalent (a coin's on-chain `CoinMetadata<T>` object
+      // isn't looked up by type over gRPC), so GraphQL is the fallback here
+      // instead, before giving up to a synthesized default.
+      const viaGraphQL = await getCoinMetadataViaGraphQL(coinType, rpcUrl).catch(() => null);
+      if (viaGraphQL) {
+        const metadata: CoinMetadata = { coinType, ...viaGraphQL };
+        metadataCache.set(coinType, { data: metadata, timestamp: Date.now() });
+        return metadata;
+      }
+
       // Return default for SUI on error
       if (coinType === SUI_COIN_TYPE) {
         return {
@@ -399,7 +429,9 @@ export class CoinService {
   public async mergeCoins(
     primaryCoinId: string,
     coinIdsToMerge: string[],
-    coinType: string,
+    // Kept in the signature for call-site symmetry with splitCoin; merging
+    // needs no type argument because the coins carry it.
+    _coinType: string,
     gasBudget: string = '50000000'
   ): Promise<CoinOperationResult> {
     try {
@@ -608,7 +640,9 @@ export class CoinService {
   public async dryRunMerge(
     primaryCoinId: string,
     coinIdsToMerge: string[],
-    coinType: string,
+    // Kept in the signature for call-site symmetry with splitCoin; merging
+    // needs no type argument because the coins carry it.
+    _coinType: string,
     gasBudget: string = '50000000'
   ): Promise<CoinOperationResult> {
     try {

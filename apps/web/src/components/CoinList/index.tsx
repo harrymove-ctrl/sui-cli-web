@@ -16,6 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import * as api from '@/api/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 import { ShimmerSkeleton } from '@/components/unlumen-ui/shimmer-skeleton';
 import { useAppStore } from '@/stores/useAppStore';
 
@@ -123,6 +124,54 @@ export function CoinList() {
     navigate(`/app/coins/merge?type=${encodeURIComponent(group.coinType)}`);
   };
 
+  // Cap the exported coin groups so a dust-heavy wallet (hundreds of types)
+  // doesn't produce an unusable multi-MB payload.
+  const AI_GROUP_CAP = 200;
+  const aiGroups = filteredGroups.slice(0, AI_GROUP_CAP).map((g) => ({
+    symbol: g.symbol,
+    coinType: g.coinType,
+    totalBalance: g.formattedBalance,
+    coinCount: g.coinCount,
+    isVerified: g.isVerified,
+  }));
+
+  const aiJson = JSON.stringify(
+    {
+      address: activeAddress?.address ?? null,
+      alias: activeAddress?.alias ?? null,
+      totalCoinTypes: coinData?.totalCoinTypes ?? 0,
+      totalCoins: coinData?.totalCoins ?? 0,
+      balancesOnly: coinData?.balancesOnly ?? false,
+      truncated: filteredGroups.length > AI_GROUP_CAP,
+      groups: aiGroups,
+    },
+    null,
+    2
+  );
+
+  const aiMarkdown = [
+    '# Sui coin balances',
+    '',
+    `- **Address:** ${activeAddress?.alias || activeAddress?.address || 'not connected'}`,
+    `- **Coin types:** ${coinData?.totalCoinTypes ?? 0}`,
+    `- **Coin objects:** ${coinData?.balancesOnly ? 'n/a (balances only)' : (coinData?.totalCoins ?? 0)}`,
+    '',
+    '## Balances',
+    '| Symbol | Balance | Coins | Coin type |',
+    '|---|---|---|---|',
+    ...aiGroups.map(
+      (g) =>
+        `| ${g.symbol}${g.isVerified ? ' ✓' : ''} | ${g.totalBalance} | ${g.coinCount} | ${g.coinType} |`
+    ),
+    ...(filteredGroups.length > AI_GROUP_CAP
+      ? ['', `_… ${filteredGroups.length - AI_GROUP_CAP} more coin types truncated._`]
+      : []),
+  ].join('\n');
+
+  const aiPrompt = `Here are the coin balances for my Sui wallet ${
+    activeAddress?.alias || activeAddress?.address || ''
+  }:\n\n${aiMarkdown}\n\nGive me a summary of my holdings and flag anything worth attention (e.g. a large number of dust coins in one type that could be merged, or unverified coin types).`;
+
   if (!activeAddress) {
     return <div className="px-3 py-8 text-center text-muted-foreground">No address selected</div>;
   }
@@ -185,9 +234,19 @@ export function CoinList() {
             {activeAddress.alias || `${activeAddress.address.slice(0, 12)}...`}
           </button>
         </div>
-        <Badge variant="secondary">
-          {coinData.totalCoinTypes} type{coinData.totalCoinTypes !== 1 ? 's' : ''}
-        </Badge>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Badge variant="secondary">
+            {coinData.totalCoinTypes} type{coinData.totalCoinTypes !== 1 ? 's' : ''}
+          </Badge>
+          {coinData && (
+            <CopyForAiMenu
+              prompt={aiPrompt}
+              json={aiJson}
+              markdown={aiMarkdown}
+              onCopy={copyToClipboard}
+            />
+          )}
+        </div>
       </div>
 
       {/* Coin Groups */}

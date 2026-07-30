@@ -9,6 +9,7 @@ export * from './derivedObjects';
 export * from './devtools';
 export * from './environments';
 export * from './faucet';
+export * from './devstack';
 export * from './filesystem';
 export * from './inspector';
 export * from './keytool';

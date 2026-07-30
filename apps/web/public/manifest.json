@@ -35,9 +35,9 @@
       "purpose": "maskable"
     },
     {
-      "src": "/sui-logo.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
+      "src": "/sui-logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
     }
   ],
   "screenshots": [],
@@ -47,7 +47,7 @@
       "short_name": "Setup",
       "description": "Installation guide",
       "url": "/setup",
-      "icons": [{ "src": "/sui-logo.svg", "sizes": "any" }]
+      "icons": [{ "src": "/sui-logo.png", "sizes": "512x512", "type": "image/png" }]
     }
   ]
 }

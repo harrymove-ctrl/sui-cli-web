@@ -14,16 +14,19 @@ import { QuickSwitcher } from '../QuickSwitcher';
 import { Sidebar } from '../Sidebar';
 import { Spinner } from '../shared/Spinner';
 import { ShimmerSkeleton } from '@/components/unlumen-ui/shimmer-skeleton';
+import { Loader } from '@/components/ui/loader';
 import {
   SmoothScroll,
   useSmoothScroll,
 } from '@/components/unlumen-ui/scroll-animation';
+import { PixelCard } from '@/components/ui/pixel-card';
 
 const ROUTE_TITLES: Record<string, string> = {
   '/app': 'Dashboard',
   '/app/addresses': 'Manage Addresses',
   '/app/environments': 'Switch Environment',
   '/app/objects': 'My Objects',
+  '/app/packages': 'My Packages',
   '/app/gas': 'Gas Coins',
   '/app/faucet': 'Request Faucet',
 };
@@ -58,6 +61,7 @@ function ThemeToggle() {
 }
 
 export function MainLayout() {
+  const { theme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const {
@@ -139,15 +143,31 @@ export function MainLayout() {
 
   return (
     <main
-      className="h-screen w-screen bg-background overflow-hidden flex"
+      className="h-screen w-screen bg-background overflow-hidden flex relative"
       role="main"
     >
-      {/* Collapsible sidebar - a 64px icon rail when collapsed, 280px expanded.
-          Plain flex with an animated width (not a resizable panel), so toggling
-          never remounts the content area and re-fetches the current page. */}
+      {/* Animated dot-grid pixel background behind all in-app pages */}
+      <PixelCard
+        className="absolute inset-0 pointer-events-none z-0"
+        autoPlay
+        colors={
+          theme === 'dark'
+            ? ['#4da2ff', '#003f87', '#199e70']
+            : ['rgba(20,20,25,0.5)', 'rgba(77,162,255,0.35)', 'rgba(20,20,25,0.25)']
+        }
+        backgroundColor={theme === 'dark' ? '#0a0a0a' : '#ffffff'}
+        gap={14}
+        pixelSize={2.5}
+        speed={35}
+        appearFrom="middle"
+        durationMs={2000}
+      />
+      <div className="absolute inset-0 bg-gradient-to-b from-background/70 via-background/25 to-background/50 pointer-events-none z-0" />
+
+      {/* Collapsible sidebar */}
       <aside
         className={cn(
-          'flex-shrink-0 h-full border-r border-border overflow-hidden transition-[width] duration-200 ease-out',
+          'relative z-10 flex-shrink-0 h-full border-r border-border overflow-hidden transition-[width] duration-200 ease-out bg-background/80 backdrop-blur-md',
           sidebarCollapsed ? 'w-16' : 'w-[280px]'
         )}
       >
@@ -158,9 +178,9 @@ export function MainLayout() {
         />
       </aside>
 
-      <div className="flex-1 min-w-0 flex flex-col">
-          {/* Breadcrumb header */}
-          <div className="flex items-center gap-2 px-8 py-5 border-b border-border">
+      <div className="relative z-10 flex-1 min-w-0 flex flex-col">
+        {/* Breadcrumb header */}
+        <div className="flex items-center gap-2 px-8 py-5 border-b border-border bg-background/50 backdrop-blur-sm">
             {!isHome && (
               <button
                 onClick={handleBack}
@@ -235,7 +255,8 @@ export function MainLayout() {
                     <ShimmerSkeleton className="h-3 w-5/6" />
                     <ShimmerSkeleton className="h-3 w-4/6" />
                   </div>
-                  <div className="text-center pt-2 text-sm text-muted-foreground animate-pulse">
+                  <div className="flex items-center justify-center gap-2 pt-2 text-sm text-muted-foreground">
+                    <Loader variant="dots" size={16} label="Connecting" />
                     Connecting to local server...
                   </div>
                 </div>

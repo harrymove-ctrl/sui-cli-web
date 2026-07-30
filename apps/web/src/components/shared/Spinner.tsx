@@ -1,37 +1,19 @@
-import { clsx } from 'clsx';
+import { Loader } from '@/components/ui/loader';
+import { cn } from '@/lib/utils';
 
 interface SpinnerProps {
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }
 
-export function Spinner({ size = 'md', className }: SpinnerProps) {
-  const sizeClasses = {
-    sm: 'w-4 h-4',
-    md: 'w-6 h-6',
-    lg: 'w-8 h-8',
-  };
+// Preserve the original sm/md/lg API (used in ~10 places) but render the shared
+// motion Loader underneath, so every existing `<Spinner />` becomes the new
+// animated loader with no call-site changes. Colour stays `text-accent` unless a
+// caller overrides it via className (twMerge keeps the last text-* class).
+const SIZE_PX = { sm: 16, md: 24, lg: 32 } as const;
 
+export function Spinner({ size = 'md', className }: SpinnerProps) {
   return (
-    <svg
-      className={clsx('animate-spin text-accent', sizeClasses[size], className)}
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-    >
-      <circle
-        className="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-      />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      />
-    </svg>
+    <Loader variant="spinner" size={SIZE_PX[size]} className={cn('text-accent', className)} />
   );
 }

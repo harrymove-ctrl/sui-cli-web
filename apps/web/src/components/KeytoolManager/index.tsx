@@ -1,21 +1,23 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { clsx } from 'clsx';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Spinner } from '../shared/Spinner';
+import { useSearchParams } from 'react-router-dom';
 import {
-  listKeys,
-  generateKey,
-  signMessage,
+  buildTransferTransaction,
+  combineMultiSigSignatures,
   createMultiSigAddress,
   decodeTransactionKeytool,
+  executeSignedTransaction,
+  generateKey,
   generateSampleTx,
   getBalance,
-  combineMultiSigSignatures,
-  buildTransferTransaction,
-  executeSignedTransaction,
+  listKeys,
   SampleTxType,
+  signMessage,
 } from '@/api/client';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Spinner } from '../shared/Spinner';
 
 type Tab = 'keys' | 'generate' | 'sign' | 'multisig' | 'execute' | 'decode';
 
@@ -101,26 +103,27 @@ const MULTISIG_USE_CASES = [
 ];
 
 // Sample transaction types for Sign tab
-const SAMPLE_TX_TYPES: { type: SampleTxType; label: string; icon: string; description: string }[] = [
-  {
-    type: 'self-transfer',
-    label: 'Self Transfer',
-    icon: '🔄',
-    description: 'Transfer 1 MIST to yourself (safest test)',
-  },
-  {
-    type: 'split-coin',
-    label: 'Split Coin',
-    icon: '✂️',
-    description: 'Split a coin into smaller amounts',
-  },
-  {
-    type: 'merge-coins',
-    label: 'Merge Coins',
-    icon: '🔗',
-    description: 'Combine multiple coins (requires 2+ coins)',
-  },
-];
+const SAMPLE_TX_TYPES: { type: SampleTxType; label: string; icon: string; description: string }[] =
+  [
+    {
+      type: 'self-transfer',
+      label: 'Self Transfer',
+      icon: '🔄',
+      description: 'Transfer 1 MIST to yourself (safest test)',
+    },
+    {
+      type: 'split-coin',
+      label: 'Split Coin',
+      icon: '✂️',
+      description: 'Split a coin into smaller amounts',
+    },
+    {
+      type: 'merge-coins',
+      label: 'Merge Coins',
+      icon: '🔗',
+      description: 'Combine multiple coins (requires 2+ coins)',
+    },
+  ];
 
 export function KeytoolManager() {
   // URL params for tab switching
@@ -204,7 +207,9 @@ export function KeytoolManager() {
   const [buildDescription, setBuildDescription] = useState('');
   const [building, setBuilding] = useState(false);
   // Collect step - Signature collector
-  const [collectedSignatures, setCollectedSignatures] = useState<Array<{ signature: string; publicKey: string; label?: string }>>([]);
+  const [collectedSignatures, setCollectedSignatures] = useState<
+    Array<{ signature: string; publicKey: string; label?: string }>
+  >([]);
   const [newSignatureInput, setNewSignatureInput] = useState('');
   const [newSignaturePubKey, setNewSignaturePubKey] = useState('');
   const [newSignatureLabel, setNewSignatureLabel] = useState('');
@@ -215,7 +220,11 @@ export function KeytoolManager() {
   const [combinedSignature, setCombinedSignature] = useState('');
   const [combining, setCombining] = useState(false);
   const [executing, setExecuting] = useState(false);
-  const [executionResult, setExecutionResult] = useState<{ digest: string; status: string; gasUsed: string } | null>(null);
+  const [executionResult, setExecutionResult] = useState<{
+    digest: string;
+    status: string;
+    gasUsed: string;
+  } | null>(null);
 
   // Pending transactions storage
   const PENDING_TX_KEY = 'sui-cli-web:pending-multisig-tx';
@@ -281,26 +290,29 @@ export function KeytoolManager() {
   }, []);
 
   // Fetch balance for a specific address
-  const fetchBalanceForAddress = useCallback(async (address: string) => {
-    if (loadingBalances[address]) return;
+  const fetchBalanceForAddress = useCallback(
+    async (address: string) => {
+      if (loadingBalances[address]) return;
 
-    setLoadingBalances(prev => ({ ...prev, [address]: true }));
-    try {
-      const result = await getBalance(address);
-      // API already returns balance in SUI (not MIST), just use it directly
-      setHistoryBalances(prev => ({ ...prev, [address]: result.balance }));
-    } catch {
-      setHistoryBalances(prev => ({ ...prev, [address]: '0' }));
-    } finally {
-      setLoadingBalances(prev => ({ ...prev, [address]: false }));
-    }
-  }, [loadingBalances]);
+      setLoadingBalances((prev) => ({ ...prev, [address]: true }));
+      try {
+        const result = await getBalance(address);
+        // API already returns balance in SUI (not MIST), just use it directly
+        setHistoryBalances((prev) => ({ ...prev, [address]: result.balance }));
+      } catch {
+        setHistoryBalances((prev) => ({ ...prev, [address]: '0' }));
+      } finally {
+        setLoadingBalances((prev) => ({ ...prev, [address]: false }));
+      }
+    },
+    [loadingBalances]
+  );
 
   // Fetch balances when history is expanded
   useEffect(() => {
     if (showHistory && multiSigHistory.length > 0) {
       // Fetch balance for each address that we haven't loaded yet
-      multiSigHistory.forEach(item => {
+      multiSigHistory.forEach((item) => {
         if (historyBalances[item.address] === undefined && !loadingBalances[item.address]) {
           fetchBalanceForAddress(item.address);
         }
@@ -309,40 +321,43 @@ export function KeytoolManager() {
   }, [showHistory, multiSigHistory, historyBalances, loadingBalances, fetchBalanceForAddress]);
 
   // Save multi-sig to history
-  const saveToMultiSigHistory = useCallback((
-    address: string,
-    threshold: number,
-    totalSigners: number,
-    publicKeys?: string[],
-    weights?: number[]
-  ) => {
-    const newItem: MultiSigHistoryItem = {
-      address,
-      threshold,
-      totalSigners,
-      createdAt: new Date().toISOString(),
-      publicKeys,
-      weights,
-    };
-    setMultiSigHistory(prev => {
-      // Don't add duplicates
-      if (prev.some(item => item.address === address)) {
-        return prev;
-      }
-      const updated = [newItem, ...prev].slice(0, 10); // Keep last 10
-      try {
-        localStorage.setItem(MULTISIG_HISTORY_KEY, JSON.stringify(updated));
-      } catch (e) {
-        console.error('Failed to save multi-sig history:', e);
-      }
-      return updated;
-    });
-  }, []);
+  const saveToMultiSigHistory = useCallback(
+    (
+      address: string,
+      threshold: number,
+      totalSigners: number,
+      publicKeys?: string[],
+      weights?: number[]
+    ) => {
+      const newItem: MultiSigHistoryItem = {
+        address,
+        threshold,
+        totalSigners,
+        createdAt: new Date().toISOString(),
+        publicKeys,
+        weights,
+      };
+      setMultiSigHistory((prev) => {
+        // Don't add duplicates
+        if (prev.some((item) => item.address === address)) {
+          return prev;
+        }
+        const updated = [newItem, ...prev].slice(0, 10); // Keep last 10
+        try {
+          localStorage.setItem(MULTISIG_HISTORY_KEY, JSON.stringify(updated));
+        } catch (e) {
+          console.error('Failed to save multi-sig history:', e);
+        }
+        return updated;
+      });
+    },
+    []
+  );
 
   // Remove from history
   const removeFromHistory = useCallback((address: string) => {
-    setMultiSigHistory(prev => {
-      const updated = prev.filter(item => item.address !== address);
+    setMultiSigHistory((prev) => {
+      const updated = prev.filter((item) => item.address !== address);
       try {
         localStorage.setItem(MULTISIG_HISTORY_KEY, JSON.stringify(updated));
       } catch (e) {
@@ -387,7 +402,7 @@ export function KeytoolManager() {
   };
 
   // Apply threshold preset
-  const applyThresholdPreset = (preset: typeof MULTISIG_PRESETS[0]) => {
+  const applyThresholdPreset = (preset: (typeof MULTISIG_PRESETS)[0]) => {
     const newFields = [...multiSigFields];
     while (newFields.length < preset.total) {
       newFields.push({ publicKey: '', weight: 1, selectedKeyIndex: null });
@@ -471,7 +486,7 @@ export function KeytoolManager() {
   };
 
   const handleCreateMultiSig = async () => {
-    const validFields = multiSigFields.filter(f => f.publicKey.trim());
+    const validFields = multiSigFields.filter((f) => f.publicKey.trim());
     if (validFields.length < 2) {
       toast.error('At least 2 public keys are required');
       return;
@@ -485,8 +500,8 @@ export function KeytoolManager() {
     setCreatingMultiSig(true);
     try {
       const result = await createMultiSigAddress(
-        validFields.map(f => f.publicKey),
-        validFields.map(f => f.weight),
+        validFields.map((f) => f.publicKey),
+        validFields.map((f) => f.weight),
         threshold
       );
       setMultiSigAddress(result.address);
@@ -495,8 +510,8 @@ export function KeytoolManager() {
         result.address,
         threshold,
         validFields.length,
-        validFields.map(f => f.publicKey),
-        validFields.map(f => f.weight)
+        validFields.map((f) => f.publicKey),
+        validFields.map((f) => f.weight)
       );
       toast.success('Multi-sig address created');
     } catch (error) {
@@ -538,8 +553,8 @@ export function KeytoolManager() {
 
   // Save pending transaction
   const savePendingTransaction = useCallback((tx: PendingTransaction) => {
-    setPendingTransactions(prev => {
-      const updated = [tx, ...prev.filter(t => t.id !== tx.id)].slice(0, 20);
+    setPendingTransactions((prev) => {
+      const updated = [tx, ...prev.filter((t) => t.id !== tx.id)].slice(0, 20);
       try {
         localStorage.setItem(PENDING_TX_KEY, JSON.stringify(updated));
       } catch (e) {
@@ -550,21 +565,24 @@ export function KeytoolManager() {
   }, []);
 
   // Remove pending transaction
-  const removePendingTransaction = useCallback((id: string) => {
-    setPendingTransactions(prev => {
-      const updated = prev.filter(t => t.id !== id);
-      try {
-        localStorage.setItem(PENDING_TX_KEY, JSON.stringify(updated));
-      } catch (e) {
-        console.error('Failed to save pending transactions:', e);
+  const removePendingTransaction = useCallback(
+    (id: string) => {
+      setPendingTransactions((prev) => {
+        const updated = prev.filter((t) => t.id !== id);
+        try {
+          localStorage.setItem(PENDING_TX_KEY, JSON.stringify(updated));
+        } catch (e) {
+          console.error('Failed to save pending transactions:', e);
+        }
+        return updated;
+      });
+      if (selectedPendingTx === id) {
+        setSelectedPendingTx(null);
       }
-      return updated;
-    });
-    if (selectedPendingTx === id) {
-      setSelectedPendingTx(null);
-    }
-    toast.success('Transaction removed');
-  }, [selectedPendingTx]);
+      toast.success('Transaction removed');
+    },
+    [selectedPendingTx]
+  );
 
   // Build transfer transaction
   const handleBuildTransfer = async () => {
@@ -586,7 +604,7 @@ export function KeytoolManager() {
       setBuildDescription(result.description);
 
       // Check if from address is from multi-sig history
-      const historyItem = multiSigHistory.find(h => h.address === buildFromAddress);
+      const historyItem = multiSigHistory.find((h) => h.address === buildFromAddress);
 
       // Get publicKeys, weights, threshold from history or current form
       let txPublicKeys: string[] = [];
@@ -600,8 +618,8 @@ export function KeytoolManager() {
         txThreshold = historyItem.threshold;
       } else {
         // Fallback to current form
-        txPublicKeys = multiSigFields.filter(f => f.publicKey.trim()).map(f => f.publicKey);
-        txWeights = multiSigFields.filter(f => f.publicKey.trim()).map(f => f.weight);
+        txPublicKeys = multiSigFields.filter((f) => f.publicKey.trim()).map((f) => f.publicKey);
+        txWeights = multiSigFields.filter((f) => f.publicKey.trim()).map((f) => f.weight);
       }
 
       // Auto-create pending transaction
@@ -641,7 +659,7 @@ export function KeytoolManager() {
     }
 
     // Check for duplicate
-    if (collectedSignatures.some(s => s.signature === newSignatureInput)) {
+    if (collectedSignatures.some((s) => s.signature === newSignatureInput)) {
       toast.error('This signature is already added');
       return;
     }
@@ -652,14 +670,14 @@ export function KeytoolManager() {
       label: newSignatureLabel.trim() || undefined,
     };
 
-    setCollectedSignatures(prev => [...prev, newSig]);
+    setCollectedSignatures((prev) => [...prev, newSig]);
     setNewSignatureInput('');
     setNewSignaturePubKey('');
     setNewSignatureLabel('');
 
     // Update pending transaction
     if (selectedPendingTx) {
-      const pendingTx = pendingTransactions.find(t => t.id === selectedPendingTx);
+      const pendingTx = pendingTransactions.find((t) => t.id === selectedPendingTx);
       if (pendingTx) {
         savePendingTransaction({
           ...pendingTx,
@@ -673,11 +691,11 @@ export function KeytoolManager() {
 
   // Remove signature from collection
   const handleRemoveSignature = (index: number) => {
-    setCollectedSignatures(prev => prev.filter((_, i) => i !== index));
+    setCollectedSignatures((prev) => prev.filter((_, i) => i !== index));
 
     // Update pending transaction
     if (selectedPendingTx) {
-      const pendingTx = pendingTransactions.find(t => t.id === selectedPendingTx);
+      const pendingTx = pendingTransactions.find((t) => t.id === selectedPendingTx);
       if (pendingTx) {
         savePendingTransaction({
           ...pendingTx,
@@ -690,7 +708,9 @@ export function KeytoolManager() {
   // Combine signatures
   const handleCombineSignatures = async () => {
     if (collectedSignatures.length < combineThreshold) {
-      toast.error(`Need at least ${combineThreshold} signatures (have ${collectedSignatures.length})`);
+      toast.error(
+        `Need at least ${combineThreshold} signatures (have ${collectedSignatures.length})`
+      );
       return;
     }
 
@@ -705,7 +725,7 @@ export function KeytoolManager() {
         combinePublicKeys,
         combineWeights,
         combineThreshold,
-        collectedSignatures.map(s => s.signature)
+        collectedSignatures.map((s) => s.signature)
       );
       setCombinedSignature(result.combinedSignature);
       toast.success('Signatures combined successfully!');
@@ -832,7 +852,11 @@ export function KeytoolManager() {
     }
   };
 
-  const updateMultiSigField = (index: number, field: 'publicKey' | 'weight', value: string | number) => {
+  const updateMultiSigField = (
+    index: number,
+    field: 'publicKey' | 'weight',
+    value: string | number
+  ) => {
     const updated = [...multiSigFields];
     updated[index] = {
       ...updated[index],
@@ -842,8 +866,8 @@ export function KeytoolManager() {
     setMultiSigFields(updated);
   };
 
-  const validKeyCount = useMemo(() =>
-    multiSigFields.filter(f => f.publicKey.trim()).length,
+  const validKeyCount = useMemo(
+    () => multiSigFields.filter((f) => f.publicKey.trim()).length,
     [multiSigFields]
   );
 
@@ -852,42 +876,113 @@ export function KeytoolManager() {
     { id: 'generate' as Tab, label: 'Generate', icon: '✨' },
     { id: 'sign' as Tab, label: 'Sign', icon: '✍️' },
     { id: 'multisig' as Tab, label: 'Multi-Sig', icon: '👥' },
-    { id: 'execute' as Tab, label: 'Execute', icon: '🚀', badge: pendingTransactions.length > 0 ? pendingTransactions.length : undefined },
+    {
+      id: 'execute' as Tab,
+      label: 'Execute',
+      icon: '🚀',
+      badge: pendingTransactions.length > 0 ? pendingTransactions.length : undefined,
+    },
     { id: 'decode' as Tab, label: 'Decode', icon: '🔍' },
   ];
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied`);
+  };
+
+  // Non-sensitive snapshot for AI export. Only PUBLIC key material is included:
+  // addresses, public keys, schemes/aliases, multisig threshold + participant
+  // public keys, and public decode results. NEVER any private key, mnemonic,
+  // or signature material.
+  const aiSnapshot = {
+    activeTab,
+    keys: keys.map((k) => ({
+      alias: k.alias ?? null,
+      address: k.suiAddress,
+      publicKey: k.publicBase64Key,
+      keyScheme: k.keyScheme,
+    })),
+    multisig: {
+      threshold,
+      participants: multiSigFields.map((f) => ({ publicKey: f.publicKey, weight: f.weight })),
+      address: multiSigAddress || null,
+    },
+    decodeResult: decodedResult?.decoded ?? null,
+  };
+
+  const aiJson = JSON.stringify(aiSnapshot, null, 2);
+
+  const aiMarkdown = [
+    '# Sui Key Management',
+    '',
+    `- **Active tab:** ${activeTab}`,
+    '',
+    '## Keys (public data only)',
+    keys.length
+      ? [
+          '| Alias | Address | Scheme |',
+          '|---|---|---|',
+          ...keys.map((k) => `| ${k.alias ?? '—'} | ${k.suiAddress} | ${k.keyScheme} |`),
+        ].join('\n')
+      : '_No keys loaded._',
+    '',
+    '## Multi-sig',
+    `- **Threshold:** ${threshold}`,
+    `- **Address:** ${multiSigAddress || 'not created'}`,
+    multiSigFields.some((f) => f.publicKey)
+      ? [
+          '',
+          '| Participant public key | Weight |',
+          '|---|---|',
+          ...multiSigFields.map((f) => `| ${f.publicKey || '—'} | ${f.weight} |`),
+        ].join('\n')
+      : '',
+    '',
+    '## Decode result',
+    decodedResult?.decoded
+      ? `\`\`\`json\n${JSON.stringify(decodedResult.decoded, null, 2)}\n\`\`\``
+      : '_Nothing decoded yet._',
+  ].join('\n');
+
+  const aiPrompt = `Here's the current state of my Sui key management session (public data only, no secrets):\n\n${aiMarkdown}\n\nHelp me review my keys and multi-sig setup, and explain anything that looks worth attention.`;
 
   return (
     <div className="px-2 py-2">
       {/* Header */}
-      <div className="mb-4 px-3">
+      <div className="mb-4 px-3 flex items-center justify-between gap-2">
         <h2 className="text-xl font-bold text-foreground mb-1">Key Management</h2>
-        <p className="text-sm text-muted-foreground">
-          Generate keys, sign messages, create multi-sig addresses
-        </p>
+        <CopyForAiMenu
+          prompt={aiPrompt}
+          json={aiJson}
+          markdown={aiMarkdown}
+          onCopy={copyToClipboard}
+        />
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-4 px-3 overflow-x-auto">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => handleTabChange(tab.id)}
-            className={clsx(
-              'px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap relative',
-              activeTab === tab.id
-                ? 'bg-accent text-accent-foreground shadow-lg'
-                : 'bg-card/30 text-muted-foreground hover:bg-card/50 hover:text-foreground'
-            )}
-          >
-            <span>{tab.icon}</span>
-            <span>{tab.label}</span>
-            {'badge' in tab && tab.badge && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
-                {tab.badge}
-              </span>
-            )}
-          </button>
-        ))}
+      <div className="mb-4 px-3 space-y-1.5">
+        <Tabs value={activeTab} onValueChange={(v) => handleTabChange(v as Tab)} className="w-full">
+          <TabsList>
+            {tabs.map((tab) => (
+              <TabsTrigger
+                key={tab.id}
+                value={tab.id}
+                icon={<span>{tab.icon}</span>}
+                badge={tab.badge}
+              >
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+        <p className="px-1 text-xs text-muted-foreground">
+          {activeTab === 'keys' && 'List keys in your local keystore'}
+          {activeTab === 'generate' && 'Create a new keypair'}
+          {activeTab === 'sign' && 'Sign a message or transaction with a local key'}
+          {activeTab === 'multisig' && 'Build a multisig address from public keys'}
+          {activeTab === 'execute' && 'Execute a signed transaction'}
+          {activeTab === 'decode' && "Decode a signed transaction's contents"}
+        </p>
       </div>
 
       {/* Tab Content */}
@@ -943,8 +1038,18 @@ export function KeytoolManager() {
                             className="p-1 hover:bg-background-active rounded transition-colors"
                             title="Copy address"
                           >
-                            <svg className="w-3 h-3 text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            <svg
+                              className="w-3 h-3 text-tertiary"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                              />
                             </svg>
                           </button>
                         </div>
@@ -965,8 +1070,18 @@ export function KeytoolManager() {
                           className="p-1 hover:bg-background-active rounded transition-colors"
                           title="Copy public key"
                         >
-                          <svg className="w-3 h-3 text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          <svg
+                            className="w-3 h-3 text-tertiary"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                            />
                           </svg>
                         </button>
                       </div>
@@ -994,21 +1109,29 @@ export function KeytoolManager() {
             {!generatedKey || mnemonicAcknowledged ? (
               <>
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">Key Scheme</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Key Scheme
+                  </label>
                   <select
                     value={keyScheme}
-                    onChange={(e) => setKeyScheme(e.target.value as 'ed25519' | 'secp256k1' | 'secp256r1')}
+                    onChange={(e) =>
+                      setKeyScheme(e.target.value as 'ed25519' | 'secp256k1' | 'secp256r1')
+                    }
                     className="w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground focus:outline-none focus:border-accent/50 transition-colors"
                   >
                     <option value="ed25519">Ed25519 (Recommended)</option>
                     <option value="secp256k1">Secp256k1</option>
                     <option value="secp256r1">Secp256r1</option>
                   </select>
-                  <p className="mt-1 text-xs text-tertiary">Ed25519 is recommended for most use cases</p>
+                  <p className="mt-1 text-xs text-tertiary">
+                    Ed25519 is recommended for most use cases
+                  </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">Mnemonic Word Length</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Mnemonic Word Length
+                  </label>
                   <select
                     value={wordLength}
                     onChange={(e) => setWordLength(Number(e.target.value))}
@@ -1035,8 +1158,12 @@ export function KeytoolManager() {
                     <div className="flex items-start gap-2 mb-3">
                       <span className="text-green-400 text-lg">✓</span>
                       <div>
-                        <h4 className="text-sm font-medium text-green-400 mb-1">Key Generated Successfully</h4>
-                        <p className="text-xs text-muted-foreground">Your key has been added to the keystore</p>
+                        <h4 className="text-sm font-medium text-green-400 mb-1">
+                          Key Generated Successfully
+                        </h4>
+                        <p className="text-xs text-muted-foreground">
+                          Your key has been added to the keystore
+                        </p>
                       </div>
                     </div>
 
@@ -1044,24 +1171,67 @@ export function KeytoolManager() {
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-medium text-tertiary">Address</span>
-                          <button onClick={() => { navigator.clipboard.writeText(generatedKey.address); toast.success('Address copied'); }} className="p-1 hover:bg-background-active rounded transition-colors">
-                            <svg className="w-3 h-3 text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(generatedKey.address);
+                              toast.success('Address copied');
+                            }}
+                            className="p-1 hover:bg-background-active rounded transition-colors"
+                          >
+                            <svg
+                              className="w-3 h-3 text-tertiary"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                              />
+                            </svg>
                           </button>
                         </div>
-                        <div className="font-mono text-xs text-foreground break-all">{generatedKey.address}</div>
+                        <div className="font-mono text-xs text-foreground break-all">
+                          {generatedKey.address}
+                        </div>
                       </div>
 
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-medium text-tertiary">Public Key</span>
-                          <button onClick={() => { navigator.clipboard.writeText(generatedKey.publicKey); toast.success('Public key copied'); }} className="p-1 hover:bg-background-active rounded transition-colors">
-                            <svg className="w-3 h-3 text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(generatedKey.publicKey);
+                              toast.success('Public key copied');
+                            }}
+                            className="p-1 hover:bg-background-active rounded transition-colors"
+                          >
+                            <svg
+                              className="w-3 h-3 text-tertiary"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                              />
+                            </svg>
                           </button>
                         </div>
-                        <div className="font-mono text-xs text-muted-foreground break-all">{generatedKey.publicKey}</div>
+                        <div className="font-mono text-xs text-muted-foreground break-all">
+                          {generatedKey.publicKey}
+                        </div>
                       </div>
 
-                      <button onClick={() => setGeneratedKey(null)} className="w-full px-4 py-2 bg-accent/10 hover:bg-accent/20 text-accent rounded-lg text-sm font-medium transition-colors">
+                      <button
+                        onClick={() => setGeneratedKey(null)}
+                        className="w-full px-4 py-2 bg-accent/10 hover:bg-accent/20 text-accent rounded-lg text-sm font-medium transition-colors"
+                      >
                         Generate Another Key
                       </button>
                     </div>
@@ -1073,8 +1243,13 @@ export function KeytoolManager() {
                 <div className="flex items-start gap-2 mb-3">
                   <span className="text-yellow-400 text-xl">⚠️</span>
                   <div>
-                    <h4 className="text-sm font-medium text-yellow-400 mb-1">IMPORTANT: Save Your Recovery Phrase</h4>
-                    <p className="text-xs text-muted-foreground">This recovery phrase will only be shown ONCE. Store it in a secure location. Anyone with this phrase can access your account.</p>
+                    <h4 className="text-sm font-medium text-yellow-400 mb-1">
+                      IMPORTANT: Save Your Recovery Phrase
+                    </h4>
+                    <p className="text-xs text-muted-foreground">
+                      This recovery phrase will only be shown ONCE. Store it in a secure location.
+                      Anyone with this phrase can access your account.
+                    </p>
                   </div>
                 </div>
 
@@ -1082,8 +1257,23 @@ export function KeytoolManager() {
                   <div className="mb-4">
                     <div className="mb-2 flex items-center justify-between">
                       <span className="text-xs font-medium text-foreground">Recovery Phrase</span>
-                      <button onClick={handleCopyMnemonic} className="px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent rounded text-xs font-medium transition-colors flex items-center gap-1">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                      <button
+                        onClick={handleCopyMnemonic}
+                        className="px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent rounded text-xs font-medium transition-colors flex items-center gap-1"
+                      >
+                        <svg
+                          className="w-3 h-3"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                          />
+                        </svg>
                         Copy
                       </button>
                     </div>
@@ -1096,13 +1286,20 @@ export function KeytoolManager() {
                 <div className="space-y-3">
                   <div>
                     <span className="text-xs font-medium text-tertiary">Address</span>
-                    <div className="font-mono text-xs text-foreground mt-1 break-all">{generatedKey.address}</div>
+                    <div className="font-mono text-xs text-foreground mt-1 break-all">
+                      {generatedKey.address}
+                    </div>
                   </div>
                   <div>
                     <span className="text-xs font-medium text-tertiary">Public Key</span>
-                    <div className="font-mono text-xs text-muted-foreground mt-1 break-all">{generatedKey.publicKey}</div>
+                    <div className="font-mono text-xs text-muted-foreground mt-1 break-all">
+                      {generatedKey.publicKey}
+                    </div>
                   </div>
-                  <button onClick={handleAcknowledgeMnemonic} className="w-full px-4 py-2.5 bg-yellow-500 hover:bg-yellow-600 text-black rounded-lg text-sm font-medium transition-colors">
+                  <button
+                    onClick={handleAcknowledgeMnemonic}
+                    className="w-full px-4 py-2.5 bg-yellow-500 hover:bg-yellow-600 text-black rounded-lg text-sm font-medium transition-colors"
+                  >
                     I have saved my recovery phrase
                   </button>
                 </div>
@@ -1120,14 +1317,23 @@ export function KeytoolManager() {
                 <span className="text-blue-400">ℹ️</span>
                 <div className="text-xs text-muted-foreground">
                   <p className="font-medium text-blue-400 mb-1">Sign Transaction Data</p>
-                  <p>Sign BCS-serialized transaction bytes with your private key. Get transaction bytes from <code className="px-1 bg-secondary rounded">sui client tx-block --serialize</code> or build them programmatically.</p>
+                  <p>
+                    Sign BCS-serialized transaction bytes with your private key. Get transaction
+                    bytes from{' '}
+                    <code className="px-1 bg-secondary rounded">
+                      sui client tx-block --serialize
+                    </code>{' '}
+                    or build them programmatically.
+                  </p>
                 </div>
               </div>
             </div>
 
             {/* Key Selector */}
             <div>
-              <label className="block text-sm font-medium text-foreground mb-2">Select Signer</label>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Select Signer
+              </label>
 
               {keys.length > 0 && !useManualSignAddress ? (
                 <>
@@ -1146,7 +1352,13 @@ export function KeytoolManager() {
                       </option>
                     ))}
                   </select>
-                  <button onClick={() => { setUseManualSignAddress(true); setSelectedSignKeyIndex(null); }} className="mt-2 text-xs text-accent hover:underline">
+                  <button
+                    onClick={() => {
+                      setUseManualSignAddress(true);
+                      setSelectedSignKeyIndex(null);
+                    }}
+                    className="mt-2 text-xs text-accent hover:underline"
+                  >
                     Or enter address manually →
                   </button>
                 </>
@@ -1160,7 +1372,10 @@ export function KeytoolManager() {
                     className="w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-accent/50 transition-colors font-mono"
                   />
                   {keys.length > 0 && (
-                    <button onClick={() => setUseManualSignAddress(false)} className="mt-2 text-xs text-accent hover:underline">
+                    <button
+                      onClick={() => setUseManualSignAddress(false)}
+                      className="mt-2 text-xs text-accent hover:underline"
+                    >
                       ← Select from keystore
                     </button>
                   )}
@@ -1171,7 +1386,9 @@ export function KeytoolManager() {
                 <div className="mt-2 p-2 bg-card/50 rounded border border-border/30">
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-tertiary">Selected:</span>
-                    <span className="font-mono text-xs text-foreground">{keys[selectedSignKeyIndex].suiAddress}</span>
+                    <span className="font-mono text-xs text-foreground">
+                      {keys[selectedSignKeyIndex].suiAddress}
+                    </span>
                   </div>
                 </div>
               )}
@@ -1180,7 +1397,9 @@ export function KeytoolManager() {
             {/* Sample Transaction Generator */}
             <div className="p-3 bg-card/30 rounded-lg">
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-sm font-medium text-foreground">⚡ Generate Sample Transaction</span>
+                <span className="text-sm font-medium text-foreground">
+                  ⚡ Generate Sample Transaction
+                </span>
                 <span className="text-xs text-tertiary">(for testing)</span>
               </div>
 
@@ -1225,10 +1444,15 @@ export function KeytoolManager() {
 
             {/* Transaction Bytes */}
             <div>
-              <label className="block text-sm font-medium text-foreground mb-2">Transaction Bytes (Base64)</label>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Transaction Bytes (Base64)
+              </label>
               <textarea
                 value={signData}
-                onChange={(e) => { setSignData(e.target.value); setSampleDescription(''); }}
+                onChange={(e) => {
+                  setSignData(e.target.value);
+                  setSampleDescription('');
+                }}
                 placeholder="Enter Base64 encoded transaction bytes, or click a sample type above to generate one..."
                 rows={4}
                 className="w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-accent/50 transition-colors font-mono"
@@ -1245,7 +1469,9 @@ export function KeytoolManager() {
               {/* Tip */}
               <div className="mt-2 text-xs text-tertiary">
                 <span className="font-medium">Manual:</span> Get TX bytes using{' '}
-                <code className="px-1 py-0.5 bg-secondary rounded text-muted-foreground">sui client transfer-sui --serialize-unsigned-transaction</code>
+                <code className="px-1 py-0.5 bg-secondary rounded text-muted-foreground">
+                  sui client transfer-sui --serialize-unsigned-transaction
+                </code>
               </div>
             </div>
 
@@ -1261,8 +1487,21 @@ export function KeytoolManager() {
               <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-green-400">✓ Signature Created</span>
-                  <button onClick={() => { navigator.clipboard.writeText(signature); toast.success('Signature copied'); }} className="px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent rounded text-xs font-medium transition-colors flex items-center gap-1">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(signature);
+                      toast.success('Signature copied');
+                    }}
+                    className="px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent rounded text-xs font-medium transition-colors flex items-center gap-1"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                      />
+                    </svg>
                     Copy
                   </button>
                 </div>
@@ -1281,14 +1520,15 @@ export function KeytoolManager() {
             <div className="flex items-center gap-1 px-1 py-2 overflow-x-auto">
               {MULTISIG_FLOW_STEPS.map((step, idx) => (
                 <div key={step.step} className="flex items-center">
-                  <div
-                    className="group relative"
-                    title={step.hint}
-                  >
-                    <div className={clsx(
-                      'flex items-center gap-1 px-2 py-1 rounded text-xs transition-all cursor-default',
-                      step.step === 1 ? 'bg-accent/20 text-accent' : 'text-tertiary hover:text-muted-foreground'
-                    )}>
+                  <div className="group relative" title={step.hint}>
+                    <div
+                      className={clsx(
+                        'flex items-center gap-1 px-2 py-1 rounded text-xs transition-all cursor-default',
+                        step.step === 1
+                          ? 'bg-accent/20 text-accent'
+                          : 'text-tertiary hover:text-muted-foreground'
+                      )}
+                    >
                       <span className="font-mono">{step.step}</span>
                       <span className="hidden sm:inline">{step.title}</span>
                     </div>
@@ -1324,7 +1564,9 @@ export function KeytoolManager() {
                       key={useCase.id}
                       onClick={() => {
                         if (!hasEnoughKeys && keys.length === 0) {
-                          toast.error('No keys in keystore. Generate keys first in the "Generate" tab.');
+                          toast.error(
+                            'No keys in keystore. Generate keys first in the "Generate" tab.'
+                          );
                           return;
                         }
                         // Create fields for this use case, fill with available keys
@@ -1339,9 +1581,13 @@ export function KeytoolManager() {
                         setMultiSigFields(newFields);
                         setThreshold(useCase.threshold);
                         if (hasEnoughKeys) {
-                          toast.success(`Applied ${useCase.label} template with ${keysToFill} keys`);
+                          toast.success(
+                            `Applied ${useCase.label} template with ${keysToFill} keys`
+                          );
                         } else {
-                          toast.success(`Applied ${useCase.label} template (${keysToFill}/${useCase.signers} keys filled)`);
+                          toast.success(
+                            `Applied ${useCase.label} template (${keysToFill}/${useCase.signers} keys filled)`
+                          );
                         }
                       }}
                       className={clsx(
@@ -1352,12 +1598,18 @@ export function KeytoolManager() {
                       )}
                     >
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium text-foreground group-hover:text-accent">{useCase.label}</span>
+                        <span className="text-sm font-medium text-foreground group-hover:text-accent">
+                          {useCase.label}
+                        </span>
                         {!hasEnoughKeys && (
-                          <span className="text-xs text-yellow-400/80">need {useCase.signers} keys</span>
+                          <span className="text-xs text-yellow-400/80">
+                            need {useCase.signers} keys
+                          </span>
                         )}
                       </div>
-                      <div className="text-xs text-muted-foreground mb-2">{useCase.description}</div>
+                      <div className="text-xs text-muted-foreground mb-2">
+                        {useCase.description}
+                      </div>
                       <div className="text-xs text-tertiary italic">{useCase.tip}</div>
                     </button>
                   );
@@ -1375,22 +1627,37 @@ export function KeytoolManager() {
             {keys.length >= 2 && (
               <div className="p-3 bg-card/30 rounded-lg">
                 <div className="flex items-center justify-between flex-wrap gap-2">
-                  <span className="text-xs text-tertiary font-medium">⚡ Quick Fill from Keystore:</span>
+                  <span className="text-xs text-tertiary font-medium">
+                    ⚡ Quick Fill from Keystore:
+                  </span>
                   <div className="flex flex-wrap gap-2">
-                    <button onClick={() => quickFillMultiSig(2)} className="px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent rounded text-xs font-medium transition-colors" disabled={keys.length < 2}>
+                    <button
+                      onClick={() => quickFillMultiSig(2)}
+                      className="px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent rounded text-xs font-medium transition-colors"
+                      disabled={keys.length < 2}
+                    >
                       First 2 keys
                     </button>
                     {keys.length >= 3 && (
-                      <button onClick={() => quickFillMultiSig(3)} className="px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent rounded text-xs font-medium transition-colors">
+                      <button
+                        onClick={() => quickFillMultiSig(3)}
+                        className="px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent rounded text-xs font-medium transition-colors"
+                      >
                         First 3 keys
                       </button>
                     )}
                     {keys.length >= 5 && (
-                      <button onClick={() => quickFillMultiSig(5)} className="px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent rounded text-xs font-medium transition-colors">
+                      <button
+                        onClick={() => quickFillMultiSig(5)}
+                        className="px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent rounded text-xs font-medium transition-colors"
+                      >
                         First 5 keys
                       </button>
                     )}
-                    <button onClick={() => quickFillMultiSig(keys.length)} className="px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent rounded text-xs font-medium transition-colors">
+                    <button
+                      onClick={() => quickFillMultiSig(keys.length)}
+                      className="px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent rounded text-xs font-medium transition-colors"
+                    >
                       All {keys.length} keys
                     </button>
                   </div>
@@ -1401,9 +1668,21 @@ export function KeytoolManager() {
             {/* Signers */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-foreground">Signers ({validKeyCount} configured)</label>
-                <button onClick={addMultiSigField} className="px-3 py-1 bg-accent/10 hover:bg-accent/20 text-accent rounded text-xs font-medium transition-colors flex items-center gap-1">
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                <label className="text-sm font-medium text-foreground">
+                  Signers ({validKeyCount} configured)
+                </label>
+                <button
+                  onClick={addMultiSigField}
+                  className="px-3 py-1 bg-accent/10 hover:bg-accent/20 text-accent rounded text-xs font-medium transition-colors flex items-center gap-1"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 4v16m8-8H4"
+                    />
+                  </svg>
                   Add Signer
                 </button>
               </div>
@@ -1412,10 +1691,28 @@ export function KeytoolManager() {
                 {multiSigFields.map((field, index) => (
                   <div key={index} className="p-3 bg-card/30 border border-border/30 rounded-lg">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium text-muted-foreground">Signer {index + 1}</span>
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Signer {index + 1}
+                      </span>
                       {multiSigFields.length > 2 && (
-                        <button onClick={() => removeMultiSigField(index)} className="p-1 hover:bg-red-500/10 text-red-400 rounded transition-colors" title="Remove signer">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        <button
+                          onClick={() => removeMultiSigField(index)}
+                          className="p-1 hover:bg-red-500/10 text-red-400 rounded transition-colors"
+                          title="Remove signer"
+                        >
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M6 18L18 6M6 6l12 12"
+                            />
+                          </svg>
                         </button>
                       )}
                     </div>
@@ -1453,7 +1750,9 @@ export function KeytoolManager() {
                           type="number"
                           min="1"
                           value={field.weight}
-                          onChange={(e) => updateMultiSigField(index, 'weight', Number(e.target.value))}
+                          onChange={(e) =>
+                            updateMultiSigField(index, 'weight', Number(e.target.value))
+                          }
                           className="w-16 px-2 py-2 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground focus:outline-none focus:border-accent/50 transition-colors text-center"
                         />
                       </div>
@@ -1465,7 +1764,9 @@ export function KeytoolManager() {
 
             {/* Threshold */}
             <div>
-              <label className="block text-sm font-medium text-foreground mb-2">Threshold Configuration</label>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Threshold Configuration
+              </label>
               <div className="p-3 bg-card/30 rounded-lg">
                 <div className="flex items-center gap-3 mb-3">
                   <span className="text-sm text-muted-foreground">Require</span>
@@ -1477,8 +1778,17 @@ export function KeytoolManager() {
                     onChange={(e) => setThreshold(Number(e.target.value))}
                     className="w-16 px-2 py-1.5 bg-secondary/50 border border-border/50 rounded text-sm text-foreground focus:outline-none focus:border-accent/50 transition-colors text-center"
                   />
-                  <span className="text-sm text-muted-foreground">of {validKeyCount} signatures</span>
-                  <span className="text-xs text-tertiary">(total weight: {multiSigFields.reduce((sum, f) => sum + (f.publicKey.trim() ? f.weight : 0), 0)})</span>
+                  <span className="text-sm text-muted-foreground">
+                    of {validKeyCount} signatures
+                  </span>
+                  <span className="text-xs text-tertiary">
+                    (total weight:{' '}
+                    {multiSigFields.reduce(
+                      (sum, f) => sum + (f.publicKey.trim() ? f.weight : 0),
+                      0
+                    )}
+                    )
+                  </span>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -1514,9 +1824,29 @@ export function KeytoolManager() {
                 {/* Created Address */}
                 <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-green-400">✓ Multi-Sig Address Created</span>
-                    <button onClick={() => { navigator.clipboard.writeText(multiSigAddress); toast.success('Address copied'); }} className="px-2 py-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded text-xs font-medium transition-colors flex items-center gap-1">
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                    <span className="text-sm font-medium text-green-400">
+                      ✓ Multi-Sig Address Created
+                    </span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(multiSigAddress);
+                        toast.success('Address copied');
+                      }}
+                      className="px-2 py-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded text-xs font-medium transition-colors flex items-center gap-1"
+                    >
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                        />
+                      </svg>
                       Copy
                     </button>
                   </div>
@@ -1524,7 +1854,11 @@ export function KeytoolManager() {
                     {multiSigAddress}
                   </div>
                   <p className="mt-2 text-xs text-tertiary">
-                    Requires <span className="text-accent font-medium">{threshold} of {validKeyCount}</span> signatures
+                    Requires{' '}
+                    <span className="text-accent font-medium">
+                      {threshold} of {validKeyCount}
+                    </span>{' '}
+                    signatures
                   </p>
                 </div>
 
@@ -1532,18 +1866,23 @@ export function KeytoolManager() {
                 <div className="p-3 bg-card/50 border border-border/30 rounded-lg">
                   <p className="text-sm font-medium text-foreground mb-2">How to Use Multi-Sig</p>
                   <p className="text-xs text-tertiary mb-3">
-                    Multi-sig requires <span className="text-accent font-medium">{threshold}</span> out of <span className="text-accent font-medium">{validKeyCount}</span> signers to approve any transaction.
+                    Multi-sig requires <span className="text-accent font-medium">{threshold}</span>{' '}
+                    out of <span className="text-accent font-medium">{validKeyCount}</span> signers
+                    to approve any transaction.
                   </p>
 
                   <div className="space-y-3">
                     {/* Step 1: Fund - Most Important */}
                     <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold">1</span>
+                        <span className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold">
+                          1
+                        </span>
                         <span className="text-sm font-medium text-blue-400">Fund the Address</span>
                       </div>
                       <p className="text-xs text-tertiary mb-2">
-                        Before you can use this multi-sig, you need SUI for gas fees. Get testnet tokens:
+                        Before you can use this multi-sig, you need SUI for gas fees. Get testnet
+                        tokens:
                       </p>
                       <a
                         href={`/app/faucet?address=${multiSigAddress}`}
@@ -1556,29 +1895,43 @@ export function KeytoolManager() {
                     {/* Step 2: Build TX */}
                     <div className="p-3 bg-card/30 border border-border/20 rounded-lg">
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="w-5 h-5 rounded-full bg-yellow-500/80 text-black flex items-center justify-center text-xs font-bold">2</span>
-                        <span className="text-sm font-medium text-yellow-400">Create Transaction</span>
+                        <span className="w-5 h-5 rounded-full bg-yellow-500/80 text-black flex items-center justify-center text-xs font-bold">
+                          2
+                        </span>
+                        <span className="text-sm font-medium text-yellow-400">
+                          Create Transaction
+                        </span>
                       </div>
                       <p className="text-xs text-tertiary mb-2">
-                        Build an unsigned transaction. The key is to add <code className="px-1 bg-secondary rounded text-yellow-300">--serialize-unsigned-transaction</code>
+                        Build an unsigned transaction. The key is to add{' '}
+                        <code className="px-1 bg-secondary rounded text-yellow-300">
+                          --serialize-unsigned-transaction
+                        </code>
                       </p>
                       <div className="p-2 bg-secondary rounded font-mono text-xs text-muted-foreground overflow-x-auto">
-                        sui client transfer-sui --to 0x... --sui-coin-object-id 0x... --amount 1000000000 --gas-budget 10000000 --serialize-unsigned-transaction
+                        sui client transfer-sui --to 0x... --sui-coin-object-id 0x... --amount
+                        1000000000 --gas-budget 10000000 --serialize-unsigned-transaction
                       </div>
                       <p className="text-xs text-tertiary mt-1.5 flex items-center gap-1">
-                        <span>💡</span> This outputs base64-encoded TX bytes that all signers will sign.
+                        <span>💡</span> This outputs base64-encoded TX bytes that all signers will
+                        sign.
                       </p>
                     </div>
 
                     {/* Step 3: Sign */}
                     <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="w-5 h-5 rounded-full bg-purple-500 text-white flex items-center justify-center text-xs font-bold">3</span>
-                        <span className="text-sm font-medium text-purple-400">Collect {threshold} Signatures</span>
+                        <span className="w-5 h-5 rounded-full bg-purple-500 text-white flex items-center justify-center text-xs font-bold">
+                          3
+                        </span>
+                        <span className="text-sm font-medium text-purple-400">
+                          Collect {threshold} Signatures
+                        </span>
                       </div>
                       <p className="text-xs text-tertiary mb-2">
-                        Each signer uses the <strong>Sign tab</strong> to sign the <span className="text-yellow-400">SAME TX bytes</span>.
-                        You need at least {threshold} signatures.
+                        Each signer uses the <strong>Sign tab</strong> to sign the{' '}
+                        <span className="text-yellow-400">SAME TX bytes</span>. You need at least{' '}
+                        {threshold} signatures.
                       </p>
                       <button
                         onClick={() => setActiveTab('sign')}
@@ -1591,15 +1944,20 @@ export function KeytoolManager() {
                     {/* Step 4: Combine & Execute */}
                     <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="w-5 h-5 rounded-full bg-green-500 text-white flex items-center justify-center text-xs font-bold">4</span>
-                        <span className="text-sm font-medium text-green-400">Combine & Execute</span>
+                        <span className="w-5 h-5 rounded-full bg-green-500 text-white flex items-center justify-center text-xs font-bold">
+                          4
+                        </span>
+                        <span className="text-sm font-medium text-green-400">
+                          Combine & Execute
+                        </span>
                       </div>
                       <p className="text-xs text-tertiary mb-2">
                         Combine all partial signatures and execute the transaction:
                       </p>
                       <div className="space-y-1.5">
                         <div className="p-2 bg-secondary rounded font-mono text-xs text-muted-foreground overflow-x-auto">
-                          sui keytool multi-sig-combine-partial-sig --pks PK1 PK2 --weights 1 1 --threshold {threshold} --sigs SIG1 SIG2
+                          sui keytool multi-sig-combine-partial-sig --pks PK1 PK2 --weights 1 1
+                          --threshold {threshold} --sigs SIG1 SIG2
                         </div>
                         <div className="p-2 bg-secondary rounded font-mono text-xs text-muted-foreground overflow-x-auto">
                           sui client execute-signed-tx --tx-bytes TX_BYTES --signatures COMBINED_SIG
@@ -1611,7 +1969,10 @@ export function KeytoolManager() {
                   {/* Important Note */}
                   <div className="mt-3 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded text-xs text-yellow-300/80 flex items-start gap-2">
                     <span>⚠️</span>
-                    <span>All signers must sign the <strong>exact same TX bytes</strong>. Share the base64 string carefully!</span>
+                    <span>
+                      All signers must sign the <strong>exact same TX bytes</strong>. Share the
+                      base64 string carefully!
+                    </span>
                   </div>
                 </div>
 
@@ -1645,8 +2006,18 @@ export function KeytoolManager() {
                     className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-accent transition-colors"
                   >
                     <span>📜 Previously Created ({multiSigHistory.length})</span>
-                    <svg className={clsx('w-4 h-4 transition-transform', showHistory && 'rotate-180')} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    <svg
+                      className={clsx('w-4 h-4 transition-transform', showHistory && 'rotate-180')}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                      />
                     </svg>
                   </button>
                 </div>
@@ -1664,7 +2035,10 @@ export function KeytoolManager() {
                     <div className="p-2 bg-blue-500/10 border border-blue-500/20 rounded text-xs text-blue-300/80 mb-3">
                       <p className="flex items-center gap-1.5">
                         <span>ℹ️</span>
-                        <span>These are multi-sig addresses you created in this browser. Click to copy or view on explorer.</span>
+                        <span>
+                          These are multi-sig addresses you created in this browser. Click to copy
+                          or view on explorer.
+                        </span>
                       </p>
                     </div>
 
@@ -1674,120 +2048,165 @@ export function KeytoolManager() {
                       const hasBalance = balance && parseFloat(balance) > 0;
 
                       return (
-                      <div key={item.address} className="p-3 bg-card/50 border border-border/30 rounded-lg hover:border-accent/30 transition-colors group">
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="px-2 py-0.5 bg-accent/20 text-accent text-xs rounded font-medium">
-                                {item.threshold}-of-{item.totalSigners}
-                              </span>
-                              {/* Balance display */}
-                              {isLoadingBalance ? (
-                                <span className="text-xs text-tertiary animate-pulse">Loading...</span>
-                              ) : balance !== undefined ? (
-                                <span className={clsx(
-                                  'px-2 py-0.5 text-xs rounded font-medium',
-                                  hasBalance
-                                    ? 'bg-green-500/20 text-green-400'
-                                    : 'bg-red-500/20 text-red-400'
-                                )}>
-                                  {hasBalance ? `${balance} SUI` : '0 SUI'}
+                        <div
+                          key={item.address}
+                          className="p-3 bg-card/50 border border-border/30 rounded-lg hover:border-accent/30 transition-colors group"
+                        >
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="px-2 py-0.5 bg-accent/20 text-accent text-xs rounded font-medium">
+                                  {item.threshold}-of-{item.totalSigners}
                                 </span>
-                              ) : null}
-                              <span className="text-xs text-tertiary ml-auto">
-                                {new Date(item.createdAt).toLocaleDateString()}
+                                {/* Balance display */}
+                                {isLoadingBalance ? (
+                                  <span className="text-xs text-tertiary animate-pulse">
+                                    Loading...
+                                  </span>
+                                ) : balance !== undefined ? (
+                                  <span
+                                    className={clsx(
+                                      'px-2 py-0.5 text-xs rounded font-medium',
+                                      hasBalance
+                                        ? 'bg-green-500/20 text-green-400'
+                                        : 'bg-red-500/20 text-red-400'
+                                    )}
+                                  >
+                                    {hasBalance ? `${balance} SUI` : '0 SUI'}
+                                  </span>
+                                ) : null}
+                                <span className="text-xs text-tertiary ml-auto">
+                                  {new Date(item.createdAt).toLocaleDateString()}
+                                </span>
+                              </div>
+                              <div
+                                className="font-mono text-xs text-foreground break-all cursor-pointer hover:text-accent transition-colors"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(item.address);
+                                  toast.success('Address copied!');
+                                }}
+                                title="Click to copy address"
+                              >
+                                {item.address}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => fetchBalanceForAddress(item.address)}
+                                className="p-1.5 hover:bg-accent/10 text-tertiary hover:text-accent rounded transition-colors"
+                                title="Refresh balance"
+                                disabled={isLoadingBalance}
+                              >
+                                <svg
+                                  className={clsx('w-4 h-4', isLoadingBalance && 'animate-spin')}
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                  />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(item.address);
+                                  toast.success('Address copied!');
+                                }}
+                                className="p-1.5 hover:bg-accent/10 text-tertiary hover:text-accent rounded transition-colors"
+                                title="Copy address"
+                              >
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                  />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => removeFromHistory(item.address)}
+                                className="p-1.5 hover:bg-red-500/10 text-tertiary hover:text-red-400 rounded transition-colors"
+                                title="Remove from history"
+                              >
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                  />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Hint when no balance */}
+                          {!isLoadingBalance && balance !== undefined && !hasBalance && (
+                            <div className="mb-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded text-xs text-yellow-400/80 flex items-center gap-1.5">
+                              <span>⚠️</span>
+                              <span>
+                                No SUI yet - request from faucet to start using this address
                               </span>
                             </div>
-                            <div
-                              className="font-mono text-xs text-foreground break-all cursor-pointer hover:text-accent transition-colors"
-                              onClick={() => { navigator.clipboard.writeText(item.address); toast.success('Address copied!'); }}
-                              title="Click to copy address"
-                            >
-                              {item.address}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                          )}
+
+                          {/* Action buttons */}
+                          <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-border/20">
+                            {/* Quick Send - go to Execute tab */}
                             <button
-                              onClick={() => fetchBalanceForAddress(item.address)}
-                              className="p-1.5 hover:bg-accent/10 text-tertiary hover:text-accent rounded transition-colors"
-                              title="Refresh balance"
-                              disabled={isLoadingBalance}
+                              onClick={() => {
+                                setActiveTab('execute');
+                                setExecuteStep('build');
+                                setBuildFromAddress(item.address);
+                                // Pre-fill combine fields if we have publicKeys
+                                if (item.publicKeys && item.weights) {
+                                  setCombinePublicKeys(item.publicKeys);
+                                  setCombineWeights(item.weights);
+                                  setCombineThreshold(item.threshold);
+                                }
+                                toast.success('Ready to build transaction');
+                              }}
+                              className="px-2.5 py-1 bg-accent/20 hover:bg-accent/30 text-accent rounded text-xs font-medium transition-colors"
                             >
-                              <svg className={clsx('w-4 h-4', isLoadingBalance && 'animate-spin')} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                              </svg>
+                              💸 Send TX
                             </button>
-                            <button
-                              onClick={() => { navigator.clipboard.writeText(item.address); toast.success('Address copied!'); }}
-                              className="p-1.5 hover:bg-accent/10 text-tertiary hover:text-accent rounded transition-colors"
-                              title="Copy address"
+                            <a
+                              href={`/app/faucet?address=${item.address}`}
+                              className="px-2.5 py-1 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded text-xs transition-colors"
                             >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={() => removeFromHistory(item.address)}
-                              className="p-1.5 hover:bg-red-500/10 text-tertiary hover:text-red-400 rounded transition-colors"
-                              title="Remove from history"
+                              💧 Get Test SUI
+                            </a>
+                            <a
+                              href={`/app/objects?address=${item.address}`}
+                              className="px-2.5 py-1 bg-card/50 hover:bg-card/70 text-muted-foreground rounded text-xs transition-colors"
                             >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
+                              📦 View Objects
+                            </a>
+                            <a
+                              href={`https://suiscan.xyz/testnet/account/${item.address}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2.5 py-1 bg-card/50 hover:bg-card/70 text-muted-foreground rounded text-xs transition-colors flex items-center gap-1"
+                            >
+                              Explorer ↗
+                            </a>
                           </div>
                         </div>
-
-                        {/* Hint when no balance */}
-                        {!isLoadingBalance && balance !== undefined && !hasBalance && (
-                          <div className="mb-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded text-xs text-yellow-400/80 flex items-center gap-1.5">
-                            <span>⚠️</span>
-                            <span>No SUI yet - request from faucet to start using this address</span>
-                          </div>
-                        )}
-
-                        {/* Action buttons */}
-                        <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-border/20">
-                          {/* Quick Send - go to Execute tab */}
-                          <button
-                            onClick={() => {
-                              setActiveTab('execute');
-                              setExecuteStep('build');
-                              setBuildFromAddress(item.address);
-                              // Pre-fill combine fields if we have publicKeys
-                              if (item.publicKeys && item.weights) {
-                                setCombinePublicKeys(item.publicKeys);
-                                setCombineWeights(item.weights);
-                                setCombineThreshold(item.threshold);
-                              }
-                              toast.success('Ready to build transaction');
-                            }}
-                            className="px-2.5 py-1 bg-accent/20 hover:bg-accent/30 text-accent rounded text-xs font-medium transition-colors"
-                          >
-                            💸 Send TX
-                          </button>
-                          <a
-                            href={`/app/faucet?address=${item.address}`}
-                            className="px-2.5 py-1 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded text-xs transition-colors"
-                          >
-                            💧 Get Test SUI
-                          </a>
-                          <a
-                            href={`/app/objects?address=${item.address}`}
-                            className="px-2.5 py-1 bg-card/50 hover:bg-card/70 text-muted-foreground rounded text-xs transition-colors"
-                          >
-                            📦 View Objects
-                          </a>
-                          <a
-                            href={`https://suiscan.xyz/testnet/account/${item.address}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-2.5 py-1 bg-card/50 hover:bg-card/70 text-muted-foreground rounded text-xs transition-colors flex items-center gap-1"
-                          >
-                            Explorer ↗
-                          </a>
-                        </div>
-                      </div>
                       );
                     })}
 
@@ -1829,10 +2248,12 @@ export function KeytoolManager() {
                         : 'text-tertiary hover:text-muted-foreground'
                     )}
                   >
-                    <span className={clsx(
-                      'w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold',
-                      executeStep === step ? 'bg-accent-foreground/20' : 'bg-card/50'
-                    )}>
+                    <span
+                      className={clsx(
+                        'w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold',
+                        executeStep === step ? 'bg-accent-foreground/20' : 'bg-card/50'
+                      )}
+                    >
                       {idx + 1}
                     </span>
                     <span className="capitalize">{step}</span>
@@ -1851,7 +2272,9 @@ export function KeytoolManager() {
             {pendingTransactions.length > 0 && (
               <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-yellow-400">📋 Pending Transactions ({pendingTransactions.length})</span>
+                  <span className="text-sm font-medium text-yellow-400">
+                    📋 Pending Transactions ({pendingTransactions.length})
+                  </span>
                   <label className="px-2 py-1 bg-accent/10 hover:bg-accent/20 text-accent rounded text-xs font-medium transition-colors cursor-pointer flex items-center gap-1">
                     <input
                       type="file"
@@ -1877,13 +2300,17 @@ export function KeytoolManager() {
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-medium text-foreground truncate">{tx.description}</span>
-                            <span className={clsx(
-                              'px-1.5 py-0.5 text-xs rounded font-medium',
-                              tx.signatures.length >= tx.threshold
-                                ? 'bg-green-500/20 text-green-400'
-                                : 'bg-yellow-500/20 text-yellow-400'
-                            )}>
+                            <span className="text-xs font-medium text-foreground truncate">
+                              {tx.description}
+                            </span>
+                            <span
+                              className={clsx(
+                                'px-1.5 py-0.5 text-xs rounded font-medium',
+                                tx.signatures.length >= tx.threshold
+                                  ? 'bg-green-500/20 text-green-400'
+                                  : 'bg-yellow-500/20 text-yellow-400'
+                              )}
+                            >
                               {tx.signatures.length}/{tx.threshold} sigs
                             </span>
                           </div>
@@ -1893,14 +2320,20 @@ export function KeytoolManager() {
                         </div>
                         <div className="flex items-center gap-1">
                           <button
-                            onClick={(e) => { e.stopPropagation(); exportPendingTransaction(tx); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              exportPendingTransaction(tx);
+                            }}
                             className="p-1 hover:bg-accent/10 text-tertiary hover:text-accent rounded transition-colors"
                             title="Export"
                           >
                             📤
                           </button>
                           <button
-                            onClick={(e) => { e.stopPropagation(); removePendingTransaction(tx.id); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removePendingTransaction(tx.id);
+                            }}
                             className="p-1 hover:bg-red-500/10 text-tertiary hover:text-red-400 rounded transition-colors"
                             title="Remove"
                           >
@@ -1922,14 +2355,19 @@ export function KeytoolManager() {
                     <span className="text-blue-400">🔧</span>
                     <div className="text-xs text-muted-foreground">
                       <p className="font-medium text-blue-400 mb-1">Build Transfer Transaction</p>
-                      <p>Create unsigned transaction bytes for multi-sig signing. The transaction will be serialized without signatures.</p>
+                      <p>
+                        Create unsigned transaction bytes for multi-sig signing. The transaction
+                        will be serialized without signatures.
+                      </p>
                     </div>
                   </div>
                 </div>
 
                 {/* From Address - with keystore + multi-sig history selector */}
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">From Address</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    From Address
+                  </label>
                   {(keys.length > 0 || multiSigHistory.length > 0) && (
                     <select
                       value={buildFromAddress}
@@ -1950,7 +2388,8 @@ export function KeytoolManager() {
                         <optgroup label="👥 Multi-Sig Addresses">
                           {multiSigHistory.map((item) => (
                             <option key={item.address} value={item.address}>
-                              {item.threshold}-of-{item.totalSigners}: {truncateAddress(item.address, 8)}
+                              {item.threshold}-of-{item.totalSigners}:{' '}
+                              {truncateAddress(item.address, 8)}
                             </option>
                           ))}
                         </optgroup>
@@ -1968,7 +2407,9 @@ export function KeytoolManager() {
 
                 {/* To Address - with keystore selector */}
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">To Address</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    To Address
+                  </label>
                   {(keys.length > 0 || multiSigHistory.length > 0) && (
                     <select
                       value={buildToAddress}
@@ -1989,7 +2430,8 @@ export function KeytoolManager() {
                         <optgroup label="👥 Multi-Sig Addresses">
                           {multiSigHistory.map((item) => (
                             <option key={item.address} value={item.address}>
-                              {item.threshold}-of-{item.totalSigners}: {truncateAddress(item.address, 8)}
+                              {item.threshold}-of-{item.totalSigners}:{' '}
+                              {truncateAddress(item.address, 8)}
                             </option>
                           ))}
                         </optgroup>
@@ -2050,7 +2492,9 @@ export function KeytoolManager() {
                     ⚙️ Advanced Options
                   </summary>
                   <div className="mt-2 p-3 bg-card/30 rounded-lg">
-                    <label className="block text-xs font-medium text-tertiary mb-1">Gas Budget (MIST)</label>
+                    <label className="block text-xs font-medium text-tertiary mb-1">
+                      Gas Budget (MIST)
+                    </label>
                     <input
                       type="text"
                       value={buildGasBudget}
@@ -2064,7 +2508,12 @@ export function KeytoolManager() {
 
                 <button
                   onClick={handleBuildTransfer}
-                  disabled={building || !buildFromAddress.trim() || !buildToAddress.trim() || !buildAmount.trim()}
+                  disabled={
+                    building ||
+                    !buildFromAddress.trim() ||
+                    !buildToAddress.trim() ||
+                    !buildAmount.trim()
+                  }
                   className="w-full px-4 py-2.5 bg-accent hover:bg-accent-hover text-accent-foreground rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {building ? (
@@ -2080,9 +2529,14 @@ export function KeytoolManager() {
                 {builtTxBytes && (
                   <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-green-400">✓ Transaction Built</span>
+                      <span className="text-sm font-medium text-green-400">
+                        ✓ Transaction Built
+                      </span>
                       <button
-                        onClick={() => { navigator.clipboard.writeText(builtTxBytes); toast.success('TX bytes copied'); }}
+                        onClick={() => {
+                          navigator.clipboard.writeText(builtTxBytes);
+                          toast.success('TX bytes copied');
+                        }}
                         className="px-2 py-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded text-xs font-medium transition-colors"
                       >
                         📋 Copy
@@ -2113,7 +2567,10 @@ export function KeytoolManager() {
                     <span className="text-purple-400">✍️</span>
                     <div className="text-xs text-muted-foreground">
                       <p className="font-medium text-purple-400 mb-1">Collect Signatures</p>
-                      <p>Each signer uses the <strong>Sign tab</strong> to sign the TX bytes below. Then add their signatures here.</p>
+                      <p>
+                        Each signer uses the <strong>Sign tab</strong> to sign the TX bytes below.
+                        Then add their signatures here.
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -2122,9 +2579,14 @@ export function KeytoolManager() {
                 {builtTxBytes && (
                   <div className="p-3 bg-card/50 border border-border/30 rounded-lg">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium text-tertiary">TX Bytes to Sign (share with signers)</span>
+                      <span className="text-xs font-medium text-tertiary">
+                        TX Bytes to Sign (share with signers)
+                      </span>
                       <button
-                        onClick={() => { navigator.clipboard.writeText(builtTxBytes); toast.success('TX bytes copied'); }}
+                        onClick={() => {
+                          navigator.clipboard.writeText(builtTxBytes);
+                          toast.success('TX bytes copied');
+                        }}
                         className="px-2 py-1 bg-accent/10 hover:bg-accent/20 text-accent rounded text-xs font-medium transition-colors"
                       >
                         📋 Copy
@@ -2154,9 +2616,13 @@ export function KeytoolManager() {
                     <div
                       className={clsx(
                         'h-full transition-all',
-                        collectedSignatures.length >= combineThreshold ? 'bg-green-500' : 'bg-accent'
+                        collectedSignatures.length >= combineThreshold
+                          ? 'bg-green-500'
+                          : 'bg-accent'
                       )}
-                      style={{ width: `${Math.min(100, (collectedSignatures.length / combineThreshold) * 100)}%` }}
+                      style={{
+                        width: `${Math.min(100, (collectedSignatures.length / combineThreshold) * 100)}%`,
+                      }}
                     />
                   </div>
 
@@ -2164,7 +2630,10 @@ export function KeytoolManager() {
                   {collectedSignatures.length > 0 && (
                     <div className="space-y-2 mb-3">
                       {collectedSignatures.map((sig, index) => (
-                        <div key={index} className="p-2 bg-card/50 border border-border/30 rounded flex items-center justify-between gap-2">
+                        <div
+                          key={index}
+                          className="p-2 bg-card/50 border border-border/30 rounded flex items-center justify-between gap-2"
+                        >
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="text-xs font-medium text-foreground">
@@ -2194,12 +2663,13 @@ export function KeytoolManager() {
                 {combinePublicKeys.length > 0 && (
                   <div className="p-3 bg-card/30 border border-border/30 rounded-lg">
                     <span className="text-sm font-medium text-foreground mb-3 block">
-                      👥 Required Signers ({collectedSignatures.length}/{combineThreshold} of {combinePublicKeys.length})
+                      👥 Required Signers ({collectedSignatures.length}/{combineThreshold} of{' '}
+                      {combinePublicKeys.length})
                     </span>
                     <div className="space-y-2">
                       {combinePublicKeys.map((pubKey, index) => {
-                        const hasSigned = collectedSignatures.some(s => s.publicKey === pubKey);
-                        const keystoreKey = keys.find(k => k.publicBase64Key === pubKey);
+                        const hasSigned = collectedSignatures.some((s) => s.publicKey === pubKey);
+                        const keystoreKey = keys.find((k) => k.publicBase64Key === pubKey);
                         const weight = combineWeights[index] || 1;
 
                         return (
@@ -2213,14 +2683,13 @@ export function KeytoolManager() {
                             )}
                           >
                             <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <span className="text-base shrink-0">
-                                {hasSigned ? '✅' : '⏳'}
-                              </span>
+                              <span className="text-base shrink-0">{hasSigned ? '✅' : '⏳'}</span>
                               <div className="min-w-0 flex-1">
                                 {keystoreKey ? (
                                   <div className="font-medium text-foreground flex items-center gap-1">
                                     <span className="text-blue-400">🔑</span>
-                                    {keystoreKey.alias || truncateAddress(keystoreKey.suiAddress, 6)}
+                                    {keystoreKey.alias ||
+                                      truncateAddress(keystoreKey.suiAddress, 6)}
                                   </div>
                                 ) : (
                                   <div className="font-medium text-tertiary">
@@ -2229,10 +2698,14 @@ export function KeytoolManager() {
                                 )}
                               </div>
                             </div>
-                            <span className={clsx(
-                              'text-xs font-medium px-1.5 py-0.5 rounded shrink-0',
-                              hasSigned ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
-                            )}>
+                            <span
+                              className={clsx(
+                                'text-xs font-medium px-1.5 py-0.5 rounded shrink-0',
+                                hasSigned
+                                  ? 'bg-green-500/20 text-green-400'
+                                  : 'bg-yellow-500/20 text-yellow-400'
+                              )}
+                            >
                               {hasSigned ? 'Signed' : `Pending (w:${weight})`}
                             </span>
                           </div>
@@ -2245,13 +2718,17 @@ export function KeytoolManager() {
                 {/* Quick Sign - Sign directly with your keys */}
                 {builtTxBytes && keys.length > 0 && (
                   <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                    <span className="text-sm font-medium text-blue-400 mb-3 block">⚡ Quick Sign (with your keys)</span>
+                    <span className="text-sm font-medium text-blue-400 mb-3 block">
+                      ⚡ Quick Sign (with your keys)
+                    </span>
                     <p className="text-xs text-tertiary mb-3">
                       Click a key to sign the transaction directly. No need to switch tabs!
                     </p>
                     <div className="grid gap-2">
                       {keys.map((key) => {
-                        const alreadySigned = collectedSignatures.some(s => s.publicKey === key.publicBase64Key);
+                        const alreadySigned = collectedSignatures.some(
+                          (s) => s.publicKey === key.publicBase64Key
+                        );
                         return (
                           <button
                             key={key.publicBase64Key}
@@ -2264,10 +2741,12 @@ export function KeytoolManager() {
                                   publicKey: key.publicBase64Key,
                                   label: key.alias || truncateAddress(key.suiAddress, 6),
                                 };
-                                setCollectedSignatures(prev => [...prev, newSig]);
+                                setCollectedSignatures((prev) => [...prev, newSig]);
                                 // Update pending transaction
                                 if (selectedPendingTx) {
-                                  const pendingTx = pendingTransactions.find(t => t.id === selectedPendingTx);
+                                  const pendingTx = pendingTransactions.find(
+                                    (t) => t.id === selectedPendingTx
+                                  );
                                   if (pendingTx) {
                                     savePendingTransaction({
                                       ...pendingTx,
@@ -2275,7 +2754,9 @@ export function KeytoolManager() {
                                     });
                                   }
                                 }
-                                toast.success(`Signed with ${key.alias || truncateAddress(key.suiAddress, 6)}`);
+                                toast.success(
+                                  `Signed with ${key.alias || truncateAddress(key.suiAddress, 6)}`
+                                );
                               } catch (error) {
                                 toast.error(`Sign failed: ${error}`);
                               }
@@ -2311,14 +2792,18 @@ export function KeytoolManager() {
 
                 {/* Manual Add Signature Form */}
                 <div className="p-3 bg-card/30 border border-border/30 rounded-lg">
-                  <span className="text-sm font-medium text-foreground mb-3 block">📝 Add External Signature</span>
+                  <span className="text-sm font-medium text-foreground mb-3 block">
+                    📝 Add External Signature
+                  </span>
                   <p className="text-xs text-tertiary mb-3">
                     For signatures from other signers (not in your keystore)
                   </p>
 
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-xs font-medium text-tertiary mb-1">Signature</label>
+                      <label className="block text-xs font-medium text-tertiary mb-1">
+                        Signature
+                      </label>
                       <input
                         type="text"
                         value={newSignatureInput}
@@ -2329,7 +2814,9 @@ export function KeytoolManager() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-tertiary mb-1">Public Key</label>
+                      <label className="block text-xs font-medium text-tertiary mb-1">
+                        Public Key
+                      </label>
                       {keys.length > 0 && (
                         <select
                           value={newSignaturePubKey}
@@ -2354,7 +2841,9 @@ export function KeytoolManager() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-tertiary mb-1">Label (optional)</label>
+                      <label className="block text-xs font-medium text-tertiary mb-1">
+                        Label (optional)
+                      </label>
                       <input
                         type="text"
                         value={newSignatureLabel}
@@ -2394,18 +2883,25 @@ export function KeytoolManager() {
                     <span className="text-green-400">🚀</span>
                     <div className="text-xs text-muted-foreground">
                       <p className="font-medium text-green-400 mb-1">Combine & Execute</p>
-                      <p>Combine all signatures into a multi-sig signature and execute the transaction on-chain.</p>
+                      <p>
+                        Combine all signatures into a multi-sig signature and execute the
+                        transaction on-chain.
+                      </p>
                     </div>
                   </div>
                 </div>
 
                 {/* Summary */}
                 <div className="p-3 bg-card/30 rounded-lg">
-                  <span className="text-sm font-medium text-foreground mb-2 block">Transaction Summary</span>
+                  <span className="text-sm font-medium text-foreground mb-2 block">
+                    Transaction Summary
+                  </span>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
                       <span className="text-tertiary">Signatures:</span>
-                      <span className="ml-2 text-foreground">{collectedSignatures.length} / {combineThreshold}</span>
+                      <span className="ml-2 text-foreground">
+                        {collectedSignatures.length} / {combineThreshold}
+                      </span>
                     </div>
                     <div>
                       <span className="text-tertiary">Public Keys:</span>
@@ -2417,11 +2913,17 @@ export function KeytoolManager() {
                     </div>
                     <div>
                       <span className="text-tertiary">Status:</span>
-                      <span className={clsx(
-                        'ml-2',
-                        collectedSignatures.length >= combineThreshold ? 'text-green-400' : 'text-yellow-400'
-                      )}>
-                        {collectedSignatures.length >= combineThreshold ? 'Ready' : 'Need more sigs'}
+                      <span
+                        className={clsx(
+                          'ml-2',
+                          collectedSignatures.length >= combineThreshold
+                            ? 'text-green-400'
+                            : 'text-yellow-400'
+                        )}
+                      >
+                        {collectedSignatures.length >= combineThreshold
+                          ? 'Ready'
+                          : 'Need more sigs'}
                       </span>
                     </div>
                   </div>
@@ -2431,14 +2933,15 @@ export function KeytoolManager() {
                 {combinePublicKeys.length > 0 && (
                   <div className="p-3 bg-card/30 border border-border/30 rounded-lg">
                     <span className="text-sm font-medium text-foreground mb-3 block">
-                      👥 Multi-Sig Signers ({collectedSignatures.length}/{combinePublicKeys.length} signed)
+                      👥 Multi-Sig Signers ({collectedSignatures.length}/{combinePublicKeys.length}{' '}
+                      signed)
                     </span>
                     <div className="space-y-2">
                       {combinePublicKeys.map((pubKey, index) => {
                         // Check if this public key has signed
-                        const hasSigned = collectedSignatures.some(s => s.publicKey === pubKey);
+                        const hasSigned = collectedSignatures.some((s) => s.publicKey === pubKey);
                         // Find if this key exists in user's keystore
-                        const keystoreKey = keys.find(k => k.publicBase64Key === pubKey);
+                        const keystoreKey = keys.find((k) => k.publicBase64Key === pubKey);
                         // Get weight for this key
                         const weight = combineWeights[index] || 1;
 
@@ -2453,16 +2956,16 @@ export function KeytoolManager() {
                             )}
                           >
                             <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <span className="text-lg shrink-0">
-                                {hasSigned ? '✅' : '⏳'}
-                              </span>
+                              <span className="text-lg shrink-0">{hasSigned ? '✅' : '⏳'}</span>
                               <div className="min-w-0 flex-1">
                                 {keystoreKey ? (
                                   <>
                                     <div className="font-medium text-foreground flex items-center gap-1.5">
                                       <span className="text-blue-400">🔑</span>
                                       {keystoreKey.alias || 'Unnamed Key'}
-                                      <span className="text-xs text-tertiary">({keystoreKey.keyScheme})</span>
+                                      <span className="text-xs text-tertiary">
+                                        ({keystoreKey.keyScheme})
+                                      </span>
                                     </div>
                                     <div className="text-xs text-tertiary font-mono truncate">
                                       {truncateAddress(keystoreKey.suiAddress, 10)}
@@ -2470,7 +2973,9 @@ export function KeytoolManager() {
                                   </>
                                 ) : (
                                   <>
-                                    <div className="font-medium text-foreground">External Signer</div>
+                                    <div className="font-medium text-foreground">
+                                      External Signer
+                                    </div>
                                     <div className="text-xs text-tertiary font-mono truncate">
                                       {pubKey.slice(0, 20)}...{pubKey.slice(-8)}
                                     </div>
@@ -2479,15 +2984,15 @@ export function KeytoolManager() {
                               </div>
                             </div>
                             <div className="flex items-center gap-2 shrink-0 ml-2">
-                              <span className="text-xs text-tertiary">
-                                weight: {weight}
-                              </span>
-                              <span className={clsx(
-                                'text-xs font-medium px-1.5 py-0.5 rounded',
-                                hasSigned
-                                  ? 'bg-green-500/20 text-green-400'
-                                  : 'bg-yellow-500/20 text-yellow-400'
-                              )}>
+                              <span className="text-xs text-tertiary">weight: {weight}</span>
+                              <span
+                                className={clsx(
+                                  'text-xs font-medium px-1.5 py-0.5 rounded',
+                                  hasSigned
+                                    ? 'bg-green-500/20 text-green-400'
+                                    : 'bg-yellow-500/20 text-yellow-400'
+                                )}
+                              >
                                 {hasSigned ? 'Signed' : 'Pending'}
                               </span>
                             </div>
@@ -2497,7 +3002,8 @@ export function KeytoolManager() {
                     </div>
                     {collectedSignatures.length < combineThreshold && (
                       <p className="mt-3 text-xs text-tertiary text-center">
-                        Need {combineThreshold - collectedSignatures.length} more signature(s) to meet threshold of {combineThreshold}
+                        Need {combineThreshold - collectedSignatures.length} more signature(s) to
+                        meet threshold of {combineThreshold}
                       </p>
                     )}
                   </div>
@@ -2525,9 +3031,14 @@ export function KeytoolManager() {
                 {combinedSignature && (
                   <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-purple-400">✓ Combined Multi-Sig Signature</span>
+                      <span className="text-sm font-medium text-purple-400">
+                        ✓ Combined Multi-Sig Signature
+                      </span>
                       <button
-                        onClick={() => { navigator.clipboard.writeText(combinedSignature); toast.success('Signature copied'); }}
+                        onClick={() => {
+                          navigator.clipboard.writeText(combinedSignature);
+                          toast.success('Signature copied');
+                        }}
                         className="px-2 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded text-xs font-medium transition-colors"
                       >
                         📋 Copy
@@ -2562,16 +3073,23 @@ export function KeytoolManager() {
                   <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
                     <div className="flex items-center gap-2 mb-3">
                       <span className="text-2xl">🎉</span>
-                      <span className="text-lg font-medium text-green-400">Transaction Executed!</span>
+                      <span className="text-lg font-medium text-green-400">
+                        Transaction Executed!
+                      </span>
                     </div>
 
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center justify-between p-2 bg-secondary rounded">
                         <span className="text-tertiary">Digest:</span>
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-foreground">{truncateAddress(executionResult.digest, 8)}</span>
+                          <span className="font-mono text-foreground">
+                            {truncateAddress(executionResult.digest, 8)}
+                          </span>
                           <button
-                            onClick={() => { navigator.clipboard.writeText(executionResult.digest); toast.success('Digest copied'); }}
+                            onClick={() => {
+                              navigator.clipboard.writeText(executionResult.digest);
+                              toast.success('Digest copied');
+                            }}
                             className="p-1 hover:bg-accent/10 text-tertiary hover:text-accent rounded transition-colors"
                           >
                             📋
@@ -2581,10 +3099,14 @@ export function KeytoolManager() {
 
                       <div className="flex items-center justify-between p-2 bg-secondary rounded">
                         <span className="text-tertiary">Status:</span>
-                        <span className={clsx(
-                          'px-2 py-0.5 rounded text-xs font-medium',
-                          executionResult.status === 'success' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                        )}>
+                        <span
+                          className={clsx(
+                            'px-2 py-0.5 rounded text-xs font-medium',
+                            executionResult.status === 'success'
+                              ? 'bg-green-500/20 text-green-400'
+                              : 'bg-red-500/20 text-red-400'
+                          )}
+                        >
                           {executionResult.status}
                         </span>
                       </div>
@@ -2635,13 +3157,18 @@ export function KeytoolManager() {
                 <span className="text-blue-400">ℹ️</span>
                 <div className="text-xs text-muted-foreground">
                   <p className="font-medium text-blue-400 mb-1">Decode & Verify Transactions</p>
-                  <p>Inspect transaction bytes before signing. Optionally verify that a signature matches the transaction.</p>
+                  <p>
+                    Inspect transaction bytes before signing. Optionally verify that a signature
+                    matches the transaction.
+                  </p>
                 </div>
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-foreground mb-2">Transaction Bytes (Base64)</label>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Transaction Bytes (Base64)
+              </label>
               <textarea
                 value={txBytes}
                 onChange={(e) => setTxBytes(e.target.value)}
@@ -2651,12 +3178,15 @@ export function KeytoolManager() {
               />
               <p className="mt-1 text-xs text-tertiary">
                 Paste transaction bytes from{' '}
-                <code className="px-1 py-0.5 bg-secondary rounded">sui client tx-block</code> or the Sign tab
+                <code className="px-1 py-0.5 bg-secondary rounded">sui client tx-block</code> or the
+                Sign tab
               </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-foreground mb-2">Signature (Optional - for verification)</label>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Signature (Optional - for verification)
+              </label>
               <input
                 type="text"
                 value={decodeSignature}
@@ -2664,7 +3194,9 @@ export function KeytoolManager() {
                 placeholder="Enter signature to verify against transaction..."
                 className="w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-accent/50 transition-colors font-mono"
               />
-              <p className="mt-1 text-xs text-tertiary">If provided, verifies the signature was created for this transaction</p>
+              <p className="mt-1 text-xs text-tertiary">
+                If provided, verifies the signature was created for this transaction
+              </p>
             </div>
 
             <button
@@ -2684,26 +3216,49 @@ export function KeytoolManager() {
                       onClick={() => setShowRawJson(!showRawJson)}
                       className={clsx(
                         'px-2 py-1 text-xs rounded transition-colors',
-                        showRawJson ? 'bg-accent text-accent-foreground' : 'bg-card/50 hover:bg-card/70 text-muted-foreground'
+                        showRawJson
+                          ? 'bg-accent text-accent-foreground'
+                          : 'bg-card/50 hover:bg-card/70 text-muted-foreground'
                       )}
                     >
                       {showRawJson ? 'Formatted' : 'Raw JSON'}
                     </button>
                     <button
-                      onClick={() => { navigator.clipboard.writeText(JSON.stringify(decodedResult.decoded, null, 2)); toast.success('Result copied'); }}
+                      onClick={() => {
+                        navigator.clipboard.writeText(
+                          JSON.stringify(decodedResult.decoded, null, 2)
+                        );
+                        toast.success('Result copied');
+                      }}
                       className="px-2 py-1 bg-card/50 hover:bg-card/70 text-muted-foreground text-xs rounded transition-colors flex items-center gap-1"
                     >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                        />
+                      </svg>
                       Copy
                     </button>
                   </div>
                 </div>
 
                 {decodedResult.signatureValid !== undefined && (
-                  <div className={clsx(
-                    'mb-3 px-3 py-2 rounded text-xs font-medium flex items-center gap-2',
-                    decodedResult.signatureValid ? 'bg-green-500/10 text-green-400 border border-green-500/30' : 'bg-red-500/10 text-red-400 border border-red-500/30'
-                  )}>
+                  <div
+                    className={clsx(
+                      'mb-3 px-3 py-2 rounded text-xs font-medium flex items-center gap-2',
+                      decodedResult.signatureValid
+                        ? 'bg-green-500/10 text-green-400 border border-green-500/30'
+                        : 'bg-red-500/10 text-red-400 border border-red-500/30'
+                    )}
+                  >
                     {decodedResult.signatureValid ? '✓ Signature Valid' : '✗ Signature Invalid'}
                   </div>
                 )}
@@ -2719,7 +3274,9 @@ export function KeytoolManager() {
                         <div key={key} className="flex items-start gap-2 p-2 bg-card/50 rounded">
                           <span className="text-tertiary font-medium min-w-[100px]">{key}:</span>
                           <span className="text-foreground font-mono break-all">
-                            {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                            {typeof value === 'object'
+                              ? JSON.stringify(value, null, 2)
+                              : String(value)}
                           </span>
                         </div>
                       ))

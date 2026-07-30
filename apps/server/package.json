@@ -1,6 +1,6 @@
 {
   "name": "sui-cli-web-server",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Local server that bridges your browser to Sui CLI. Manage addresses, transfer SUI, deploy Move contracts - all from a beautiful web UI. Private keys never leave your machine.",
   "type": "module",
   "main": "./dist/index.js",

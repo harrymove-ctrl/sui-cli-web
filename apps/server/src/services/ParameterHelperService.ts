@@ -1,6 +1,8 @@
 import { SuiCliExecutor } from '../cli/SuiCliExecutor';
 import { ConfigParser } from '../cli/ConfigParser';
 import { InspectorService, FunctionInfo, ParameterInfo } from './dev/InspectorService';
+import { getObjectFullViaGrpc, getOwnedObjectsViaGrpc } from '../utils/suiGrpcClient';
+import { normalizeCliObjectShape } from '../utils/normalizeSuiObject';
 
 // Type categories for parameter classification
 export type ParameterCategory =
@@ -581,11 +583,27 @@ export class ParameterHelperService {
         try {
           return await this.fetchObjectsViaRpc(address, rpcUrl);
         } catch {
-          // Fall back to CLI
+          // Fall through to gRPC
+        }
+
+        // gRPC - the modern replacement for the JSON-RPC call above, and the only
+        // reliable path on Mysten's public testnet/devnet fullnodes (every legacy
+        // JSON-RPC method 404s there). Already returns a decoded `type` string per
+        // object, unlike the raw-BCS CLI fallback below.
+        try {
+          const owned = await getOwnedObjectsViaGrpc(address, rpcUrl);
+          if (owned.length > 0) return owned;
+        } catch {
+          // Fall through to CLI
         }
       }
 
-      // CLI fallback
+      // CLI fallback - last resort (e.g. localnet with no RPC/gRPC reachable at
+      // all). `sui client objects --json` returns raw, undecoded BCS content
+      // (`data.Move.type_`/`contents: [byte, ...]`, not a decoded `type` string),
+      // so `getObjectsByType`'s type-matching filter below effectively can't work
+      // against this path - acceptable since it should only ever be reached when
+      // both RPC and gRPC are unavailable.
       const output = await this.executor.execute(['client', 'objects', address], { json: true });
       const data = JSON.parse(output);
       return Array.isArray(data) ? data : [];
@@ -693,13 +711,27 @@ export class ParameterHelperService {
             return result.result?.data;
           }
         } catch {
+          // Fall through to gRPC
+        }
+
+        // gRPC - the modern replacement for the JSON-RPC call above, and the only
+        // reliable path on testnet/devnet (every legacy JSON-RPC method 404s
+        // there). Same canonical shape (`type`, `content.fields`), just without
+        // Display metadata - gRPC has no equivalent field for that.
+        try {
+          const full = await getObjectFullViaGrpc(objectId, rpcUrl);
+          if (full) return full;
+        } catch {
           // Fall back to CLI
         }
       }
 
-      // CLI fallback
+      // CLI fallback - its JSON uses different field names entirely
+      // (`objType`/`prevTx`) and flattens some object kinds (e.g. `Coin<T>`)
+      // directly onto `content` instead of nesting under `content.fields` -
+      // normalize so this never returns a third shape callers have to guess at.
       const output = await this.executor.execute(['client', 'object', objectId], { json: true });
-      return JSON.parse(output);
+      return normalizeCliObjectShape(JSON.parse(output));
     } catch (error) {
       console.error('[ParameterHelperService] Failed to get object metadata:', error);
       return null;

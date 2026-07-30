@@ -5,10 +5,18 @@ name: Deploy to Railway
 # building with no error anywhere. This workflow uploads the source itself with
 # a project token, which does not depend on the App at all.
 #
+# The deploy is gated: the `test` job below builds every workspace and runs the
+# server suite, and `deploy` declares `needs: test`, so a commit that fails to
+# build or fails a test never reaches `railway up`. Keeping the gate as a job in
+# THIS workflow - rather than a separate CI workflow chained by workflow_run -
+# means it runs on exactly this commit and ref, with no skipped-vs-failed
+# ambiguity and no stale-ref race.
+#
 # Requires a repository secret RAILWAY_TOKEN: a *project* token from
 # https://railway.com/account/tokens scoped to sui-cli-web / production.
-# Without it the job skips instead of failing, so a fork or a clone without the
-# secret does not report a red build for something it was never meant to do.
+# Without it the deploy step skips instead of failing, so a fork or a clone
+# without the secret does not report a red build for something it was never
+# meant to do.
 
 on:
   push:
@@ -22,8 +30,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'harrymove-ctrl/sui-cli-web' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          # Must be >= 20 for vitest 4; a bad pin here would skip the very tests
+          # this gate exists to run and let a broken commit through as "passed".
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (all workspaces)
+        run: npm run build
+
+      - name: Test (server - unit + e2e)
+        # No `sui` binary on the runner by design - see ci.yml for why.
+        run: npm test -w sui-cli-web-server
+
   deploy:
     runs-on: ubuntu-latest
+    # The gate: this is what stops a red build or a failing test from shipping.
+    needs: test
     if: ${{ github.repository == 'harrymove-ctrl/sui-cli-web' }}
     steps:
       - name: Checkout repository

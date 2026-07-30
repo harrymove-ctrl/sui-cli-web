@@ -118,7 +118,10 @@ function collectTabsContentValues(node: ReactNode): string[] {
 }
 
 function resolveTabValue(candidate: string | undefined, contentValueSet: Set<string>, fallback: string) {
-  if (candidate !== undefined && contentValueSet.has(candidate)) {
+  // A Tabs tree with no TabsContent at all (e.g. a segmented control driving
+  // external state rather than switching panels) has nothing to validate
+  // `candidate` against - trust it rather than always falling back to ''.
+  if (candidate !== undefined && (contentValueSet.size === 0 || contentValueSet.has(candidate))) {
     return candidate;
   }
 
@@ -274,7 +277,6 @@ function Tabs({
   const contentValues = useMemo(() => collectTabsContentValues(children), [children]);
   const contentValueSet = useMemo(() => new Set(contentValues), [contentValues]);
   const firstContentValue = contentValues[0] ?? '';
-  const hasPanels = contentValues.length > 0;
 
   const [uncontrolledValue, setUncontrolledValue] = useState(() =>
     resolveTabValue(defaultValue, contentValueSet, firstContentValue)
@@ -327,14 +329,6 @@ function Tabs({
 
   const rootClassName = cn('relative', orientation === 'vertical' && 'flex gap-4', className);
 
-  if (!hasPanels) {
-    return (
-      <div className={rootClassName} data-slot="tabs">
-        {children}
-      </div>
-    );
-  }
-
   return (
     <MotionConfig reducedMotion={reduceMotion ? 'always' : 'never'}>
       <TabsContext.Provider value={contextValue}>
@@ -355,10 +349,11 @@ function Tabs({
 
 type TabsListProps = ComponentPropsWithoutRef<typeof TabsPrimitive.List> & {
   fullWidth?: boolean;
+  indicatorClassName?: string;
 };
 
 const TabsList = forwardRef<ElementRef<typeof TabsPrimitive.List>, TabsListProps>(
-  ({ children, className, fullWidth = false, loop = true, ...props }, ref) => {
+  ({ children, className, fullWidth = false, indicatorClassName, loop = true, ...props }, ref) => {
     const { listRef, orientation, transition, triggerRefs, variant, value } = useTabsContext('TabsList');
 
     const { indicatorRect, showIndicator } = useTabIndicator({
@@ -412,7 +407,8 @@ const TabsList = forwardRef<ElementRef<typeof TabsPrimitive.List>, TabsListProps
                 ? 'rounded-lg shadow-[rgba(0,0,0,0.04)_0px_1px_6px] dark:shadow-[rgba(0,0,0,0.2)_0px_1px_6px]'
                 : isVertical
                   ? 'right-0 w-px'
-                  : 'bottom-0 h-px'
+                  : 'bottom-0 h-px',
+              indicatorClassName
             )}
             initial={false}
             key={`${variant}-${orientation}`}

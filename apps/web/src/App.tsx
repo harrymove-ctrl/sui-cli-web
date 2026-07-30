@@ -1,11 +1,13 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { AppGuard } from './components/guards/AppGuard';
 import { useTheme } from './contexts/ThemeContext';
 import { trackPageView } from './lib/analytics';
 
 // Lazy load ALL route components for better initial load and code splitting
+const AppGuard = lazy(() =>
+  import('./components/guards/AppGuard').then((m) => ({ default: m.AppGuard }))
+);
 const HomePage = lazy(() => import('./components/HomePage').then((m) => ({ default: m.HomePage })));
 const SetupPage = lazy(() =>
   import('./components/SetupPage').then((m) => ({ default: m.SetupPage }))
@@ -38,11 +40,22 @@ const TransactionBuilder = lazy(() =>
 const DynamicFieldExplorer = lazy(() =>
   import('./components/DynamicFieldExplorer').then((m) => ({ default: m.DynamicFieldExplorer }))
 );
+// Package Explorer is its own Assets page again - packages are a different kind
+// of thing from owned objects, and burying them in an Objects tab made the two
+// hard to tell apart.
+const PackageExplorer = lazy(() =>
+  import('./components/PackageExplorer').then((m) => ({ default: m.PackageExplorer }))
+);
+// Anyone still on the old `/app/objects?tab=packages` URL is redirected from
+// inside ObjectList, which is where that query param is read.
 const DevTools = lazy(() => import('./components/DevTools').then((m) => ({ default: m.DevTools })));
 const DerivedObjectCalculator = lazy(() =>
   import('./components/DerivedObjectCalculator').then((m) => ({
     default: m.DerivedObjectCalculator,
   }))
+);
+const DevstackBridge = lazy(() =>
+  import('./components/DevstackBridge').then((m) => ({ default: m.DevstackBridge }))
 );
 const SecurityTools = lazy(() =>
   import('./components/SecurityTools').then((m) => ({ default: m.SecurityTools }))
@@ -184,6 +197,7 @@ export function App() {
               <Route path="objects" element={<ObjectList />} />
               <Route path="objects/:objectId" element={<ObjectList />} />
               <Route path="dynamic-fields" element={<DynamicFieldExplorer />} />
+              <Route path="packages" element={<PackageExplorer />} />
               <Route path="gas" element={<Navigate to="/app/coins" replace />} />
               <Route path="coins" element={<CoinList />} />
               <Route path="coins/split" element={<CoinSplit />} />
@@ -194,6 +208,7 @@ export function App() {
               <Route path="move" element={<MoveDeploy />} />
               <Route path="devtools" element={<DevTools />} />
               <Route path="derived-objects" element={<DerivedObjectCalculator />} />
+              <Route path="devstack" element={<DevstackBridge />} />
               <Route path="security" element={<SecurityTools />} />
               <Route path="keytool" element={<KeytoolManager />} />
               <Route path="inspector" element={<TransactionBuilder />} />

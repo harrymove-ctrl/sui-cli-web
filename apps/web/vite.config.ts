@@ -1,9 +1,18 @@
-import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    // react-draggable (pulled in by react-grid-layout) reads
+    // `process.env.DRAGGABLE_DEBUG` inside a log() it calls on EVERY drag/resize
+    // event. Vite's dev server does not define `process`, so without this the
+    // reference throws "process is not defined", the drag handler crashes, and
+    // cards silently refuse to move. `vite build` already inlines it, so this
+    // only matters for the dev server.
+    'process.env.DRAGGABLE_DEBUG': 'false',
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -13,10 +22,9 @@ export default defineConfig({
     port: 5174,
     proxy: {
       '/api': {
-        // Backend runs on 4001 in this environment (3001 is occupied by an
-        // unrelated process on this machine) - keep in sync with however the
-        // server is actually started (see packages/server's PORT env var).
-        target: 'http://localhost:4001',
+        // Matches sui-cli-web-server's default PORT (apps/server/src/index.ts) -
+        // keep in sync with however the server is actually started.
+        target: 'http://localhost:3001',
         changeOrigin: true,
       },
     },
@@ -31,11 +39,19 @@ export default defineConfig({
             return 'vendor-sui';
           }
           // Core React libraries
-          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/') || id.includes('node_modules/react-router-dom/')) {
+          if (
+            id.includes('node_modules/react/') ||
+            id.includes('node_modules/react-dom/') ||
+            id.includes('node_modules/react-router-dom/')
+          ) {
             return 'vendor-react';
           }
           // UI libraries
-          if (id.includes('framer-motion') || id.includes('lucide-react') || id.includes('react-hot-toast')) {
+          if (
+            id.includes('framer-motion') ||
+            id.includes('lucide-react') ||
+            id.includes('react-hot-toast')
+          ) {
             return 'vendor-ui';
           }
           // Radix UI components
@@ -66,8 +82,22 @@ export default defineConfig({
   },
   // Optimize dependencies
   optimizeDeps: {
-    include: ['react', 'react-dom', 'react-router-dom', 'zustand'],
+    // Pre-bundle the grid libs so the `define` above is applied to their code
+    // (react-draggable's process.env access lives inside react-grid-layout's tree).
+    include: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      'zustand',
+      'react-grid-layout',
+      'react-draggable',
+    ],
     // Exclude libraries with __DEFINES__ issues in dev mode
-    exclude: ['@microsoft/clarity', '@statsig/js-client', '@statsig/session-replay', '@statsig/web-analytics'],
+    exclude: [
+      '@microsoft/clarity',
+      '@statsig/js-client',
+      '@statsig/session-replay',
+      '@statsig/web-analytics',
+    ],
   },
 });

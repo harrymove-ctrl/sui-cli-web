@@ -4,10 +4,12 @@ import Fastify from 'fastify';
 import fs from 'fs';
 import { createRequire } from 'module';
 import path from 'path';
+import { pathToFileURL } from 'url';
 import { SuiCliExecutor } from './cli/SuiCliExecutor';
 import { addressRoutes } from './routes/address';
 import { coinRoutes } from './routes/coin';
 import { derivedObjectsRoutes } from './routes/derivedObjects';
+import { devstackRoutes } from './routes/devstack';
 import { devtoolsRoutes } from './routes/devtools';
 import { dynamicFieldsRoutes } from './routes/dynamic-fields';
 import { environmentRoutes } from './routes/environment';
@@ -123,7 +125,15 @@ ${c.yellow}${c.bold}   ⚡ Continuing with outdated version... Consider updating
   `);
 }
 
-async function main() {
+/**
+ * Build the fully-assembled Fastify app - CORS, rate-limit hooks, every route
+ * plugin, and static serving - and return it *without* listening.
+ *
+ * Split out from main() so tests can boot the real, complete server in-process
+ * with fastify.inject(): no port to bind, no ready-poll to race, and the same
+ * plugin graph production runs. main() is the only caller that then listens.
+ */
+export async function buildServer() {
   const fastify = Fastify({
     logger: {
       level: 'info',
@@ -506,6 +516,23 @@ async function main() {
     { prefix: '/api' }
   );
 
+  // Devstack bridge - read-only inspection of a local devstack project, plus
+  // attaching its RPC as a sui client env. Writes go through the sui CLI, so
+  // the write rate limit is the right one for the attach endpoint.
+  await fastify.register(
+    async (instance) => {
+      instance.addHook('onRequest', async (request, reply) => {
+        if (request.method === 'GET') {
+          await readRateLimit(request, reply);
+        } else {
+          await writeRateLimit(request, reply);
+        }
+      });
+      await instance.register(devstackRoutes);
+    },
+    { prefix: '/api' }
+  );
+
   // Pay routes - Multi-recipient payments
   await fastify.register(
     async (instance) => {
@@ -567,10 +594,38 @@ async function main() {
 
   if (webDistPath) {
     console.log(`[Static] Serving UI & Blog static files from: ${webDistPath}`);
+    // Two registrations, because the two kinds of file want opposite caching.
+    //
+    // Everything under /assets carries a content hash in its filename, so a
+    // given URL can never change contents - it is safe to cache for a year and
+    // never revalidate. @fastify/static defaults to `public, max-age=0`, which
+    // made the browser re-check every one of ~40 chunks on every reload.
+    await fastify.register(fastifyStatic, {
+      root: path.join(webDistPath, 'assets'),
+      prefix: '/assets/',
+      wildcard: false,
+      decorateReply: false,
+      maxAge: '1y',
+      immutable: true,
+    });
+
+    // index.html and the rest keep the conservative default: their URLs are
+    // stable, so caching them is how a deploy goes unnoticed.
+    //
+    // `wildcard: true` here (not `false`) is load-bearing: with `false`,
+    // @fastify/static eagerly pre-registers one exact route per file it finds
+    // under `root` at plugin-registration time - and `webDistPath` recursively
+    // includes everything already registered a few lines up under `/assets/`,
+    // so the server crashed on every cold start ("Method 'HEAD' already
+    // declared for route '/assets/...'") the moment the web build actually had
+    // assets in it. `wildcard: true` uses a single catch-all route instead,
+    // which find-my-way only falls through to when the more specific
+    // `/assets/*` route (registered above) doesn't match - no collision, and
+    // still serves index.html/everything else correctly.
     await fastify.register(fastifyStatic, {
       root: webDistPath,
       prefix: '/',
-      wildcard: false,
+      wildcard: true,
     });
 
     // The Astro marketing site is built separately and copied under /blog, so
@@ -603,6 +658,12 @@ async function main() {
   } else {
     console.log('[Static] Warning: No static web dist folder found in candidates:', candidatePaths);
   }
+
+  return fastify;
+}
+
+async function main() {
+  const fastify = await buildServer();
 
   // Start server
   try {
@@ -656,4 +717,10 @@ async function main() {
   }
 }
 
-main();
+// Self-start only when run as the entrypoint (`tsx src/index.ts`, `node
+// dist/index.js`). When a test imports this module for buildServer(), argv[1]
+// is the test runner, so main() - and its listen() - stays dormant.
+const invokedPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
+if (import.meta.url === invokedPath) {
+  main();
+}

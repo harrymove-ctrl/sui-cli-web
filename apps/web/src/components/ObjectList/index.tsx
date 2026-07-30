@@ -1,5 +1,4 @@
-import { useEffect, useState, useMemo, useCallback, type ReactNode } from 'react';
-import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
+import { extractCoinType } from '@sui-cli-web/shared';
 import {
   ChevronRight,
   ClipboardCopy,
@@ -22,26 +21,36 @@ import {
   Wand2,
   X,
 } from 'lucide-react';
-import { useAppStore } from '@/stores/useAppStore';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import toast from 'react-hot-toast';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { getObject } from '@/api/client';
+import {
+  type BlobSummary,
+  getBlobSummaries,
+  getNftMetadata,
+  type NftMetadata,
+} from '@/api/services/objects';
+import { transferObject } from '@/api/services/transfers';
+import { DitherAvatar } from '@/components/dither-kit/avatar';
 import { BlobGlassIcon } from '@/components/icons/BlobGlassIcon';
-import { Tooltip } from '@/components/ui/tooltip';
 import { FileGlassIcon } from '@/components/icons/FileGlassIcon';
-import { WalletContentGlassIcon } from '@/components/icons/WalletContentGlassIcon';
 import { ImageGlassIcon } from '@/components/icons/ImageGlassIcon';
 import { KeyGlassIcon } from '@/components/icons/KeyGlassIcon';
-import { Spinner } from '../shared/Spinner';
+import { WalletContentGlassIcon } from '@/components/icons/WalletContentGlassIcon';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip } from '@/components/ui/tooltip';
 import { ShimmerSkeleton } from '@/components/unlumen-ui/shimmer-skeleton';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { buildAiContext } from '@/lib/ai-context';
+import { useAppStore } from '@/stores/useAppStore';
+import { Spinner } from '../shared/Spinner';
+import { ObjectAttributePanel } from './ObjectAttributePanel';
 import { ObjectDetail } from './ObjectDetail';
-import toast from 'react-hot-toast';
-import { extractCoinType } from '@sui-cli-web/shared';
-import { getObject } from '@/api/client';
-import { transferObject } from '@/api/services/transfers';
-import { getBlobSummaries, getNftMetadata, type BlobSummary, type NftMetadata } from '@/api/services/objects';
-import { DitherAvatar } from '@/components/dither-kit/avatar';
 
 type ObjectCategory = 'all' | 'coin' | 'nft' | 'cap' | 'game' | 'memory' | 'other';
 
@@ -55,6 +64,30 @@ const COIN_PRIORITY: Record<string, number> = {
 };
 
 const VERIFIED_COINS = new Set(Object.keys(COIN_PRIORITY));
+
+/** Chips beyond this are a scroll hazard; the overflow is surfaced as a count. */
+const TYPE_CHIP_CAP = 12;
+
+/**
+ * Short, human label for a full Move type. `0x2::coin::Coin<0x2::sui::SUI>`
+ * reads as `Coin<SUI>` - the module path is noise once you're already scanning a
+ * single account's objects.
+ */
+function shortTypeLabel(type: string): string {
+  if (!type) return 'Unknown';
+  const [base, ...rest] = type.split('<');
+  const name = base.split('::').pop() ?? base;
+  if (!rest.length) return name;
+  const generic = rest.join('<').replace(/>+$/, '');
+  const genericName = generic.split('::').pop() ?? generic;
+  return `${name}<${genericName}>`;
+}
+
+/** Objects come off the RPC loosely typed; read the Move type without widening. */
+function typeOf(obj: unknown): string {
+  const o = obj as { type?: string; data?: { type?: string } };
+  return o?.type ?? o?.data?.type ?? '';
+}
 
 function getObjectRowId(obj: Record<string, unknown>, index: number): string {
   return ((obj.objectId as string) || (obj.data as any)?.objectId || `obj-${index}`) as string;
@@ -85,11 +118,39 @@ const isWalrusMemoryObject = (type: string): boolean => {
 
 const CATEGORIES: CategoryConfig[] = [
   { id: 'all', label: 'All', icon: <FileGlassIcon size={16} />, match: () => true },
-  { id: 'coin', label: 'Coins', icon: <WalletContentGlassIcon size={16} />, match: (t) => t.toLowerCase().includes('coin') },
-  { id: 'nft', label: 'NFTs', icon: <ImageGlassIcon size={16} />, match: (t) => t.toLowerCase().includes('nft') || t.toLowerCase().includes('display') },
-  { id: 'game', label: 'Game Demo', icon: '🎮', match: (t) => t.includes(GAME_PACKAGE_ID) || t.toLowerCase().includes('character') || t.toLowerCase().includes('::item::item') },
-  { id: 'memory', label: 'Walrus Memory', icon: <BlobGlassIcon size={16} />, match: isWalrusMemoryObject },
-  { id: 'cap', label: 'Capabilities', icon: <KeyGlassIcon size={16} />, match: (t) => t.toLowerCase().includes('cap') },
+  {
+    id: 'coin',
+    label: 'Coins',
+    icon: <WalletContentGlassIcon size={16} />,
+    match: (t) => t.toLowerCase().includes('coin'),
+  },
+  {
+    id: 'nft',
+    label: 'NFTs',
+    icon: <ImageGlassIcon size={16} />,
+    match: (t) => t.toLowerCase().includes('nft') || t.toLowerCase().includes('display'),
+  },
+  {
+    id: 'game',
+    label: 'Game Demo',
+    icon: '🎮',
+    match: (t) =>
+      t.includes(GAME_PACKAGE_ID) ||
+      t.toLowerCase().includes('character') ||
+      t.toLowerCase().includes('::item::item'),
+  },
+  {
+    id: 'memory',
+    label: 'Walrus Memory',
+    icon: <BlobGlassIcon size={16} />,
+    match: isWalrusMemoryObject,
+  },
+  {
+    id: 'cap',
+    label: 'Capabilities',
+    icon: <KeyGlassIcon size={16} />,
+    match: (t) => t.toLowerCase().includes('cap'),
+  },
   { id: 'other', label: 'Other', icon: '📄', match: () => true },
 ];
 
@@ -97,7 +158,7 @@ const CATEGORIES: CategoryConfig[] = [
 function getCoinBalance(obj: Record<string, unknown>): string | null {
   const content = obj.data?.content || obj.content;
   if (content?.dataType === 'moveObject' && content?.fields) {
-    return content.fields.balance as string || null;
+    return (content.fields.balance as string) || null;
   }
   return null;
 }
@@ -128,8 +189,10 @@ function getCoinSymbol(coinType: string): string {
   // Known mappings
   if (coinType.includes('sui::SUI')) return 'SUI';
   if (coinType.includes('wal::WAL')) return 'WAL';
-  if (coinType === '0x5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN') return 'USDC';
-  if (coinType === '0xc060006111016b8a020ad5b33834984a437aaa7d3c74c18e09a95d48aceab08c::coin::COIN') return 'USDT';
+  if (coinType === '0x5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN')
+    return 'USDC';
+  if (coinType === '0xc060006111016b8a020ad5b33834984a437aaa7d3c74c18e09a95d48aceab08c::coin::COIN')
+    return 'USDT';
 
   return typeName;
 }
@@ -207,13 +270,8 @@ function NftThumbnail({
 }
 
 export function ObjectList() {
-  const {
-    objects,
-    addresses,
-    isLoading,
-    searchQuery,
-    fetchObjects,
-  } = useAppStore();
+  const { objects, addresses, isLoading, searchQuery, setSearchQuery, fetchObjects } =
+    useAppStore();
 
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -223,22 +281,48 @@ export function ObjectList() {
   const [bulkTransferOpen, setBulkTransferOpen] = useState(false);
   const [bulkTransferAddress, setBulkTransferAddress] = useState('');
   const [isBulkTransferring, setIsBulkTransferring] = useState(false);
+  // Packages used to be a tab here; keep old links (and any ?packageId=) working.
+  useEffect(() => {
+    if (searchParams.get('tab') !== 'packages') return;
+    const pid = searchParams.get('packageId');
+    navigate(pid ? `/app/packages?packageId=${encodeURIComponent(pid)}` : '/app/packages', {
+      replace: true,
+    });
+  }, [searchParams, navigate]);
+
+  // Multi-select: an empty set means "no narrowing", otherwise it's a union of
+  // the picked types (an object has exactly one type, so intersecting would
+  // always yield nothing).
+  const [typeFilter, setTypeFilter] = useState<Set<string>>(() => new Set());
   const [activeCategory, setActiveCategory] = useState<ObjectCategory>('all');
-  const [directLookupObject, setDirectLookupObject] = useState<Record<string, unknown> | null>(null);
+  const [directLookupObject, setDirectLookupObject] = useState<Record<string, unknown> | null>(
+    null
+  );
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [fetchedUrlObjectId, setFetchedUrlObjectId] = useState<string | null>(null);
   const [blobSummaries, setBlobSummaries] = useState<Record<string, BlobSummary>>({});
   const [nftMetadata, setNftMetadata] = useState<Record<string, NftMetadata>>({});
 
+  // Below the mobile breakpoint the wide multi-column table can't fit, so the
+  // list collapses to a compact single-line-per-object layout (see render).
+  const isMobile = useIsMobile();
+
   // Support viewing objects for any address via query param (e.g., multi-sig addresses)
   const queryAddress = searchParams.get('address');
+
+  // `searchQuery` is shared across the coin/address/environment lists too, so a
+  // leftover object search would silently filter those after navigating away.
+  // Clear it on unmount (and on first mount, in case another view left one set).
+  useEffect(() => {
+    return () => setSearchQuery('');
+  }, [setSearchQuery]);
   const activeAddress = addresses.find((a) => a.isActive);
 
   // Use query address if provided, otherwise use active address
   const targetAddress = queryAddress || activeAddress?.address;
   const displayLabel = queryAddress
     ? `${queryAddress.slice(0, 10)}...${queryAddress.slice(-6)}`
-    : (activeAddress?.alias || `${activeAddress?.address.slice(0, 16)}...`);
+    : activeAddress?.alias || `${activeAddress?.address.slice(0, 16)}...`;
   const isExternalAddress = !!queryAddress && queryAddress !== activeAddress?.address;
 
   useEffect(() => {
@@ -283,7 +367,9 @@ export function ObjectList() {
 
   // Check if search query is a full Object ID (0x + 64 hex chars = 66 total)
   const isFullObjectId = useCallback((query: string) => {
-    return query && query.startsWith('0x') && query.length === 66 && /^0x[a-fA-F0-9]{64}$/.test(query);
+    return (
+      query && query.startsWith('0x') && query.length === 66 && /^0x[a-fA-F0-9]{64}$/.test(query)
+    );
   }, []);
 
   // Direct object lookup when user searches for a full Object ID
@@ -318,9 +404,11 @@ export function ObjectList() {
 
   // Helper to check if type is a game object
   const isGameObject = (type: string) => {
-    return type.includes(GAME_PACKAGE_ID) ||
-           type.toLowerCase().includes('character') ||
-           type.toLowerCase().includes('::item::item');
+    return (
+      type.includes(GAME_PACKAGE_ID) ||
+      type.toLowerCase().includes('character') ||
+      type.toLowerCase().includes('::item::item')
+    );
   };
 
   // Batch-fetch decoded Blob details (size, certification, last-touched) once
@@ -362,7 +450,11 @@ export function ObjectList() {
         type: ((obj.type as string) || (obj.data as any)?.type || '') as string,
         objectId: ((obj.objectId as string) || (obj.data as any)?.objectId || '') as string,
       }))
-      .filter((o) => o.objectId && (o.type.toLowerCase().includes('nft') || o.type.toLowerCase().includes('display')))
+      .filter(
+        (o) =>
+          o.objectId &&
+          (o.type.toLowerCase().includes('nft') || o.type.toLowerCase().includes('display'))
+      )
       .map((o) => o.objectId)
       .filter((id) => !nftMetadata[id]);
 
@@ -476,9 +568,43 @@ export function ObjectList() {
     return { filteredObjects: filtered, categoryCounts: counts };
   }, [objects, searchQuery, activeCategory]);
 
+  // Distinct Move types inside the current tab, most common first. Derived from
+  // the category-filtered set (not the type-filtered one) so the chips don't
+  // disappear the moment you pick one.
+  const typeOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const obj of filteredObjects) {
+      const type = typeOf(obj);
+      if (!type) continue;
+      counts.set(type, (counts.get(type) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([type, count]) => ({ type, count, label: shortTypeLabel(type) }));
+  }, [filteredObjects]);
+
+  // A type from the Coins tab is meaningless under NFTs - drop the selection
+  // whenever the tab or search changes rather than silently showing zero rows.
+  useEffect(() => {
+    setTypeFilter(new Set());
+  }, [activeCategory, searchQuery]);
+
+  const toggleTypeFilter = (type: string) => {
+    setTypeFilter((prev) => {
+      const next = new Set(prev);
+      next.has(type) ? next.delete(type) : next.add(type);
+      return next;
+    });
+  };
+
+  const visibleObjects = useMemo(() => {
+    if (typeFilter.size === 0) return filteredObjects;
+    return filteredObjects.filter((obj) => typeFilter.has(typeOf(obj)));
+  }, [filteredObjects, typeFilter]);
+
   const selectedObjects = useMemo(
-    () => filteredObjects.filter((obj, i) => selectedIds.has(getObjectRowId(obj, i))),
-    [filteredObjects, selectedIds]
+    () => visibleObjects.filter((obj, i) => selectedIds.has(getObjectRowId(obj, i))),
+    [visibleObjects, selectedIds]
   );
 
   // Merge only makes sense when every selected row is the same real coin type
@@ -542,7 +668,9 @@ export function ObjectList() {
     const text = JSON.stringify(payload, null, 2);
     try {
       await navigator.clipboard.writeText(text);
-      toast.success(`Copied ${selectedObjects.length} object${selectedObjects.length === 1 ? '' : 's'}`);
+      toast.success(
+        `Copied ${selectedObjects.length} object${selectedObjects.length === 1 ? '' : 's'}`
+      );
     } catch {
       toast.error('Copy failed');
     }
@@ -593,7 +721,8 @@ export function ObjectList() {
     if (lower.includes('test')) return 'bg-green-500/20 text-green-400 border-green-500/30';
     // Game objects - cyan/teal color
     if (lower.includes('character')) return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30';
-    if (lower.includes('::item::item')) return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+    if (lower.includes('::item::item'))
+      return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
     if (type.includes(GAME_PACKAGE_ID)) return 'bg-teal-500/20 text-teal-400 border-teal-500/30';
     return 'bg-muted text-muted-foreground border-border';
   };
@@ -621,9 +750,13 @@ export function ObjectList() {
               <span className="text-base text-foreground truncate">
                 {isCoin && coinSymbol ? coinSymbol : getTypeDisplay(type)}
               </span>
-              {isCoin && isVerified && <span className="text-[10px] text-success flex-shrink-0">✓</span>}
+              {isCoin && isVerified && (
+                <span className="text-[10px] text-success flex-shrink-0">✓</span>
+              )}
               {!isCoin && moduleName && (
-                <span className="text-xs text-tertiary font-mono flex-shrink-0">::{moduleName}</span>
+                <span className="text-xs text-tertiary font-mono flex-shrink-0">
+                  ::{moduleName}
+                </span>
               )}
             </div>
           );
@@ -635,6 +768,7 @@ export function ObjectList() {
         accessor: (obj) => (obj.objectId as string) || (obj.data as any)?.objectId || '',
         sortable: true,
         size: 300,
+        grow: true,
         cell: (obj) => (
           <span className="text-sm text-tertiary font-mono truncate">
             {(obj.objectId as string) || (obj.data as any)?.objectId || ''}
@@ -663,7 +797,8 @@ export function ObjectList() {
           if (!coinBalance) return null;
           return (
             <span className="text-sm text-primary">
-              {formatCoinBalance(coinBalance)} <span className="text-muted-foreground">{coinSymbol}</span>
+              {formatCoinBalance(coinBalance)}{' '}
+              <span className="text-muted-foreground">{coinSymbol}</span>
             </span>
           );
         },
@@ -676,7 +811,9 @@ export function ObjectList() {
         size: 100,
         align: 'right',
         cell: (obj) => (
-          <span className="text-xs text-tertiary">v{(obj.version as string) || (obj.data as any)?.version || ''}</span>
+          <span className="text-xs text-tertiary">
+            v{(obj.version as string) || (obj.data as any)?.version || ''}
+          </span>
         ),
       },
       {
@@ -692,7 +829,9 @@ export function ObjectList() {
         minSize: 200,
         cell: (obj) => {
           const type = ((obj.type as string) || (obj.data as any)?.type || '') as string;
-          const objectId = ((obj.objectId as string) || (obj.data as any)?.objectId || '') as string;
+          const objectId = ((obj.objectId as string) ||
+            (obj.data as any)?.objectId ||
+            '') as string;
           const isCoin = type.toLowerCase().includes('coin');
           const coinType = isCoin ? extractCoinType(type) : null;
           if (!isCoin || !coinType) return null;
@@ -703,7 +842,9 @@ export function ObjectList() {
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation();
-                  navigate(`/app/coins/transfer?coinId=${objectId}&type=${encodeURIComponent(coinType)}`);
+                  navigate(
+                    `/app/coins/transfer?coinId=${objectId}&type=${encodeURIComponent(coinType)}`
+                  );
                 }}
               >
                 <Package className="w-3.5 h-3.5" />
@@ -714,7 +855,9 @@ export function ObjectList() {
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation();
-                  navigate(`/app/coins/split?coinId=${objectId}&type=${encodeURIComponent(coinType)}`);
+                  navigate(
+                    `/app/coins/split?coinId=${objectId}&type=${encodeURIComponent(coinType)}`
+                  );
                 }}
               >
                 <Split className="w-3.5 h-3.5" />
@@ -748,7 +891,9 @@ export function ObjectList() {
               <span className="flex-shrink-0">{getTypeIcon(type)}</span>
               <span className="text-base text-foreground truncate">{getTypeDisplay(type)}</span>
               {moduleName && (
-                <span className="text-xs text-tertiary font-mono flex-shrink-0">::{moduleName}</span>
+                <span className="text-xs text-tertiary font-mono flex-shrink-0">
+                  ::{moduleName}
+                </span>
               )}
             </div>
           );
@@ -760,6 +905,7 @@ export function ObjectList() {
         accessor: (obj) => (obj.objectId as string) || (obj.data as any)?.objectId || '',
         sortable: true,
         size: 260,
+        grow: true,
         cell: (obj) => (
           <span className="text-sm text-tertiary font-mono truncate">
             {(obj.objectId as string) || (obj.data as any)?.objectId || ''}
@@ -770,15 +916,23 @@ export function ObjectList() {
         id: 'size',
         header: 'Size',
         accessor: (obj) => {
-          const objectId = ((obj.objectId as string) || (obj.data as any)?.objectId || '') as string;
+          const objectId = ((obj.objectId as string) ||
+            (obj.data as any)?.objectId ||
+            '') as string;
           return blobSummaries[objectId]?.size ?? -1;
         },
         sortable: true,
         size: 100,
         align: 'right',
         cell: (obj) => {
-          const objectId = ((obj.objectId as string) || (obj.data as any)?.objectId || '') as string;
-          return <span className="text-sm text-foreground">{formatBytes(blobSummaries[objectId]?.size ?? null)}</span>;
+          const objectId = ((obj.objectId as string) ||
+            (obj.data as any)?.objectId ||
+            '') as string;
+          return (
+            <span className="text-sm text-foreground">
+              {formatBytes(blobSummaries[objectId]?.size ?? null)}
+            </span>
+          );
         },
       },
       {
@@ -792,13 +946,17 @@ export function ObjectList() {
           </Tooltip>
         ),
         accessor: (obj) => {
-          const objectId = ((obj.objectId as string) || (obj.data as any)?.objectId || '') as string;
+          const objectId = ((obj.objectId as string) ||
+            (obj.data as any)?.objectId ||
+            '') as string;
           return blobSummaries[objectId]?.certifiedEpoch ?? -1;
         },
         sortable: true,
         size: 150,
         cell: (obj) => {
-          const objectId = ((obj.objectId as string) || (obj.data as any)?.objectId || '') as string;
+          const objectId = ((obj.objectId as string) ||
+            (obj.data as any)?.objectId ||
+            '') as string;
           const summary = blobSummaries[objectId];
           if (!summary) return <span className="text-sm text-tertiary">-</span>;
           return summary.certifiedEpoch !== null ? (
@@ -812,31 +970,47 @@ export function ObjectList() {
         id: 'storageUntil',
         header: 'Storage Until',
         accessor: (obj) => {
-          const objectId = ((obj.objectId as string) || (obj.data as any)?.objectId || '') as string;
+          const objectId = ((obj.objectId as string) ||
+            (obj.data as any)?.objectId ||
+            '') as string;
           return blobSummaries[objectId]?.storageEndEpoch ?? -1;
         },
         sortable: true,
         size: 120,
         align: 'right',
         cell: (obj) => {
-          const objectId = ((obj.objectId as string) || (obj.data as any)?.objectId || '') as string;
+          const objectId = ((obj.objectId as string) ||
+            (obj.data as any)?.objectId ||
+            '') as string;
           const epoch = blobSummaries[objectId]?.storageEndEpoch;
-          return <span className="text-sm text-muted-foreground">{epoch !== undefined && epoch !== null ? `epoch ${epoch}` : '-'}</span>;
+          return (
+            <span className="text-sm text-muted-foreground">
+              {epoch !== undefined && epoch !== null ? `epoch ${epoch}` : '-'}
+            </span>
+          );
         },
       },
       {
         id: 'lastTouched',
         header: 'Last Interaction',
         accessor: (obj) => {
-          const objectId = ((obj.objectId as string) || (obj.data as any)?.objectId || '') as string;
+          const objectId = ((obj.objectId as string) ||
+            (obj.data as any)?.objectId ||
+            '') as string;
           return blobSummaries[objectId]?.lastTouchedMs ?? -1;
         },
         sortable: true,
         size: 130,
         align: 'right',
         cell: (obj) => {
-          const objectId = ((obj.objectId as string) || (obj.data as any)?.objectId || '') as string;
-          return <span className="text-sm text-muted-foreground">{formatRelativeTime(blobSummaries[objectId]?.lastTouchedMs ?? null)}</span>;
+          const objectId = ((obj.objectId as string) ||
+            (obj.data as any)?.objectId ||
+            '') as string;
+          return (
+            <span className="text-sm text-muted-foreground">
+              {formatRelativeTime(blobSummaries[objectId]?.lastTouchedMs ?? null)}
+            </span>
+          );
         },
       },
     ],
@@ -852,14 +1026,18 @@ export function ObjectList() {
         id: 'preview',
         header: 'NFT',
         accessor: (obj) => {
-          const objectId = ((obj.objectId as string) || (obj.data as any)?.objectId || '') as string;
+          const objectId = ((obj.objectId as string) ||
+            (obj.data as any)?.objectId ||
+            '') as string;
           return nftMetadata[objectId]?.name || (obj.type as string) || '';
         },
         sortable: true,
         size: 280,
         cell: (obj) => {
           const type = ((obj.type as string) || (obj.data as any)?.type || '') as string;
-          const objectId = ((obj.objectId as string) || (obj.data as any)?.objectId || '') as string;
+          const objectId = ((obj.objectId as string) ||
+            (obj.data as any)?.objectId ||
+            '') as string;
           const meta = nftMetadata[objectId];
           return (
             <div className="flex items-center gap-3 min-w-0">
@@ -868,7 +1046,9 @@ export function ObjectList() {
                 <span className="text-base text-foreground truncate">
                   {meta?.name || getTypeDisplay(type)}
                 </span>
-                <span className="text-xs text-tertiary font-mono truncate">::{getModuleName(type)}</span>
+                <span className="text-xs text-tertiary font-mono truncate">
+                  ::{getModuleName(type)}
+                </span>
               </div>
             </div>
           );
@@ -880,6 +1060,7 @@ export function ObjectList() {
         accessor: (obj) => (obj.objectId as string) || (obj.data as any)?.objectId || '',
         sortable: true,
         size: 240,
+        grow: true,
         cell: (obj) => (
           <span className="text-sm text-tertiary font-mono truncate">
             {(obj.objectId as string) || (obj.data as any)?.objectId || ''}
@@ -893,7 +1074,9 @@ export function ObjectList() {
         sortable: false,
         size: 320,
         cell: (obj) => {
-          const objectId = ((obj.objectId as string) || (obj.data as any)?.objectId || '') as string;
+          const objectId = ((obj.objectId as string) ||
+            (obj.data as any)?.objectId ||
+            '') as string;
           const attrs = nftMetadata[objectId]?.attributes ?? [];
           if (attrs.length === 0) return <span className="text-xs text-tertiary">—</span>;
           return (
@@ -950,20 +1133,12 @@ export function ObjectList() {
   // Show object detail view
   if (selectedObject) {
     return (
-      <ObjectDetail
-        object={selectedObject}
-        onBack={handleCloseDetail}
-        onCopy={copyToClipboard}
-      />
+      <ObjectDetail object={selectedObject} onBack={handleCloseDetail} onCopy={copyToClipboard} />
     );
   }
 
   if (!targetAddress) {
-    return (
-      <div className="px-3 py-8 text-center text-muted-foreground">
-        No address selected
-      </div>
-    );
+    return <div className="px-3 py-8 text-center text-muted-foreground">No address selected</div>;
   }
 
   if (isLoading && objects.length === 0) {
@@ -974,7 +1149,7 @@ export function ObjectList() {
           <ShimmerSkeleton className="h-5 w-24" />
           <ShimmerSkeleton className="h-5 w-32" />
         </div>
-        
+
         {/* Tabs skeleton */}
         <div className="flex items-center gap-2 mb-4 px-1">
           <ShimmerSkeleton className="h-8 w-16" rounded="full" />
@@ -985,7 +1160,10 @@ export function ObjectList() {
         {/* List items skeleton */}
         <div className="space-y-1">
           {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border-l-2 border-l-transparent">
+            <div
+              key={i}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg border-l-2 border-l-transparent"
+            >
               <ShimmerSkeleton className="h-6 w-6 shrink-0" rounded="full" />
               <div className="flex-1 space-y-2">
                 <ShimmerSkeleton className="h-4 w-1/4" />
@@ -999,11 +1177,128 @@ export function ObjectList() {
     );
   }
 
+  // "Copy for AI" payloads describing the currently-filtered object list. Capped
+  // so a wallet with thousands of objects doesn't produce a multi-MB clipboard.
+  const AI_ROW_CAP = 200;
+  const aiRows = visibleObjects.slice(0, AI_ROW_CAP).map((obj) => {
+    const type = ((obj.type as string) || (obj.data as any)?.type || '') as string;
+    return {
+      type,
+      objectId: ((obj.objectId as string) || (obj.data as any)?.objectId || '') as string,
+      version: ((obj.version as string) || (obj.data as any)?.version || '') as string,
+    };
+  });
+  const aiTruncated = visibleObjects.length > AI_ROW_CAP;
+  const activeCategoryLabel = CATEGORIES.find((c) => c.id === activeCategory)?.label ?? 'All';
+  const aiJson = JSON.stringify(
+    {
+      address: targetAddress,
+      filter: activeCategoryLabel,
+      total: visibleObjects.length,
+      objects: aiRows,
+    },
+    null,
+    2
+  );
+  const aiMarkdown = [
+    `# Objects for ${displayLabel}`,
+    '',
+    `- **Address:** \`${targetAddress}\``,
+    `- **Filter:** ${activeCategoryLabel}`,
+    `- **Showing:** ${aiRows.length} of ${visibleObjects.length}${aiTruncated ? ' (truncated)' : ''}`,
+    '',
+    '| Type | Object ID | Version |',
+    '| --- | --- | --- |',
+    ...aiRows.map(
+      (r) => `| ${getTypeDisplay(r.type) || '—'} | \`${r.objectId}\` | ${r.version || '—'} |`
+    ),
+  ].join('\n');
+  const aiPrompt = buildAiContext({
+    title: 'Sui owned objects',
+    intro: [
+      `On-chain objects owned by \`${targetAddress}\`, as currently filtered in the UI`,
+      `(${activeCategoryLabel}${typeFilter.size > 0 ? ` + ${typeFilter.size} type filter(s)` : ''}: ${visibleObjects.length} shown${aiTruncated ? `, first ${AI_ROW_CAP} listed below` : ''}).`,
+    ],
+    stateJson: aiJson,
+    extra: aiMarkdown,
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/addresses/:address/objects',
+        effect: 'every object owned by an address',
+      },
+      {
+        // `type` is required - without it the route 400s.
+        method: 'GET',
+        path: '/addresses/:address/objects/by-type?type=<pattern>',
+        effect: 'objects matching a Move type pattern (type param is required)',
+      },
+      { method: 'GET', path: '/coins/:address', effect: 'coin objects only, with balances' },
+      {
+        method: 'POST',
+        path: '/transfers/object',
+        body: '{ to, objectId, gasBudget? }',
+        effect: 'signs and submits an object transfer',
+        mutating: true,
+      },
+      {
+        method: 'POST',
+        path: '/transfers/object/dry-run',
+        body: '{ to, objectId, gasBudget? }',
+        effect: 'simulate the transfer',
+      },
+    ],
+    rules: [
+      'The category tabs (Coins/NFTs/Capabilities/...) are heuristics over the type string, not on-chain classes',
+      'An object has exactly one Move type; the full type is `package::module::Struct<TypeArgs>`',
+      'Only the listed rows are included here - the account may own more than is shown',
+      'Transferring an object moves the whole object; there is no partial transfer except for coins (split first)',
+    ],
+    examples: [
+      'group these by what they actually are',
+      'find anything unusual or unexpected',
+      'work out which are safe to clean up',
+    ],
+  });
+
+  // Single-line-per-object rows for the mobile compact list (the desktop uses the
+  // full DataTable).
+  const plainObjectRows = visibleObjects.map((obj, i) => {
+    const type = ((obj.type as string) || (obj.data as any)?.type || '') as string;
+    const objectId = ((obj.objectId as string) || (obj.data as any)?.objectId || '') as string;
+    const version = ((obj.version as string) || (obj.data as any)?.version || '') as string;
+    const isCoin = type.toLowerCase().includes('coin');
+    const coinType = isCoin ? extractCoinType(type) : null;
+    const label =
+      isCoin && coinType ? getCoinSymbol(coinType) || getTypeDisplay(type) : getTypeDisplay(type);
+    return (
+      <button
+        type="button"
+        key={getObjectRowId(obj, i)}
+        onClick={() => {
+          setSelectedObject(obj);
+          if (objectId) navigate(`/app/objects/${objectId}`);
+        }}
+        className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-accent/50 transition-colors"
+      >
+        <span className="flex-shrink-0">{getTypeIcon(type)}</span>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm text-foreground truncate">{label}</div>
+          <div className="text-xs text-tertiary font-mono truncate">
+            {objectId ? `${objectId.slice(0, 10)}...${objectId.slice(-6)}` : ''}
+          </div>
+        </div>
+        {version && <span className="text-xs text-tertiary flex-shrink-0">v{version}</span>}
+        <ChevronRight className="w-4 h-4 text-tertiary flex-shrink-0" />
+      </button>
+    );
+  });
+
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <div className="flex items-center justify-between gap-2 px-1">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0">
           <span>Objects</span>
           {isExternalAddress && (
             <Badge variant="outline" className="border-purple-500/30 text-purple-400 text-[10px]">
@@ -1011,13 +1306,60 @@ export function ObjectList() {
             </Badge>
           )}
         </div>
-        <button
-          className="text-sm text-muted-foreground hover:text-foreground cursor-pointer transition-colors font-mono"
-          onClick={() => { navigator.clipboard.writeText(targetAddress); toast.success('Address copied'); }}
-          title="Click to copy"
-        >
-          {displayLabel}
-        </button>
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            className="text-sm text-muted-foreground hover:text-foreground cursor-pointer transition-colors font-mono truncate"
+            onClick={() => {
+              navigator.clipboard.writeText(targetAddress);
+              toast.success('Address copied');
+            }}
+            title="Click to copy"
+          >
+            {displayLabel}
+          </button>
+          {visibleObjects.length > 0 && (
+            <CopyForAiMenu
+              prompt={aiPrompt}
+              json={aiJson}
+              markdown={aiMarkdown}
+              onCopy={copyToClipboard}
+              className="flex-shrink-0"
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Find object - drives the shared searchQuery, which filters the list by
+          Object ID / type and (for a full 0x… id) triggers the direct lookup below. */}
+      <div className="px-1">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Find an object by ID or type… (paste a full 0x… ID to fetch any object)"
+            className="w-full pl-10 pr-9 py-2 bg-secondary border border-border rounded-lg text-sm text-foreground placeholder:text-tertiary focus:outline-none focus:border-[#4da2ff]/50 transition-colors"
+            aria-label="Find an object"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              title="Clear search"
+              aria-label="Clear search"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        {searchQuery && (
+          <div className="mt-1.5 px-1 text-xs text-muted-foreground">
+            {visibleObjects.length} match{visibleObjects.length !== 1 ? 'es' : ''} in{' '}
+            {activeCategoryLabel}
+          </div>
+        )}
       </div>
 
       {/* Category filter - single shared TabsContent below (the list is already
@@ -1036,208 +1378,323 @@ export function ObjectList() {
           })}
         </TabsList>
         <TabsContent value={activeCategory}>
-
-      {/* Direct Object Lookup Result - when user searches for a full Object ID */}
-      {isFullObjectId(searchQuery) && (
-        <div className="mb-3">
-          <div className="text-xs text-muted-foreground mb-2 flex items-center gap-2">
-            <Search className="w-3 h-3" />
-            Direct Object Lookup
-          </div>
-          {isLookingUp ? (
-            <div className="flex items-center gap-2 px-3 py-4 bg-muted/30 rounded-lg">
-              <Spinner />
-              <span className="text-sm text-muted-foreground">Looking up object...</span>
-            </div>
-          ) : directLookupObject ? (
-            <div
-              className="flex items-center gap-3 px-3 py-3 rounded-lg bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 transition-colors cursor-pointer"
-              onClick={() => setSelectedObject(directLookupObject)}
-            >
-              <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center text-lg">
-                {getTypeIcon((directLookupObject as any).data?.type || (directLookupObject as any).type || '')}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-green-400">Found Object</span>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getTypeColor((directLookupObject as any).data?.type || (directLookupObject as any).type || '')}`}>
-                    {getTypeDisplay((directLookupObject as any).data?.type || (directLookupObject as any).type || '')}
-                  </span>
-                </div>
-                <div className="text-xs text-muted-foreground font-mono truncate mt-1">
-                  {searchQuery}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">
-                  v{(directLookupObject as any).data?.version || (directLookupObject as any).version || '?'}
-                </span>
-                <ChevronRight className="w-4 h-4 text-green-400" />
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 px-3 py-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-              <span className="text-red-400">❌</span>
-              <span className="text-sm text-red-400">Object not found or deleted</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {filteredObjects.length === 0 && !isFullObjectId(searchQuery) ? (
-        <div className="px-3 py-8 text-center text-muted-foreground">
-          <div className="text-4xl mb-2">{objects.length === 0 ? '📭' : '🔍'}</div>
-          <div className="mb-2">{objects.length === 0 ? 'This address has no objects yet' : 'No objects match your filter'}</div>
-
-          {objects.length === 0 && (
-            <div className="mt-4 p-4 bg-muted/30 rounded-lg text-left max-w-sm mx-auto">
-              <p className="text-xs text-muted-foreground mb-3">
-                {isExternalAddress
-                  ? 'This might be a new multi-sig address. To start using it:'
-                  : 'To add objects to this address:'}
-              </p>
-              <div className="space-y-2 text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-bold">1</span>
-                  <span>Get test SUI from faucet</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-bold">2</span>
-                  <span>Transfer assets to this address</span>
-                </div>
-              </div>
-              <Button variant="outline" size="sm" className="mt-3" asChild>
-                <a href={`/app/faucet?address=${targetAddress}`}>
-                  <Droplet className="w-3.5 h-3.5" />
-                  Request from Faucet
-                </a>
-              </Button>
-            </div>
-          )}
-
-          {activeCategory !== 'all' && objects.length > 0 && (
-            <button
-              onClick={() => setActiveCategory('all')}
-              className="mt-2 text-xs text-primary hover:underline"
-            >
-              Show all objects
-            </button>
-          )}
-        </div>
-      ) : filteredObjects.length === 0 && isFullObjectId(searchQuery) ? (
-        /* Only direct lookup result shown */
-        null
-      ) : (
-        /* Virtualized table - smooth at 10k+ rows, sortable/resizable/reorderable
-           headers, sticky header, row selection. */
-        <div className="rounded-lg border border-border overflow-hidden">
-          {selectedIds.size > 0 && (
-            <div className="border-b border-border bg-accent">
-              <div className="flex items-center justify-between px-3 py-2 text-xs">
-                <span className="text-foreground">{selectedIds.size} selected</span>
-                <div className="flex items-center gap-3">
-                  {commonCoinType && (
-                    <button
-                      className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
-                      onClick={() =>
-                        navigate(`/app/coins/merge?type=${encodeURIComponent(commonCoinType)}`)
-                      }
-                    >
-                      <Combine className="w-3.5 h-3.5" />
-                      Merge
-                    </button>
+          <>
+              {/* Concrete-type filter. The category tabs are heuristic buckets
+                  ("anything with 'cap' in the type"); this narrows to one exact
+                  Move type, which is what you want once a bucket has hundreds. */}
+              {typeOptions.length > 1 && (
+                <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setTypeFilter(new Set())}
+                    aria-pressed={typeFilter.size === 0}
+                    className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      typeFilter.size === 0
+                        ? 'border-[#4da2ff]/40 bg-[#4da2ff]/10 text-[#4da2ff]'
+                        : 'border-border bg-secondary text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    All types
+                  </button>
+                  {typeOptions.slice(0, TYPE_CHIP_CAP).map((opt) => {
+                    const on = typeFilter.has(opt.type);
+                    return (
+                      <button
+                        key={opt.type}
+                        type="button"
+                        onClick={() => toggleTypeFilter(opt.type)}
+                        aria-pressed={on}
+                        title={opt.type}
+                        className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                          on
+                            ? 'border-[#4da2ff]/40 bg-[#4da2ff]/10 text-[#4da2ff]'
+                            : 'border-border bg-secondary text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        <span className="font-mono">{opt.label}</span>
+                        <span className="ml-1 text-tertiary">{opt.count}</span>
+                      </button>
+                    );
+                  })}
+                  {typeOptions.length > TYPE_CHIP_CAP && (
+                    <span className="text-[11px] text-tertiary">
+                      +{typeOptions.length - TYPE_CHIP_CAP} more type
+                      {typeOptions.length - TYPE_CHIP_CAP !== 1 ? 's' : ''}
+                    </span>
                   )}
-                  <button
-                    className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
-                    onClick={handleCopySelected}
-                    title="Copy selected objects as JSON (for pasting into an AI agent)"
-                  >
-                    <ClipboardCopy className="w-3.5 h-3.5" />
-                    Copy
-                  </button>
-                  <button
-                    className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
-                    onClick={() => setBulkTransferOpen((o) => !o)}
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    Transfer
-                  </button>
-                  <button
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={() => {
-                      setSelectedIds(new Set());
-                      setBulkTransferOpen(false);
-                    }}
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-              {bulkTransferOpen && (
-                <div className="flex items-center gap-2 px-3 pb-2">
-                  <input
-                    type="text"
-                    value={bulkTransferAddress}
-                    onChange={(e) => setBulkTransferAddress(e.target.value)}
-                    placeholder="0x... recipient address"
-                    className="flex-1 text-xs font-mono px-2 py-1.5 rounded border border-border bg-background text-foreground placeholder:text-tertiary"
-                    disabled={isBulkTransferring}
-                  />
-                  <Button
-                    size="sm"
-                    disabled={!bulkTransferAddress.trim() || isBulkTransferring}
-                    onClick={handleBulkTransfer}
-                  >
-                    {isBulkTransferring ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      `Send ${selectedIds.size}`
-                    )}
-                  </Button>
-                  <button
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={() => setBulkTransferOpen(false)}
-                    disabled={isBulkTransferring}
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
                 </div>
               )}
-            </div>
-          )}
-          <DataTable
-            // Distinct column set (and therefore distinct column ids) for the
-            // Walrus Memory tab - remount rather than reuse so DataTable's
-            // internal column order/sizing state doesn't carry over stale ids.
-            key={activeCategory === 'memory' ? 'memory-columns' : activeCategory === 'nft' ? 'nft-columns' : 'default-columns'}
-            columns={activeCategory === 'memory' ? memoryTableColumns : activeCategory === 'nft' ? nftTableColumns : tableColumns}
-            data={filteredObjects}
-            getRowId={getObjectRowId}
-            selectedIds={selectedIds}
-            onSelectionChange={setSelectedIds}
-            onRowClick={(obj) => setSelectedObject(obj)}
-            rowHeight={56}
-            // Fixed 560px used to leave a lot of dead space below the scrollable box on
-            // tall viewports - the visible table card looked taller than the actual
-            // wheel-scrollable region, so scrolling only worked in a narrow strip instead
-            // of anywhere over the table (bad UX - had to hunt for the real scrollbar).
-            // Scales with the viewport instead, bounded so it never gets unreasonably short.
-            className="h-[min(70vh,720px)] min-h-[320px]"
-          />
-        </div>
-      )}
+              {/* Direct Object Lookup Result - when user searches for a full Object ID */}
+              {isFullObjectId(searchQuery) && (
+                <div className="mb-3">
+                  <div className="text-xs text-muted-foreground mb-2 flex items-center gap-2">
+                    <Search className="w-3 h-3" />
+                    Direct Object Lookup
+                  </div>
+                  {isLookingUp ? (
+                    <div className="flex items-center gap-2 px-3 py-4 bg-muted/30 rounded-lg">
+                      <Spinner />
+                      <span className="text-sm text-muted-foreground">Looking up object...</span>
+                    </div>
+                  ) : directLookupObject ? (
+                    <div
+                      className="flex items-center gap-3 px-3 py-3 rounded-lg bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 transition-colors cursor-pointer"
+                      onClick={() => setSelectedObject(directLookupObject)}
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center text-lg">
+                        {getTypeIcon(
+                          (directLookupObject as any).data?.type ||
+                            (directLookupObject as any).type ||
+                            ''
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-green-400">Found Object</span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getTypeColor((directLookupObject as any).data?.type || (directLookupObject as any).type || '')}`}
+                          >
+                            {getTypeDisplay(
+                              (directLookupObject as any).data?.type ||
+                                (directLookupObject as any).type ||
+                                ''
+                            )}
+                          </span>
+                        </div>
+                        <div className="text-xs text-muted-foreground font-mono truncate mt-1">
+                          {searchQuery}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          v
+                          {(directLookupObject as any).data?.version ||
+                            (directLookupObject as any).version ||
+                            '?'}
+                        </span>
+                        <ChevronRight className="w-4 h-4 text-green-400" />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 px-3 py-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                      <span className="text-red-400">❌</span>
+                      <span className="text-sm text-red-400">Object not found or deleted</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
+              {visibleObjects.length === 0 && !isFullObjectId(searchQuery) ? (
+                <div className="px-3 py-8 text-center text-muted-foreground">
+                  <div className="text-4xl mb-2">{objects.length === 0 ? '📭' : '🔍'}</div>
+                  <div className="mb-2">
+                    {objects.length === 0
+                      ? 'This address has no objects yet'
+                      : 'No objects match your filter'}
+                  </div>
+
+                  {objects.length === 0 && (
+                    <div className="mt-4 p-4 bg-muted/30 rounded-lg text-left max-w-sm mx-auto">
+                      <p className="text-xs text-muted-foreground mb-3">
+                        {isExternalAddress
+                          ? 'This might be a new multi-sig address. To start using it:'
+                          : 'To add objects to this address:'}
+                      </p>
+                      <div className="space-y-2 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-bold">
+                            1
+                          </span>
+                          <span>Get test SUI from faucet</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-bold">
+                            2
+                          </span>
+                          <span>Transfer assets to this address</span>
+                        </div>
+                      </div>
+                      <Button variant="outline" size="sm" className="mt-3" asChild>
+                        <a href={`/app/faucet?address=${targetAddress}`}>
+                          <Droplet className="w-3.5 h-3.5" />
+                          Request from Faucet
+                        </a>
+                      </Button>
+                    </div>
+                  )}
+
+                  {activeCategory !== 'all' && objects.length > 0 && (
+                    <button
+                      onClick={() => setActiveCategory('all')}
+                      className="mt-2 text-xs text-primary hover:underline"
+                    >
+                      Show all objects
+                    </button>
+                  )}
+                </div>
+              ) : visibleObjects.length === 0 &&
+                isFullObjectId(searchQuery) ? /* Only direct lookup result shown */
+              null : (
+                /* Virtualized table - smooth at 10k+ rows, sortable/resizable/reorderable
+           headers, sticky header, row selection. */
+                <div className="rounded-lg border border-border overflow-hidden">
+                  {selectedIds.size > 0 && (
+                    <div className="border-b border-border bg-accent">
+                      <div className="flex items-center justify-between px-3 py-2 text-xs">
+                        <span className="text-foreground">{selectedIds.size} selected</span>
+                        <div className="flex items-center gap-3">
+                          {commonCoinType && (
+                            <button
+                              className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
+                              onClick={() =>
+                                navigate(
+                                  `/app/coins/merge?type=${encodeURIComponent(commonCoinType)}`
+                                )
+                              }
+                            >
+                              <Combine className="w-3.5 h-3.5" />
+                              Merge
+                            </button>
+                          )}
+                          <button
+                            className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
+                            onClick={handleCopySelected}
+                            title="Copy selected objects as JSON (for pasting into an AI agent)"
+                          >
+                            <ClipboardCopy className="w-3.5 h-3.5" />
+                            Copy
+                          </button>
+                          <button
+                            className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
+                            onClick={() => setBulkTransferOpen((o) => !o)}
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            Transfer
+                          </button>
+                          <button
+                            className="text-muted-foreground hover:text-foreground"
+                            onClick={() => {
+                              setSelectedIds(new Set());
+                              setBulkTransferOpen(false);
+                            }}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+                      {bulkTransferOpen && (
+                        <div className="flex items-center gap-2 px-3 pb-2">
+                          <input
+                            type="text"
+                            value={bulkTransferAddress}
+                            onChange={(e) => setBulkTransferAddress(e.target.value)}
+                            placeholder="0x... recipient address"
+                            className="flex-1 text-xs font-mono px-2 py-1.5 rounded border border-border bg-background text-foreground placeholder:text-tertiary"
+                            disabled={isBulkTransferring}
+                          />
+                          <Button
+                            size="sm"
+                            disabled={!bulkTransferAddress.trim() || isBulkTransferring}
+                            onClick={handleBulkTransfer}
+                          >
+                            {isBulkTransferring ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              `Send ${selectedIds.size}`
+                            )}
+                          </Button>
+                          <button
+                            className="text-muted-foreground hover:text-foreground"
+                            onClick={() => setBulkTransferOpen(false)}
+                            disabled={isBulkTransferring}
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {isMobile ? (
+                    // Narrow screens: the multi-column resizable table can't fit, so fall
+                    // back to a compact single-line-per-object list (icon + type + id).
+                    <div className="max-h-[min(70vh,720px)] overflow-y-auto divide-y divide-border/50">
+                      {plainObjectRows}
+                    </div>
+                  ) : (
+                    <DataTable
+                      // Distinct column set (and therefore distinct column ids) for the
+                      // Walrus Memory tab - remount rather than reuse so DataTable's
+                      // internal column order/sizing state doesn't carry over stale ids.
+                      key={
+                        activeCategory === 'memory'
+                          ? 'memory-columns'
+                          : activeCategory === 'nft'
+                            ? 'nft-columns'
+                            : 'default-columns'
+                      }
+                      columns={
+                        activeCategory === 'memory'
+                          ? memoryTableColumns
+                          : activeCategory === 'nft'
+                            ? nftTableColumns
+                            : tableColumns
+                      }
+                      data={visibleObjects}
+                      getRowId={getObjectRowId}
+                      selectedIds={selectedIds}
+                      onSelectionChange={setSelectedIds}
+                      onRowClick={(obj) => {
+                        setSelectedObject(obj);
+                        const clickedId =
+                          (obj.objectId as string) || (obj.data as { objectId?: string })?.objectId;
+                        if (clickedId) {
+                          navigate(`/app/objects/${clickedId}`);
+                        }
+                      }}
+                      rowHeight={56}
+                      // Click a row (or its chevron) to expand a richer attributes panel -
+                      // owner, digest, previous tx, storage rebate, transferable, Display -
+                      // fetched lazily per row. "View full details" inside opens the object page.
+                      renderExpanded={(obj) => (
+                        <ObjectAttributePanel
+                          objectId={
+                            (obj.objectId as string) ||
+                            (obj.data as { objectId?: string })?.objectId ||
+                            ''
+                          }
+                          baseType={
+                            (obj.type as string) || (obj.data as { type?: string })?.type
+                          }
+                          baseVersion={
+                            (obj.version as string) ||
+                            (obj.data as { version?: string })?.version
+                          }
+                          baseOwner={
+                            (obj.owner as unknown) ?? (obj.data as { owner?: unknown })?.owner
+                          }
+                        />
+                      )}
+                      expandedRowHeight={300}
+                      // Fixed 560px used to leave a lot of dead space below the scrollable box on
+                      // tall viewports - the visible table card looked taller than the actual
+                      // wheel-scrollable region, so scrolling only worked in a narrow strip instead
+                      // of anywhere over the table (bad UX - had to hunt for the real scrollbar).
+                      // Scales with the viewport instead, bounded so it never gets unreasonably short.
+                      className="h-[min(70vh,720px)] min-h-[320px]"
+                    />
+                  )}
+                </div>
+              )}
+          </>
         </TabsContent>
       </Tabs>
 
       {/* Footer */}
       <div className="mt-3 px-1 py-2 border-t border-border flex items-center justify-between text-xs text-tertiary">
         <span>
-          {filteredObjects.length}/{objects.length} objects
+          {visibleObjects.length}/{objects.length} objects
         </span>
-        <span>
-          Click to inspect
-        </span>
+        <span>Click to inspect</span>
       </div>
     </div>
   );

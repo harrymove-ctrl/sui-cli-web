@@ -1,32 +1,33 @@
-import { useState, useEffect } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+  Activity,
+  AlertCircle,
+  Binary,
+  CheckCircle2,
+  ChevronDown,
+  Copy,
+  FileSearch,
+  FolderOpen,
+  Info,
+  Lightbulb,
+  Loader2,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  Unlock,
+  XCircle,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import { useSearchParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Label } from '@/components/ui/label';
+import { decodeTransaction, verifyBytecode, verifySource } from '@/api/client';
+import { FileBrowser } from '@/components/MoveDeploy/FileBrowser';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Shield,
-  ShieldCheck,
-  ShieldAlert,
-  FileSearch,
-  Binary,
-  Unlock,
-  Loader2,
-  CheckCircle2,
-  XCircle,
-  AlertCircle,
-  FolderOpen,
-  Copy,
-  Activity,
-  Info,
-  ChevronDown,
-  Lightbulb,
-} from 'lucide-react';
-import toast from 'react-hot-toast';
-import { FileBrowser } from '@/components/MoveDeploy/FileBrowser';
-import { verifySource, verifyBytecode, decodeTransaction } from '@/api/client';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Simplified warning for user-friendly display
 interface SimplifiedWarning {
@@ -39,25 +40,30 @@ interface SimplifiedWarning {
 }
 
 // Map warning codes to user-friendly explanations
-const WARNING_EXPLANATIONS: Record<string, { title: string; description: string; suggestion: string }> = {
-  'W99001': {
+const WARNING_EXPLANATIONS: Record<
+  string,
+  { title: string; description: string; suggestion: string }
+> = {
+  W99001: {
     title: 'Better return pattern available',
-    description: 'Your function sends an object directly to the caller. This works, but returning the object instead makes your code more flexible.',
-    suggestion: 'Consider using "public fun" that returns the object, so callers can decide what to do with it.',
+    description:
+      'Your function sends an object directly to the caller. This works, but returning the object instead makes your code more flexible.',
+    suggestion:
+      'Consider using "public fun" that returns the object, so callers can decide what to do with it.',
   },
-  'W09001': {
+  W09001: {
     title: 'Unused variable',
     description: 'You declared a variable but never used it.',
     suggestion: 'Remove the variable or prefix with underscore (_) if intentional.',
   },
-  'W09002': {
+  W09002: {
     title: 'Unused import',
     description: 'You imported something but never used it.',
     suggestion: 'Remove the unused import to keep code clean.',
   },
-  'W09003': {
+  W09003: {
     title: 'Unused function',
-    description: 'You defined a function but it\'s never called.',
+    description: "You defined a function but it's never called.",
     suggestion: 'Remove if not needed, or add "public" if it should be accessible.',
   },
 };
@@ -68,7 +74,9 @@ function parseWarningToSimplified(rawWarning: string): SimplifiedWarning {
   const codeMatch = rawWarning.match(/warning\[(?:[Ll]int\s+)?(W\d+)\]:/);
   const warningCode = codeMatch ? codeMatch[1] : 'unknown';
   const locationMatch = rawWarning.match(/┌─\s+([^:]+):(\d+):\d+/);
-  const location = locationMatch ? `${locationMatch[1].split('/').pop()}:${locationMatch[2]}` : undefined;
+  const location = locationMatch
+    ? `${locationMatch[1].split('/').pop()}:${locationMatch[2]}`
+    : undefined;
 
   const explanation = WARNING_EXPLANATIONS[warningCode] || {
     title: 'Code suggestion',
@@ -110,16 +118,18 @@ function parseCliWarnings(output: string): ParsedOutput {
   // Helper to check if line is part of warning block
   const isWarningContinuation = (line: string): boolean => {
     const boxChars = /^[\s┌─│└├╭╮╯╰]/;
-    return boxChars.test(line) ||
-           line.startsWith('   ') ||
-           line.startsWith(' ') ||
-           line.startsWith('=') ||
-           line.includes('This warning can be suppressed') ||
-           line.includes('Returning an object') ||
-           line.includes('Transaction sender') ||
-           line.includes('Transfer of an object') ||
-           line.includes('^^^^') ||
-           line.trim() === '';
+    return (
+      boxChars.test(line) ||
+      line.startsWith('   ') ||
+      line.startsWith(' ') ||
+      line.startsWith('=') ||
+      line.includes('This warning can be suppressed') ||
+      line.includes('Returning an object') ||
+      line.includes('Transaction sender') ||
+      line.includes('Transfer of an object') ||
+      line.includes('^^^^') ||
+      line.trim() === ''
+    );
   };
 
   for (const line of lines) {
@@ -262,7 +272,12 @@ export function SecurityTools() {
     setBytecodeResult(null);
 
     try {
-      const modulePathsArray = modulePaths.trim() ? modulePaths.trim().split(',').map(p => p.trim()) : undefined;
+      const modulePathsArray = modulePaths.trim()
+        ? modulePaths
+            .trim()
+            .split(',')
+            .map((p) => p.trim())
+        : undefined;
       const protocolVer = protocolVersion.trim() ? parseInt(protocolVersion.trim(), 10) : undefined;
 
       const data = await verifyBytecode(
@@ -313,6 +328,66 @@ export function SecurityTools() {
     toast.success(`${label} copied to clipboard`);
   };
 
+  // Non-sensitive snapshot for AI export: tool config + verification/decode
+  // results only. No transaction bytes, signatures, or other raw inputs.
+  const aiSnapshot = {
+    activeTab,
+    sourceVerification: {
+      packagePath: packagePath || null,
+      verifyDeps,
+      skipSource,
+      result: sourceResult
+        ? {
+            verified: sourceResult.verified,
+            output: sourceResult.output,
+            packagePath: sourceResult.packagePath,
+          }
+        : null,
+    },
+    bytecodeVerification: {
+      result: bytecodeResult
+        ? {
+            withinLimits: bytecodeResult.withinLimits,
+            output: bytecodeResult.output,
+            meterUsage: bytecodeResult.meterUsage ?? null,
+          }
+        : null,
+    },
+    transactionDecode: {
+      result: txResult
+        ? { signatureValid: txResult.signatureValid ?? null, decoded: txResult.decoded }
+        : null,
+    },
+  };
+
+  const aiJson = JSON.stringify(aiSnapshot, null, 2);
+
+  const aiMarkdown = [
+    '# Sui Security Tools',
+    '',
+    `- **Active tab:** ${activeTab}`,
+    '',
+    '## Source verification',
+    `- **Package path:** ${packagePath || 'not set'}`,
+    `- **Verify dependencies:** ${verifyDeps}`,
+    `- **Skip source:** ${skipSource}`,
+    sourceResult
+      ? `- **Result:** ${sourceResult.verified ? 'verified' : 'failed'}\n\n\`\`\`\n${sourceResult.output}\n\`\`\``
+      : '- **Result:** not run yet',
+    '',
+    '## Bytecode verification',
+    bytecodeResult
+      ? `- **Result:** ${bytecodeResult.withinLimits ? 'within meter limits' : 'exceeds meter limits'}${bytecodeResult.meterUsage ? ` (${bytecodeResult.meterUsage.current}/${bytecodeResult.meterUsage.limit})` : ''}\n\n\`\`\`\n${bytecodeResult.output}\n\`\`\``
+      : '- **Result:** not run yet',
+    '',
+    '## Transaction decode',
+    txResult
+      ? `- **Signature valid:** ${txResult.signatureValid ?? 'n/a'}\n\n\`\`\`json\n${JSON.stringify(txResult.decoded, null, 2)}\n\`\`\``
+      : '- **Result:** not run yet',
+  ].join('\n');
+
+  const aiPrompt = `Here's the current state of my Sui security tools session:\n\n${aiMarkdown}\n\nHelp me interpret these verification and decode results, and flag anything that looks like a security concern.`;
+
   return (
     <>
       <div className="relative z-10 p-3 sm:p-4">
@@ -328,9 +403,12 @@ export function SecurityTools() {
               <Shield className="w-5 h-5 text-emerald-500" />
               <h1 className="text-lg font-bold text-foreground">Security Tools</h1>
             </div>
-            <p className="text-muted-foreground text-xs hidden sm:block">
-              Verify • Audit • Decode
-            </p>
+            <CopyForAiMenu
+              prompt={aiPrompt}
+              json={aiJson}
+              markdown={aiMarkdown}
+              onCopy={copyToClipboard}
+            />
           </motion.div>
 
           {/* Main Content */}
@@ -340,20 +418,22 @@ export function SecurityTools() {
             transition={{ type: 'spring', stiffness: 300, damping: 25, delay: 0.1 }}
           >
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-              <TabsList className="grid w-full grid-cols-3 bg-secondary border border-border h-9">
-                <TabsTrigger value="source" className="flex items-center justify-center gap-1.5 text-xs data-[state=active]:bg-accent data-[state=active]:text-foreground text-muted-foreground hover:text-foreground h-8">
-                  <FileSearch className="w-3.5 h-3.5 flex-shrink-0" />
+              <TabsList fullWidth indicatorClassName="bg-emerald-500">
+                <TabsTrigger value="source" icon={<FileSearch />} className="flex-1">
                   <span className="hidden sm:inline">Verify Source</span>
                 </TabsTrigger>
-                <TabsTrigger value="bytecode" className="flex items-center justify-center gap-1.5 text-xs data-[state=active]:bg-accent data-[state=active]:text-foreground text-muted-foreground hover:text-foreground h-8">
-                  <Binary className="w-3.5 h-3.5 flex-shrink-0" />
+                <TabsTrigger value="bytecode" icon={<Binary />} className="flex-1">
                   <span className="hidden sm:inline">Verify Bytecode</span>
                 </TabsTrigger>
-                <TabsTrigger value="decode" className="flex items-center justify-center gap-1.5 text-xs data-[state=active]:bg-accent data-[state=active]:text-foreground text-muted-foreground hover:text-foreground h-8">
-                  <Unlock className="w-3.5 h-3.5 flex-shrink-0" />
+                <TabsTrigger value="decode" icon={<Unlock />} className="flex-1">
                   <span className="hidden sm:inline">Decode TX</span>
                 </TabsTrigger>
               </TabsList>
+              <p className="px-1 pt-1.5 text-xs text-muted-foreground">
+                {activeTab === 'source' && 'Confirm published bytecode matches your local source'}
+                {activeTab === 'bytecode' && 'Compare bytecode between two builds or packages'}
+                {activeTab === 'decode' && 'Decode a transaction into human-readable calls'}
+              </p>
 
               {/* Verify Source Tab */}
               <TabsContent value="source" className="space-y-4 mt-4">
@@ -364,7 +444,8 @@ export function SecurityTools() {
                     Prerequisite: Package must be published on-chain first
                   </p>
                   <p className="text-muted-foreground pl-5">
-                    This verifies that your local source code matches the bytecode deployed on the current network.
+                    This verifies that your local source code matches the bytecode deployed on the
+                    current network.
                   </p>
                 </div>
 
@@ -381,7 +462,10 @@ export function SecurityTools() {
                   <CardContent className="px-4 pb-4 space-y-3">
                     {/* Package Path */}
                     <div className="space-y-1">
-                      <Label htmlFor="source-package-path" className="text-xs font-medium flex items-center gap-1 text-foreground">
+                      <Label
+                        htmlFor="source-package-path"
+                        className="text-xs font-medium flex items-center gap-1 text-foreground"
+                      >
                         Package Path <span className="text-destructive">*</span>
                       </Label>
                       <div className="flex gap-1.5">
@@ -419,7 +503,9 @@ export function SecurityTools() {
                             disabled={verifyingSource}
                             className="w-3.5 h-3.5 text-foreground bg-secondary border-border rounded focus:ring-1 focus:ring-ring"
                           />
-                          <span className="text-[11px] text-muted-foreground">Verify dependencies</span>
+                          <span className="text-[11px] text-muted-foreground">
+                            Verify dependencies
+                          </span>
                         </label>
                         <label className="flex items-center gap-1.5 cursor-pointer">
                           <input
@@ -429,7 +515,9 @@ export function SecurityTools() {
                             disabled={verifyingSource}
                             className="w-3.5 h-3.5 text-foreground bg-secondary border-border rounded focus:ring-1 focus:ring-ring"
                           />
-                          <span className="text-[11px] text-muted-foreground">Skip source verification</span>
+                          <span className="text-[11px] text-muted-foreground">
+                            Skip source verification
+                          </span>
                         </label>
                       </div>
                     </div>
@@ -457,116 +545,126 @@ export function SecurityTools() {
 
                 {/* Source Result */}
                 <AnimatePresence mode="wait">
-                  {sourceResult && (() => {
-                    const parsed = parseCliWarnings(sourceResult.output);
-                    return (
-                      <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        className="space-y-3"
-                      >
-                        {/* User-friendly Lint Warnings */}
-                        {parsed.hasWarnings && (
-                          <div className="space-y-2 p-4 bg-amber-500/5 border border-amber-500/20 rounded-lg">
-                            {/* Simple header */}
-                            <div className="flex items-center gap-2">
-                              <Lightbulb className="w-4 h-4 text-amber-500" />
-                              <span className="text-sm font-medium text-amber-500">
-                                {parsed.warnings.length} code suggestion{parsed.warnings.length > 1 ? 's' : ''} found
-                              </span>
-                              <span className="text-xs text-muted-foreground ml-auto">
-                                Not verification errors
-                              </span>
-                            </div>
+                  {sourceResult &&
+                    (() => {
+                      const parsed = parseCliWarnings(sourceResult.output);
+                      return (
+                        <motion.div
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          className="space-y-3"
+                        >
+                          {/* User-friendly Lint Warnings */}
+                          {parsed.hasWarnings && (
+                            <div className="space-y-2 p-4 bg-amber-500/5 border border-amber-500/20 rounded-lg">
+                              {/* Simple header */}
+                              <div className="flex items-center gap-2">
+                                <Lightbulb className="w-4 h-4 text-amber-500" />
+                                <span className="text-sm font-medium text-amber-500">
+                                  {parsed.warnings.length} code suggestion
+                                  {parsed.warnings.length > 1 ? 's' : ''} found
+                                </span>
+                                <span className="text-xs text-muted-foreground ml-auto">
+                                  Not verification errors
+                                </span>
+                              </div>
 
-                            {/* Simple warning cards */}
-                            <div className="space-y-2">
-                              {parsed.warnings.map((warning, idx) => (
-                                <div
-                                  key={idx}
-                                  className="p-2.5 bg-card border border-amber-500/10 rounded-lg"
-                                >
-                                  <div className="flex items-start justify-between gap-2 mb-1">
-                                    <span className="text-xs font-medium text-amber-500">
-                                      {warning.title}
+                              {/* Simple warning cards */}
+                              <div className="space-y-2">
+                                {parsed.warnings.map((warning, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="p-2.5 bg-card border border-amber-500/10 rounded-lg"
+                                  >
+                                    <div className="flex items-start justify-between gap-2 mb-1">
+                                      <span className="text-xs font-medium text-amber-500">
+                                        {warning.title}
+                                      </span>
+                                      {warning.location && (
+                                        <span className="text-xs text-amber-500/70 font-mono whitespace-nowrap">
+                                          {warning.location}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground mb-1.5">
+                                      {warning.description}
+                                    </p>
+                                    <p className="text-[11px] text-emerald-500/90 flex items-start gap-1">
+                                      <span className="text-emerald-500">→</span>
+                                      {warning.suggestion}
+                                    </p>
+                                    <details className="mt-1.5">
+                                      <summary className="text-xs text-amber-500/60 cursor-pointer hover:text-amber-500 flex items-center gap-1">
+                                        <ChevronDown className="w-2.5 h-2.5" />
+                                        Show compiler output
+                                      </summary>
+                                      <pre className="mt-1.5 p-1.5 bg-secondary rounded text-xs text-amber-500/70 font-mono overflow-x-auto whitespace-pre-wrap max-h-24 overflow-y-auto">
+                                        {warning.rawOutput}
+                                      </pre>
+                                    </details>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Verification Result */}
+                          <Card
+                            className={`bg-card border shadow-sm ${sourceResult.verified ? 'border-emerald-500/40' : 'border-destructive/40'}`}
+                          >
+                            <CardHeader className="py-3 px-4">
+                              <CardTitle className="text-sm flex items-center gap-1.5">
+                                {sourceResult.verified ? (
+                                  <>
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                                    <span className="text-emerald-500">
+                                      Verification Successful
                                     </span>
-                                    {warning.location && (
-                                      <span className="text-xs text-amber-500/70 font-mono whitespace-nowrap">
-                                        {warning.location}
+                                    {parsed.hasWarnings && (
+                                      <span className="text-xs text-amber-500 ml-1">
+                                        (with lint warnings)
                                       </span>
                                     )}
-                                  </div>
-                                  <p className="text-[11px] text-muted-foreground mb-1.5">
-                                    {warning.description}
+                                  </>
+                                ) : (
+                                  <>
+                                    <XCircle className="w-4 h-4 text-destructive" />
+                                    <span className="text-destructive">Verification Failed</span>
+                                  </>
+                                )}
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="px-4 pb-4 space-y-3">
+                              {/* Helpful message for failed verification */}
+                              {!sourceResult.verified && (
+                                <div className="p-3 bg-destructive/5 border border-destructive/30 rounded-lg text-xs">
+                                  <p className="text-destructive flex items-center gap-1.5 mb-1">
+                                    <AlertCircle className="w-3 h-3" />
+                                    Common reasons for verification failure:
                                   </p>
-                                  <p className="text-[11px] text-emerald-500/90 flex items-start gap-1">
-                                    <span className="text-emerald-500">→</span>
-                                    {warning.suggestion}
-                                  </p>
-                                  <details className="mt-1.5">
-                                    <summary className="text-xs text-amber-500/60 cursor-pointer hover:text-amber-500 flex items-center gap-1">
-                                      <ChevronDown className="w-2.5 h-2.5" />
-                                      Show compiler output
-                                    </summary>
-                                    <pre className="mt-1.5 p-1.5 bg-secondary rounded text-xs text-amber-500/70 font-mono overflow-x-auto whitespace-pre-wrap max-h-24 overflow-y-auto">
-                                      {warning.rawOutput}
-                                    </pre>
-                                  </details>
+                                  <ul className="text-destructive/80 pl-5 space-y-0.5 list-disc text-xs">
+                                    <li>Package not yet published on current network</li>
+                                    <li>Local source differs from deployed bytecode</li>
+                                    <li>Wrong network (check active environment)</li>
+                                    <li>Package ID mismatch in Move.toml</li>
+                                  </ul>
                                 </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Verification Result */}
-                        <Card className={`bg-card border shadow-sm ${sourceResult.verified ? 'border-emerald-500/40' : 'border-destructive/40'}`}>
-                          <CardHeader className="py-3 px-4">
-                            <CardTitle className="text-sm flex items-center gap-1.5">
-                              {sourceResult.verified ? (
-                                <>
-                                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                                  <span className="text-emerald-500">Verification Successful</span>
-                                  {parsed.hasWarnings && (
-                                    <span className="text-xs text-amber-500 ml-1">(with lint warnings)</span>
-                                  )}
-                                </>
-                              ) : (
-                                <>
-                                  <XCircle className="w-4 h-4 text-destructive" />
-                                  <span className="text-destructive">Verification Failed</span>
-                                </>
                               )}
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="px-4 pb-4 space-y-3">
-                            {/* Helpful message for failed verification */}
-                            {!sourceResult.verified && (
-                              <div className="p-3 bg-destructive/5 border border-destructive/30 rounded-lg text-xs">
-                                <p className="text-destructive flex items-center gap-1.5 mb-1">
-                                  <AlertCircle className="w-3 h-3" />
-                                  Common reasons for verification failure:
-                                </p>
-                                <ul className="text-destructive/80 pl-5 space-y-0.5 list-disc text-xs">
-                                  <li>Package not yet published on current network</li>
-                                  <li>Local source differs from deployed bytecode</li>
-                                  <li>Wrong network (check active environment)</li>
-                                  <li>Package ID mismatch in Move.toml</li>
-                                </ul>
-                              </div>
-                            )}
 
-                            {/* Output */}
-                            <div className="bg-secondary border border-border rounded-lg p-2 max-h-64 overflow-y-auto">
-                              <pre className={`text-xs font-mono whitespace-pre-wrap break-all ${sourceResult.verified ? 'text-emerald-500' : 'text-destructive'}`}>
-                                {parsed.content || sourceResult.output}
-                              </pre>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-                    );
-                  })()}
+                              {/* Output */}
+                              <div className="bg-secondary border border-border rounded-lg p-2 max-h-64 overflow-y-auto">
+                                <pre
+                                  className={`text-xs font-mono whitespace-pre-wrap break-all ${sourceResult.verified ? 'text-emerald-500' : 'text-destructive'}`}
+                                >
+                                  {parsed.content || sourceResult.output}
+                                </pre>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </motion.div>
+                      );
+                    })()}
                 </AnimatePresence>
               </TabsContent>
 
@@ -585,7 +683,10 @@ export function SecurityTools() {
                   <CardContent className="px-4 pb-4 space-y-3">
                     {/* Package Path */}
                     <div className="space-y-1">
-                      <Label htmlFor="bytecode-package-path" className="text-xs font-medium text-foreground">
+                      <Label
+                        htmlFor="bytecode-package-path"
+                        className="text-xs font-medium text-foreground"
+                      >
                         Package Path
                       </Label>
                       <div className="flex gap-1.5">
@@ -629,7 +730,10 @@ export function SecurityTools() {
 
                     {/* Protocol Version */}
                     <div className="space-y-1">
-                      <Label htmlFor="protocol-version" className="text-xs font-medium text-foreground">
+                      <Label
+                        htmlFor="protocol-version"
+                        className="text-xs font-medium text-foreground"
+                      >
                         Protocol Version (optional)
                       </Label>
                       <input
@@ -646,7 +750,9 @@ export function SecurityTools() {
                     {/* Verify Button */}
                     <Button
                       onClick={handleVerifyBytecode}
-                      disabled={(!bytecodePackagePath.trim() && !modulePaths.trim()) || verifyingBytecode}
+                      disabled={
+                        (!bytecodePackagePath.trim() && !modulePaths.trim()) || verifyingBytecode
+                      }
                       className="w-full"
                     >
                       {verifyingBytecode ? (
@@ -672,7 +778,9 @@ export function SecurityTools() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
                     >
-                      <Card className={`bg-card border shadow-sm ${bytecodeResult.withinLimits ? 'border-emerald-500/40' : 'border-destructive/40'}`}>
+                      <Card
+                        className={`bg-card border shadow-sm ${bytecodeResult.withinLimits ? 'border-emerald-500/40' : 'border-destructive/40'}`}
+                      >
                         <CardHeader className="py-3 px-4">
                           <CardTitle className="text-sm flex items-center gap-1.5">
                             {bytecodeResult.withinLimits ? (
@@ -694,8 +802,14 @@ export function SecurityTools() {
                             <div className="space-y-1">
                               <div className="flex items-center justify-between text-xs">
                                 <span className="text-foreground">Meter Usage</span>
-                                <Badge variant={bytecodeResult.withinLimits ? 'secondary' : 'destructive'} className="text-xs">
-                                  {bytecodeResult.meterUsage.current} / {bytecodeResult.meterUsage.limit}
+                                <Badge
+                                  variant={
+                                    bytecodeResult.withinLimits ? 'secondary' : 'destructive'
+                                  }
+                                  className="text-xs"
+                                >
+                                  {bytecodeResult.meterUsage.current} /{' '}
+                                  {bytecodeResult.meterUsage.limit}
                                 </Badge>
                               </div>
                               {/* Progress Bar */}
@@ -703,13 +817,18 @@ export function SecurityTools() {
                                 <div
                                   className={`h-full transition-all ${bytecodeResult.withinLimits ? 'bg-emerald-500' : 'bg-destructive'}`}
                                   style={{
-                                    width: `${Math.min((bytecodeResult.meterUsage.current / bytecodeResult.meterUsage.limit) * 100, 100)}%`
+                                    width: `${Math.min((bytecodeResult.meterUsage.current / bytecodeResult.meterUsage.limit) * 100, 100)}%`,
                                   }}
                                 />
                               </div>
                               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                 <Activity className="w-2.5 h-2.5" />
-                                {Math.round((bytecodeResult.meterUsage.current / bytecodeResult.meterUsage.limit) * 100)}% used
+                                {Math.round(
+                                  (bytecodeResult.meterUsage.current /
+                                    bytecodeResult.meterUsage.limit) *
+                                    100
+                                )}
+                                % used
                               </div>
                             </div>
                           )}
@@ -742,7 +861,10 @@ export function SecurityTools() {
                   <CardContent className="px-4 pb-4 space-y-3">
                     {/* Transaction Bytes */}
                     <div className="space-y-1">
-                      <Label htmlFor="tx-bytes" className="text-xs font-medium flex items-center gap-1 text-foreground">
+                      <Label
+                        htmlFor="tx-bytes"
+                        className="text-xs font-medium flex items-center gap-1 text-foreground"
+                      >
                         Transaction Bytes <span className="text-destructive">*</span>
                       </Label>
                       <textarea
@@ -806,7 +928,10 @@ export function SecurityTools() {
                             <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                             Decoded Transaction
                             {txResult.signatureValid !== undefined && (
-                              <Badge variant={txResult.signatureValid ? 'secondary' : 'destructive'} className="ml-auto text-xs">
+                              <Badge
+                                variant={txResult.signatureValid ? 'secondary' : 'destructive'}
+                                className="ml-auto text-xs"
+                              >
                                 {txResult.signatureValid ? 'Valid Signature' : 'Invalid Signature'}
                               </Badge>
                             )}
@@ -818,7 +943,12 @@ export function SecurityTools() {
                               type="button"
                               variant="outline"
                               size="icon"
-                              onClick={() => copyToClipboard(JSON.stringify(txResult.decoded, null, 2), 'Transaction data')}
+                              onClick={() =>
+                                copyToClipboard(
+                                  JSON.stringify(txResult.decoded, null, 2),
+                                  'Transaction data'
+                                )
+                              }
                               className="absolute top-2 right-2 h-7 w-7"
                               title="Copy to clipboard"
                             >
@@ -846,7 +976,8 @@ export function SecurityTools() {
             <div className="flex items-center gap-2 px-4 py-3 border border-border bg-secondary/50 rounded-lg">
               <AlertCircle className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
               <span className="text-xs text-muted-foreground">
-                <strong className="text-foreground">Security Tip:</strong> Always verify source code before deployment. Check bytecode limits to prevent runtime failures.
+                <strong className="text-foreground">Security Tip:</strong> Always verify source code
+                before deployment. Check bytecode limits to prevent runtime failures.
               </span>
             </div>
           </motion.div>

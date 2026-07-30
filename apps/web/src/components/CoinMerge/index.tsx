@@ -1,3 +1,4 @@
+import type { CoinInfo, CoinMetadata, CoinOperationResult } from '@sui-cli-web/shared';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertCircle,
@@ -15,9 +16,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import { Button } from '@/components/ui/button';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 import { showErrorToast, showSuccessToast } from '@/lib/toast';
 import { useAppStore } from '@/stores/useAppStore';
-import type { CoinInfo, CoinMetadata, CoinOperationResult } from '@sui-cli-web/shared';
 
 // Format balance with proper decimals
 function formatBalance(balance: string, decimals: number): string {
@@ -213,10 +214,64 @@ export function CoinMerge() {
 
   const isAnyLoading = isLoading || isEstimating || isMerging;
 
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    showSuccessToast({ message: `${label} copied` });
+  };
+
+  const aiJson = JSON.stringify(
+    {
+      operation: 'merge',
+      coinType: coinTypeParam,
+      symbol,
+      decimals,
+      totalCoins: coins.length,
+      primaryCoin: primaryCoin
+        ? {
+            coinObjectId: primaryCoin.coinObjectId,
+            balance: formatBalance(primaryCoin.balance, decimals),
+          }
+        : null,
+      selectedCoins: selectedCoins.map((c) => ({
+        coinObjectId: c.coinObjectId,
+        balance: formatBalance(c.balance, decimals),
+      })),
+      selectedBalance: formatBalance(selectedBalance.toString(), decimals),
+      totalAfterMerge: formatBalance(totalAfterMerge.toString(), decimals),
+    },
+    null,
+    2
+  );
+
+  const aiMarkdown = [
+    '# Sui coin merge',
+    '',
+    `- **Coin type:** ${coinTypeParam}`,
+    `- **Symbol:** ${symbol}`,
+    primaryCoin
+      ? `- **Primary coin:** ${primaryCoin.coinObjectId} (${formatBalance(primaryCoin.balance, decimals)} ${symbol})`
+      : '',
+    `- **Coins selected to merge:** ${selectedCoinIds.size} of ${coins.length}`,
+    `- **Selected balance:** ${formatBalance(selectedBalance.toString(), decimals)} ${symbol}`,
+    `- **Balance after merge:** ${formatBalance(totalAfterMerge.toString(), decimals)} ${symbol}`,
+    `- **Coins reduced:** ${coins.length} → ${coins.length - selectedCoinIds.size}`,
+    '',
+    '## Coins to merge',
+    ...selectedCoins.map(
+      (c, i) => `${i + 1}. ${c.coinObjectId} — ${formatBalance(c.balance, decimals)} ${symbol}`
+    ),
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const aiPrompt = `I'm merging ${symbol} coins on Sui.\n\n${aiMarkdown}\n\nConfirm this merge makes sense (consolidating dust into the primary coin) and flag anything worth attention.`;
+
   if (!coinTypeParam) {
     return (
       <div className="p-4 text-center">
-        <p className="text-muted-foreground">Invalid parameters. Please select a coin type first.</p>
+        <p className="text-muted-foreground">
+          Invalid parameters. Please select a coin type first.
+        </p>
         <Button onClick={() => navigate('/app/coins')} className="mt-4">
           Go to Coins
         </Button>
@@ -240,7 +295,17 @@ export function CoinMerge() {
             <Combine className="w-5 h-5 text-foreground" />
             <h1 className="text-lg font-semibold text-foreground">Merge Coins</h1>
           </div>
-          <span className="text-muted-foreground text-sm hidden sm:block ml-auto">{symbol}</span>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-muted-foreground text-sm hidden sm:block">{symbol}</span>
+            {coins.length > 0 && (
+              <CopyForAiMenu
+                prompt={aiPrompt}
+                json={aiJson}
+                markdown={aiMarkdown}
+                onCopy={copyToClipboard}
+              />
+            )}
+          </div>
         </motion.div>
 
         {isLoading ? (
@@ -265,7 +330,9 @@ export function CoinMerge() {
               animate={{ opacity: 1, y: 0 }}
               className="bg-card border border-border rounded-xl p-4"
             >
-              <div className="text-xs text-muted-foreground mb-2">Primary coin (receives merged balance)</div>
+              <div className="text-xs text-muted-foreground mb-2">
+                Primary coin (receives merged balance)
+              </div>
               <select
                 value={primaryCoinId}
                 onChange={(e) => {
@@ -283,7 +350,8 @@ export function CoinMerge() {
               >
                 {coins.map((coin) => (
                   <option key={coin.coinObjectId} value={coin.coinObjectId}>
-                    {formatBalance(coin.balance, decimals)} {symbol} - {coin.coinObjectId.slice(0, 12)}...
+                    {formatBalance(coin.balance, decimals)} {symbol} -{' '}
+                    {coin.coinObjectId.slice(0, 12)}...
                   </option>
                 ))}
               </select>
@@ -482,7 +550,9 @@ export function CoinMerge() {
                       {mergeResult.success ? (
                         <>
                           <CheckCircle2 className="w-5 h-5 text-foreground" />
-                          <span className="text-sm font-medium text-foreground">Merge successful</span>
+                          <span className="text-sm font-medium text-foreground">
+                            Merge successful
+                          </span>
                         </>
                       ) : (
                         <>
@@ -548,7 +618,11 @@ export function CoinMerge() {
                         </Button>
 
                         {/* Back to Coins */}
-                        <Button variant="outline" className="w-full" onClick={() => navigate('/app/coins')}>
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => navigate('/app/coins')}
+                        >
                           Back to Coins
                         </Button>
                       </>

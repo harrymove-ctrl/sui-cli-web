@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { type DerivedObjectKeyType, deriveObjectAddress } from '@/api/services/derivedObjects';
 import { Button } from '@/components/ui/button';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -55,12 +56,47 @@ export function DerivedObjectCalculator() {
 
   const canCompute = parentId.trim().startsWith('0x') && keyValue.trim().length > 0 && !isComputing;
 
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied`);
+  };
+
+  // Copy-for-AI export of the derivation inputs and computed result.
+  const aiExport = address
+    ? {
+        prompt: [
+          `On Sui, I derived an object address from a parent object and a typed key.`,
+          `- Parent object ID: ${parentId.trim()}`,
+          `- Key type: ${keyType}`,
+          `- Key value: ${keyValue.trim()}`,
+          `- Derived object address: ${address}`,
+          '',
+          "This uses @mysten/sui's derived_object::derive_address. Explain how this address is computed and how I can use it.",
+        ].join('\n'),
+        json: JSON.stringify(
+          {
+            parentId: parentId.trim(),
+            keyType,
+            keyValue: keyValue.trim(),
+            derivedAddress: address,
+          },
+          null,
+          2
+        ),
+      }
+    : null;
+
   return (
     <div className="px-3 py-3 space-y-4">
       <div className="p-4 rounded-lg border border-border bg-card space-y-3">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Fingerprint className="w-3.5 h-3.5" />
-          <span>Derived Address Calculator</span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Fingerprint className="w-3.5 h-3.5" />
+            <span>Derived Address Calculator</span>
+          </div>
+          {aiExport && (
+            <CopyForAiMenu prompt={aiExport.prompt} json={aiExport.json} onCopy={copyToClipboard} />
+          )}
         </div>
         <p className="text-xs text-muted-foreground">
           Computes a derived object's deterministic address from its parent object ID and key - the
