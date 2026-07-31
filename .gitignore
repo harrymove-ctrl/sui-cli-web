@@ -45,10 +45,10 @@ contracts/community_registry/CONTRACT_INFO.md
 
 # Screenshots (local only, except public assets)
 *.png
-!packages/client/public/*.png
-!packages/client/public/**/*.png
-!packages/blog/public/*.png
-!packages/blog/public/**/*.png
+!apps/web/public/*.png
+!apps/web/public/**/*.png
+!apps/marketing/public/*.png
+!apps/marketing/public/**/*.png
 
 # Environment & Secrets
 .env
