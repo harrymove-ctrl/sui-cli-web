@@ -2,8 +2,9 @@
  * Pay Routes - Multi-recipient payments
  */
 
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { PayService, PayRequest, PayAllSuiRequest } from '../services/dev/PayService';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { PayAllSuiRequest, PayRequest, PayService } from '../services/dev/PayService';
+import { requireAuthToken } from '../utils/authToken';
 import { handleRouteError } from '../utils/errorHandler';
 import { validateAddress } from '../utils/validation';
 
@@ -13,7 +14,7 @@ export async function payRoutes(fastify: FastifyInstance) {
   // POST /api/pay - Pay using any coins
   fastify.post<{
     Body: PayRequest;
-  }>('/pay', async (request, reply) => {
+  }>('/pay', { preHandler: requireAuthToken }, async (request, reply) => {
     try {
       // Validate recipients
       if (request.body.recipients) {
@@ -37,7 +38,7 @@ export async function payRoutes(fastify: FastifyInstance) {
   // POST /api/pay/sui - Pay using SUI coins
   fastify.post<{
     Body: PayRequest;
-  }>('/pay/sui', async (request, reply) => {
+  }>('/pay/sui', { preHandler: requireAuthToken }, async (request, reply) => {
     try {
       // Validate recipients
       if (request.body.recipients) {
@@ -61,7 +62,7 @@ export async function payRoutes(fastify: FastifyInstance) {
   // POST /api/pay/all-sui - Pay all SUI to one recipient
   fastify.post<{
     Body: PayAllSuiRequest;
-  }>('/pay/all-sui', async (request, reply) => {
+  }>('/pay/all-sui', { preHandler: requireAuthToken }, async (request, reply) => {
     try {
       if (request.body.recipient) {
         validateAddress(request.body.recipient, 'recipient');

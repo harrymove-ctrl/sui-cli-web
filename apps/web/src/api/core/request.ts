@@ -3,6 +3,7 @@
  * @module api/core/request
  */
 
+import { pairingHeader } from '@/lib/authToken';
 import type { ApiResponse } from '@/types';
 import { getApiBaseUrl, setConnectionStatus } from './connection';
 
@@ -25,6 +26,7 @@ export async function fetchApi<T>(
     const response = await fetch(`${API_BASE}${endpoint}`, {
       headers: {
         'Content-Type': 'application/json',
+        ...pairingHeader(),
       },
       ...fetchOptions,
       signal: controller.signal,
@@ -80,7 +82,9 @@ export async function fetchApi<T>(
     }
     if (error instanceof TypeError && error.message.includes('fetch')) {
       setConnectionStatus(false);
-      throw new Error('Cannot connect to local server. Make sure the server is running (npx sui-cli-web-server).');
+      throw new Error(
+        'Cannot connect to local server. Make sure the server is running (npx sui-cli-web-server).'
+      );
     }
     if (error instanceof SyntaxError && error.message.includes('JSON')) {
       setConnectionStatus(false);
@@ -101,7 +105,7 @@ async function fetchApiRaw<T>(endpoint: string, options?: RequestInit): Promise<
 
   try {
     const response = await fetch(`${API_BASE}${endpoint}`, {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...pairingHeader() },
       ...options,
       signal: controller.signal,
     });
@@ -139,7 +143,10 @@ export const apiClient = {
     }
   },
 
-  async post<T = any>(endpoint: string, body?: any): Promise<T & { success: boolean; error?: string }> {
+  async post<T = any>(
+    endpoint: string,
+    body?: any
+  ): Promise<T & { success: boolean; error?: string }> {
     try {
       const data = await fetchApiRaw<T & { success?: boolean; error?: string }>(endpoint, {
         method: 'POST',
@@ -159,7 +166,9 @@ export const apiClient = {
 
   async delete<T = any>(endpoint: string): Promise<T & { success: boolean; error?: string }> {
     try {
-      const data = await fetchApiRaw<T & { success?: boolean; error?: string }>(endpoint, { method: 'DELETE' });
+      const data = await fetchApiRaw<T & { success?: boolean; error?: string }>(endpoint, {
+        method: 'DELETE',
+      });
       if ('success' in data) {
         return data as T & { success: boolean; error?: string };
       }

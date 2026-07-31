@@ -2,8 +2,9 @@
  * PTB Builder Routes - Visual PTB construction and execution
  */
 
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { PtbBuilderService, PtbCommand, PtbBuildRequest } from '../services/dev/PtbBuilderService';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { PtbBuilderService, PtbBuildRequest, PtbCommand } from '../services/dev/PtbBuilderService';
+import { requireAuthToken } from '../utils/authToken';
 import { handleRouteError } from '../utils/errorHandler';
 
 export async function ptbBuilderRoutes(fastify: FastifyInstance) {
@@ -24,7 +25,7 @@ export async function ptbBuilderRoutes(fastify: FastifyInstance) {
   // POST /api/ptb/build - Build and execute PTB
   fastify.post<{
     Body: PtbBuildRequest;
-  }>('/inspector/ptb-builder/build', async (request, reply) => {
+  }>('/inspector/ptb-builder/build', { preHandler: requireAuthToken }, async (request, reply) => {
     try {
       const result = await service.executePtb(request.body);
       return result;

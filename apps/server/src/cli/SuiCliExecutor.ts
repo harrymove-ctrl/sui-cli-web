@@ -69,7 +69,10 @@ export class SuiCliExecutor {
         type: 'command_success',
         command: args[0], // e.g., 'client', 'move'
         duration,
-        metadata: { fullArgs: args },
+        // Only the command + subcommand, never the tail: `keytool import`
+        // takes a mnemonic or private key as a positional argument, and
+        // logging the full argv would write it to analytics.jsonl in plaintext.
+        metadata: { fullArgs: args.slice(0, 2) },
       });
 
       if (stdout.trim()) {
@@ -89,7 +92,7 @@ export class SuiCliExecutor {
         command: args[0],
         duration,
         error: errorOutput,
-        metadata: { fullArgs: args },
+        metadata: { fullArgs: args.slice(0, 2) },
       });
 
       // Throw with the cleaned output so UI can display it properly
@@ -110,7 +113,9 @@ export class SuiCliExecutor {
       }
       return JSON.parse(jsonMatch[0]) as T;
     } catch (error: any) {
-      throw new Error(`Failed to parse JSON output: ${error.message}\n\nOutput:\n${output.substring(0, 500)}`);
+      throw new Error(
+        `Failed to parse JSON output: ${error.message}\n\nOutput:\n${output.substring(0, 500)}`
+      );
     }
   }
 

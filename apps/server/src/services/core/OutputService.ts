@@ -2,10 +2,11 @@
  * OutputService - Handle large outputs with file storage and streaming
  */
 
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import * as os from 'os';
 import * as crypto from 'crypto';
+import * as fs from 'fs/promises';
+import * as os from 'os';
+import * as path from 'path';
+import { validateOutputId } from '../../utils/validation';
 
 export interface OutputMetadata {
   type: 'trace' | 'coverage' | 'build' | 'test' | 'replay' | 'other';
@@ -63,13 +64,20 @@ export class OutputService {
    * Get file path for an output ID
    */
   private getFilePath(id: string): string {
+    // id comes straight from the URL param on the read/download/delete routes;
+    // without this check `../../.sui/sui_config/client` resolves outside
+    // OUTPUT_DIR (path.join collapses `..` segments).
+    validateOutputId(id);
     return path.join(OUTPUT_DIR, `${id}.json`);
   }
 
   /**
    * Store large output to file and return reference
    */
-  async storeLargeOutput(data: string, metadata: Omit<OutputMetadata, 'createdAt'>): Promise<OutputReference> {
+  async storeLargeOutput(
+    data: string,
+    metadata: Omit<OutputMetadata, 'createdAt'>
+  ): Promise<OutputReference> {
     await this.ensureDir();
 
     const id = this.generateId();
@@ -128,7 +136,9 @@ export class OutputService {
   /**
    * Get output for download
    */
-  async downloadOutput(id: string): Promise<{ data: Buffer; filename: string; contentType: string }> {
+  async downloadOutput(
+    id: string
+  ): Promise<{ data: Buffer; filename: string; contentType: string }> {
     const output = await this.getOutput(id);
     if (!output) {
       throw new Error(`Output not found: ${id}`);
@@ -172,8 +182,8 @@ export class OutputService {
       }
     }
 
-    return outputs.sort((a, b) =>
-      new Date(b.metadata.createdAt).getTime() - new Date(a.metadata.createdAt).getTime()
+    return outputs.sort(
+      (a, b) => new Date(b.metadata.createdAt).getTime() - new Date(a.metadata.createdAt).getTime()
     );
   }
 

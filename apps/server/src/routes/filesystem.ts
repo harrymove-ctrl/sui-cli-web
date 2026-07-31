@@ -1,8 +1,8 @@
+import type { ApiResponse } from '@sui-cli-web/shared';
 import { FastifyInstance } from 'fastify';
 import { promises as fs, realpathSync } from 'fs';
-import path from 'path';
 import os from 'os';
-import type { ApiResponse } from '@sui-cli-web/shared';
+import path, { sep } from 'path';
 import { handleRouteError } from '../utils/errorHandler';
 
 interface DirectoryEntry {
@@ -78,11 +78,17 @@ function isPathAllowed(targetPath: string): boolean {
     canonicalPath = path.normalize(path.resolve(targetPath));
   }
 
-  // Check if canonical path starts with any allowed directory
+  // Check if canonical path is, or is inside, any allowed directory. The
+  // separator matters: without it, "/home/harry-evil" passes a startsWith
+  // check for "/home/harry".
   for (const allowedDir of allowedDirs) {
-    // Normalize the allowed dir too
     const normalizedAllowed = path.normalize(allowedDir);
-    if (canonicalPath.startsWith(normalizedAllowed)) {
+    if (
+      canonicalPath === normalizedAllowed ||
+      canonicalPath.startsWith(
+        normalizedAllowed.endsWith(sep) ? normalizedAllowed : normalizedAllowed + sep
+      )
+    ) {
       return true;
     }
   }
@@ -225,7 +231,8 @@ export async function filesystemRoutes(fastify: FastifyInstance) {
           for (const file of files) {
             if (!file.isDirectory()) continue;
             if (file.name.startsWith('.')) continue; // Skip hidden
-            if (file.name === 'node_modules' || file.name === 'target' || file.name === 'build') continue; // Skip common non-package dirs
+            if (file.name === 'node_modules' || file.name === 'target' || file.name === 'build')
+              continue; // Skip common non-package dirs
 
             const fullPath = path.join(dirPath, file.name);
 
@@ -284,10 +291,7 @@ export async function filesystemRoutes(fastify: FastifyInstance) {
 
       // On Windows, add drive roots
       if (process.platform === 'win32') {
-        commonDirs.push(
-          { name: 'C: Drive', path: 'C:/' },
-          { name: 'D: Drive', path: 'D:/' }
-        );
+        commonDirs.push({ name: 'C: Drive', path: 'C:/' }, { name: 'D: Drive', path: 'D:/' });
       }
 
       for (const dir of commonDirs) {

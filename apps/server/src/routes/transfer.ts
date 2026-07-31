@@ -1,12 +1,9 @@
+import type { ApiResponse } from '@sui-cli-web/shared';
 import { FastifyInstance } from 'fastify';
 import { TransferService } from '../services/TransferService';
-import type { ApiResponse } from '@sui-cli-web/shared';
-import {
-  validateAddress,
-  validateObjectId,
-  validateOptionalGasBudget,
-} from '../utils/validation';
+import { requireAuthToken } from '../utils/authToken';
 import { handleRouteError } from '../utils/errorHandler';
+import { validateAddress, validateObjectId, validateOptionalGasBudget } from '../utils/validation';
 
 const transferService = new TransferService();
 
@@ -15,11 +12,13 @@ export async function transferRoutes(fastify: FastifyInstance) {
   fastify.post<{
     Body: { to: string; amount: string; coinId?: string; gasBudget?: string };
     Reply: ApiResponse<{ digest: string; gasUsed?: string }>;
-  }>('/transfers/sui', async (request, reply) => {
+  }>('/transfers/sui', { preHandler: requireAuthToken }, async (request, reply) => {
     try {
       const to = validateAddress(request.body?.to, 'to');
       const amount = request.body?.amount;
-      const coinId = request.body?.coinId ? validateObjectId(request.body.coinId, 'coinId') : undefined;
+      const coinId = request.body?.coinId
+        ? validateObjectId(request.body.coinId, 'coinId')
+        : undefined;
       const gasBudget = validateOptionalGasBudget(request.body?.gasBudget);
 
       // Validate amount is a positive number
@@ -56,7 +55,9 @@ export async function transferRoutes(fastify: FastifyInstance) {
     try {
       const to = validateAddress(request.body?.to, 'to');
       const amount = request.body?.amount;
-      const coinId = request.body?.coinId ? validateObjectId(request.body.coinId, 'coinId') : undefined;
+      const coinId = request.body?.coinId
+        ? validateObjectId(request.body.coinId, 'coinId')
+        : undefined;
       const gasBudget = validateOptionalGasBudget(request.body?.gasBudget);
 
       // Validate amount is a positive number
@@ -103,7 +104,7 @@ export async function transferRoutes(fastify: FastifyInstance) {
   fastify.post<{
     Body: { to: string; objectId: string; gasBudget?: string };
     Reply: ApiResponse<{ digest: string; gasUsed?: string }>;
-  }>('/transfers/object', async (request, reply) => {
+  }>('/transfers/object', { preHandler: requireAuthToken }, async (request, reply) => {
     try {
       const to = validateAddress(request.body?.to, 'to');
       const objectId = validateObjectId(request.body?.objectId, 'objectId');
