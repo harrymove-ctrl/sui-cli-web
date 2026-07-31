@@ -65,6 +65,12 @@ function isAllowedHost(hostHeader: string | undefined): boolean {
 
   const allowedHostnames = new Set(['localhost', '127.0.0.1', '[::1]']);
   if (isCloud) {
+    // Railway's own internal healthcheck probe - sent with this fixed Host
+    // regardless of the service's actual public domain. Without it, Railway
+    // can never see this deployment as healthy and rolls back to the last
+    // one that could - this rule shipped once and immediately took down every
+    // deploy after it.
+    allowedHostnames.add('healthcheck.railway.app');
     for (const domain of [process.env.RAILWAY_PUBLIC_DOMAIN, process.env.RAILWAY_STATIC_URL]) {
       if (domain) allowedHostnames.add(domain.replace(/^https?:\/\//, ''));
     }
