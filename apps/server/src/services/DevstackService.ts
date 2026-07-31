@@ -59,10 +59,17 @@ interface RawDeployment {
       faucet?: string;
       graphql?: string;
       local?: boolean;
-      packages?: Record<string, string>;
+      // devstack 0.4+ emits `{ id: "0x..." }` per package instead of the bare
+      // id string older versions wrote; accept both so a devstack upgrade on
+      // the user's machine doesn't crash the bridge.
+      packages?: Record<string, string | { id: string }>;
     }
   >;
   accounts?: Record<string, string>;
+}
+
+function packageId(value: string | { id: string }): string {
+  return typeof value === 'string' ? value : value.id;
 }
 
 interface CacheEntry<T> {
@@ -242,7 +249,9 @@ export class DevstackService {
         faucet: net.faucet,
         graphql: net.graphql,
         local: net.local,
-        packages: net.packages ?? {},
+        packages: Object.fromEntries(
+          Object.entries(net.packages ?? {}).map(([pkg, id]) => [pkg, packageId(id)])
+        ),
       };
     }
 

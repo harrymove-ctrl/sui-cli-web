@@ -27,17 +27,17 @@ export function TestimonialWall() {
                 The gas breakdown alone paid for itself — we caught a loop that
                 was burning 40% of our budget on a single entry function.
               </Testimonial>
-              <Testimonial name="Aiko Nakamura" title="Smart Contract Auditor">
+              <Testimonial name="Smart Contract Auditor">
                 I keep it open next to the explorer during reviews. Being able
                 to split, merge and inspect coins without leaving the keyboard
                 is the whole pitch.
               </Testimonial>
-              <Testimonial name="Deniz Yilmaz" title="DevRel, Sui Ecosystem">
+              <Testimonial name="Sui DevRel">
                 We put it in front of forty workshop attendees who&apos;d never
                 touched Move. Nobody got stuck on environment setup. That has
                 never happened before.
               </Testimonial>
-              <Testimonial name="Priya Sharma" title="Protocol Engineer">
+              <Testimonial name="Software Engineer">
                 It runs the CLI I already trust — no hosted keys, no wrapper
                 service, nothing leaves my machine. That&apos;s why it survived
                 past the demo.
