@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 import { Tooltip } from '@/components/ui/tooltip';
+import { useCopyToClipboard } from '@/hooks';
 import {
   buildExplorerUrl,
   detectNetwork,
@@ -399,13 +400,10 @@ export function AddressList() {
     });
   }, [addresses, debouncedSearchQuery, metadata]);
 
+  const copyToClipboard = useCopyToClipboard();
+
   // Copy-for-AI export. Public only: address, alias, active flag, balance -
   // never private keys, recovery phrases, or local notes/labels.
-  const copyToClipboard = useCallback((text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied`);
-  }, []);
-
   const aiExport = useMemo(() => {
     const publicAddresses = sortedAddresses.map((a) => ({
       address: a.address,

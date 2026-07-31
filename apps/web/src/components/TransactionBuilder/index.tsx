@@ -38,6 +38,7 @@ import { Button } from '@/components/ui/button';
 import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useCopyToClipboard } from '@/hooks';
 import { analyzeTransaction } from '@/utils/transactionAnalyzer';
 
 interface InspectResult {
@@ -129,11 +130,7 @@ export function TransactionBuilder() {
   const [executeResult, setExecuteResult] = useState<ExecuteSignedResult | null>(null);
   const [ptbResult, setPtbResult] = useState<PtbExecuteResult | null>(null);
 
-  // Copy to clipboard helper
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied to clipboard!`);
-  };
+  const copyToClipboard = useCopyToClipboard();
 
   // Inspect transaction
   const handleInspect = async () => {

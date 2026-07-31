@@ -1,7 +1,7 @@
-import type { GasCoin, SuiAddress } from '@sui-cli-web/shared';
+import type { GasCoin, PublishedPackageInfo, SuiAddress } from '@sui-cli-web/shared';
 import { ConfigParser } from '../cli/ConfigParser';
 import { SuiCliExecutor } from '../cli/SuiCliExecutor';
-import type { PublishedPackageInfo } from '@sui-cli-web/shared';
+import { normalizeCliObjectShape } from '../utils/normalizeSuiObject';
 import type { TransactionBalanceEffect } from '../utils/suiGrpcClient';
 import {
   getBalanceViaGrpc,
@@ -12,7 +12,6 @@ import {
   getTransactionBalanceEffectsViaGrpc,
   getTransactionTimestampsViaGrpc,
 } from '../utils/suiGrpcClient';
-import { normalizeCliObjectShape } from '../utils/normalizeSuiObject';
 import {
   getAddressBalanceEffects,
   getObjectVersionHistory,
@@ -367,16 +366,7 @@ export class AddressService {
   }
 
   private async getActiveRpcUrl(): Promise<string | null> {
-    try {
-      const config = await this.configParser.getConfig();
-      if (config) {
-        const activeEnv = config.envs.find((e) => e.alias === config.active_env);
-        return activeEnv?.rpc || null;
-      }
-    } catch {
-      // Ignore
-    }
-    return null;
+    return this.configParser.getActiveRpcUrl();
   }
 
   private async fetchBalanceViaRpc(address: string, rpcUrl: string): Promise<string> {

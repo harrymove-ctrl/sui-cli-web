@@ -1,34 +1,20 @@
-import { FastifyInstance } from 'fastify';
-import { PackageService, PublishedPackageInfo } from '../services/dev/PackageService';
 import type { ApiResponse } from '@sui-cli-web/shared';
+import { FastifyInstance } from 'fastify';
+import { ConfigParser } from '../cli/ConfigParser';
+import { PackageService, PublishedPackageInfo } from '../services/dev/PackageService';
+import { handleRouteError } from '../utils/errorHandler';
+import { getPackageModulesViaGrpc, type PackageModulesViaGrpc } from '../utils/suiGrpcClient';
 import {
+  validateFunctionName,
+  validateModuleName,
+  validateMoveArgs,
   validateObjectId,
   validateOptionalGasBudget,
-  validateModuleName,
-  validateFunctionName,
-  validateMoveArgs,
   validateTypeArgs,
 } from '../utils/validation';
-import { handleRouteError } from '../utils/errorHandler';
-import { ConfigParser } from '../cli/ConfigParser';
-import {
-  getPackageModulesViaGrpc,
-  type PackageModulesViaGrpc,
-} from '../utils/suiGrpcClient';
 
 const packageService = new PackageService();
 const configParser = ConfigParser.getInstance();
-
-/** Resolve the active environment's fullnode URL for gRPC introspection. */
-async function getActiveRpcUrl(): Promise<string | null> {
-  try {
-    const config = await configParser.getConfig();
-    const activeEnv = config?.envs.find((e) => e.alias === config.active_env);
-    return activeEnv?.rpc || null;
-  } catch {
-    return null;
-  }
-}
 
 export async function packageRoutes(fastify: FastifyInstance) {
   // Get user's published packages (via UpgradeCap objects)
@@ -64,7 +50,7 @@ export async function packageRoutes(fastify: FastifyInstance) {
     try {
       const packageId = validateObjectId(request.params.id, 'packageId');
 
-      const rpcUrl = await getActiveRpcUrl();
+      const rpcUrl = await configParser.getActiveRpcUrl();
       if (!rpcUrl) {
         reply.status(503);
         return { success: false, error: 'No active Sui environment configured' };

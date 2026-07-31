@@ -31,6 +31,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useCopyToClipboard } from '@/hooks';
 
 // Helper to parse CLI output and separate warnings from actual content
 interface ParsedOutput {
@@ -402,10 +403,7 @@ export function DevTools() {
   };
 
   // Copy-for-AI: assemble the active tool's inputs/outputs into shareable context
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied`);
-  };
+  const copyToClipboard = useCopyToClipboard();
 
   const tabLabels: Record<string, string> = {
     coverage: 'Test Coverage',

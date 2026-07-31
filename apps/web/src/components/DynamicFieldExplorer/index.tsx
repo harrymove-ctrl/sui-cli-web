@@ -28,7 +28,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 import { Tooltip } from '@/components/ui/tooltip';
+import { useCopyToClipboard } from '@/hooks';
 import { buildAiContext } from '@/lib/ai-context';
+import { buildExplorerUrl, detectNetwork, getDefaultExplorer } from '@/lib/explorer';
+import { useAppStore } from '@/stores/useAppStore';
 import { formatBalance, truncateAddress } from '@/utils/format';
 import { Spinner } from '../shared/Spinner';
 
@@ -147,6 +150,9 @@ function normalizeFieldItem(item: DynamicFieldItem, index: number): NormalizedFi
 
 export function DynamicFieldExplorer() {
   const navigate = useNavigate();
+  const { environments } = useAppStore();
+  const activeEnv = environments.find((e) => e.isActive);
+  const currentNetwork = detectNetwork(activeEnv?.alias, activeEnv?.rpc);
   const [searchParams] = useSearchParams();
   const [objectId, setObjectId] = useState('');
   const [queriedObjectId, setQueriedObjectId] = useState('');
@@ -411,10 +417,7 @@ export function DynamicFieldExplorer() {
     };
   }, [queriedObjectId, normalizedFields, stats]);
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied`);
-  };
+  const copyToClipboard = useCopyToClipboard();
 
   const toggleNameTypeFilter = (type: string) => {
     setSelectedNameTypes((prev) => {
@@ -643,7 +646,12 @@ export function DynamicFieldExplorer() {
                   View Parent Object
                 </Button>
                 <a
-                  href={`https://suiscan.xyz/testnet/object/${queriedObjectId}`}
+                  href={buildExplorerUrl(
+                    getDefaultExplorer(),
+                    currentNetwork,
+                    'object',
+                    queriedObjectId
+                  )}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"

@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 import { ShimmerSkeleton } from '@/components/unlumen-ui/shimmer-skeleton';
+import { useCopyToClipboard } from '@/hooks';
 import { useAppStore } from '@/stores/useAppStore';
 
 // Format balance with proper decimals
@@ -86,10 +87,7 @@ export function CoinList() {
     });
   };
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied`);
-  };
+  const copyToClipboard = useCopyToClipboard();
 
   // Filter groups by search query
   const filteredGroups = useMemo(() => {

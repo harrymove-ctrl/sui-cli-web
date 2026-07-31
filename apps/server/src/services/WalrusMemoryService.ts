@@ -1,13 +1,12 @@
+import { EncryptedObject, SealClient, SessionKey } from '@mysten/seal';
 import { bcs } from '@mysten/sui/bcs';
 import { Transaction } from '@mysten/sui/transactions';
 import { fromHex, normalizeSuiAddress, toHex } from '@mysten/sui/utils';
-import { SealClient, SessionKey, EncryptedObject } from '@mysten/seal';
-import { getSharedGrpcClient, inferNetwork } from '../utils/suiGrpcClient';
-import { getObjectsJsonViaGrpc } from '../utils/suiGrpcClient';
-import { loadLocalKeypairForAddress } from '../utils/localKeystore';
+import fetch from 'node-fetch';
 import { ConfigParser } from '../cli/ConfigParser';
 import { SuiCliExecutor } from '../cli/SuiCliExecutor';
-import fetch from 'node-fetch';
+import { loadLocalKeypairForAddress } from '../utils/localKeystore';
+import { getObjectsJsonViaGrpc, getSharedGrpcClient, inferNetwork } from '../utils/suiGrpcClient';
 
 // Verified against the deployed testnet/mainnet packages directly (gRPC
 // MovePackageService.getMoveFunction) - see docs/contract/overview.md in
@@ -69,8 +68,7 @@ export class WalrusMemoryService {
   private cliExecutor = SuiCliExecutor.getInstance();
 
   private async getActiveRpcUrl(): Promise<string> {
-    const config = await this.configParser.getConfig();
-    const rpcUrl = config?.envs.find((e) => e.alias === config.active_env)?.rpc;
+    const rpcUrl = await this.configParser.getActiveRpcUrl();
     if (!rpcUrl) throw new Error('No active RPC URL found');
     return rpcUrl;
   }
@@ -79,7 +77,9 @@ export class WalrusMemoryService {
     const network = inferNetwork(rpcUrl);
     const config = NETWORK_CONFIG[network];
     if (!config) {
-      throw new Error(`Walrus Memory is only available on mainnet/testnet (active network: ${network})`);
+      throw new Error(
+        `Walrus Memory is only available on mainnet/testnet (active network: ${network})`
+      );
     }
     return { network, ...config };
   }
@@ -184,7 +184,11 @@ export class WalrusMemoryService {
       throw new Error('The account owner cannot also be added as a delegate');
     }
     const existingAccount = await this.getAccountDetails(accountId);
-    if (existingAccount?.delegateKeys.some((k) => normalizeSuiAddress(k.suiAddress) === normalizedDelegate)) {
+    if (
+      existingAccount?.delegateKeys.some(
+        (k) => normalizeSuiAddress(k.suiAddress) === normalizedDelegate
+      )
+    ) {
       throw new Error('This address is already a registered delegate for this account');
     }
 
@@ -259,7 +263,9 @@ export class WalrusMemoryService {
    * succeeds. Shared by addDelegateKey/removeDelegateKey.
    */
   private async runPtbDryRunThenExecute(ptbArgs: string[]): Promise<{ digest: string }> {
-    const dryRunOutput = await this.cliExecutor.execute([...ptbArgs, '--dry-run'], { timeout: 60000 });
+    const dryRunOutput = await this.cliExecutor.execute([...ptbArgs, '--dry-run'], {
+      timeout: 60000,
+    });
     const dryRunResult = this.parsePtbOutput(dryRunOutput, true);
     if (!dryRunResult.success) {
       throw new Error(dryRunResult.error ?? 'Dry run failed');
@@ -273,7 +279,10 @@ export class WalrusMemoryService {
     // A missing digest here means the CLI reported success but our output
     // parsing couldn't find it - the transaction still landed on-chain, so
     // this must not be reported as a failure (see parsePtbOutput).
-    return { digest: result.digest ?? 'unknown (transaction succeeded - check your wallet or a block explorer)' };
+    return {
+      digest:
+        result.digest ?? 'unknown (transaction succeeded - check your wallet or a block explorer)',
+    };
   }
 
   private parsePtbOutput(
@@ -316,7 +325,9 @@ export class WalrusMemoryService {
 
     for (const base of aggregators) {
       try {
-        const res = await fetch(`${base}/v1/blobs/${walrusBlobId}`, { signal: AbortSignal.timeout(20_000) });
+        const res = await fetch(`${base}/v1/blobs/${walrusBlobId}`, {
+          signal: AbortSignal.timeout(20_000),
+        });
         if (res.ok) {
           return new Uint8Array(await res.arrayBuffer());
         }
@@ -359,7 +370,10 @@ export class WalrusMemoryService {
 
     const client = getSharedGrpcClient(rpcUrl);
     const { sealServers } = NETWORK_CONFIG[network];
-    const threshold = Math.min(2, sealServers.reduce((sum, s) => sum + s.weight, 0));
+    const threshold = Math.min(
+      2,
+      sealServers.reduce((sum, s) => sum + s.weight, 0)
+    );
 
     const sealClient = new SealClient({
       suiClient: client as any,
@@ -409,7 +423,11 @@ export class WalrusMemoryService {
       const text = decoder.decode(decrypted);
       return { isText: true, text, byteLength: decrypted.length };
     } catch {
-      return { isText: false, base64: Buffer.from(decrypted).toString('base64'), byteLength: decrypted.length };
+      return {
+        isText: false,
+        base64: Buffer.from(decrypted).toString('base64'),
+        byteLength: decrypted.length,
+      };
     }
   }
 }

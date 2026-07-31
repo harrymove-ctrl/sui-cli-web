@@ -1,11 +1,16 @@
+import { Check, Copy, ExternalLink } from 'lucide-react';
 import React, { useState } from 'react';
-import { Copy, Check, ExternalLink } from 'lucide-react';
+import { buildExplorerUrl, detectNetwork, getDefaultExplorer } from '@/lib/explorer';
+import { useAppStore } from '@/stores/useAppStore';
 import type { ObjectMetadataPopoverProps } from './types';
 
 export const ObjectMetadataPopover: React.FC<ObjectMetadataPopoverProps> = ({
   suggestion,
   children,
 }) => {
+  const { environments } = useAppStore();
+  const activeEnv = environments.find((e) => e.isActive);
+  const currentNetwork = detectNetwork(activeEnv?.alias, activeEnv?.rpc);
   const [isHovered, setIsHovered] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -52,7 +57,12 @@ export const ObjectMetadataPopover: React.FC<ObjectMetadataPopoverProps> = ({
               </button>
               {metadata.objectId && (
                 <a
-                  href={`https://suiscan.xyz/testnet/object/${metadata.objectId}`}
+                  href={buildExplorerUrl(
+                    getDefaultExplorer(),
+                    currentNetwork,
+                    'object',
+                    metadata.objectId
+                  )}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
@@ -80,9 +90,7 @@ export const ObjectMetadataPopover: React.FC<ObjectMetadataPopoverProps> = ({
             <div className="mb-2">
               <span className="text-xs text-gray-500">Type</span>
               <p className="text-xs font-mono text-purple-400 break-all">
-                {metadata.type.length > 50
-                  ? `${metadata.type.slice(0, 50)}...`
-                  : metadata.type}
+                {metadata.type.length > 50 ? `${metadata.type.slice(0, 50)}...` : metadata.type}
               </p>
             </div>
           )}
@@ -118,14 +126,16 @@ export const ObjectMetadataPopover: React.FC<ObjectMetadataPopoverProps> = ({
             <div>
               <span className="text-xs text-gray-500">Fields</span>
               <div className="mt-1 p-2 bg-gray-800 rounded text-xs font-mono max-h-24 overflow-auto">
-                {Object.entries(metadata.fields).slice(0, 5).map(([key, value]) => (
-                  <div key={key} className="flex gap-2">
-                    <span className="text-gray-500">{key}:</span>
-                    <span className="text-gray-300 truncate">
-                      {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                    </span>
-                  </div>
-                ))}
+                {Object.entries(metadata.fields)
+                  .slice(0, 5)
+                  .map(([key, value]) => (
+                    <div key={key} className="flex gap-2">
+                      <span className="text-gray-500">{key}:</span>
+                      <span className="text-gray-300 truncate">
+                        {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                      </span>
+                    </div>
+                  ))}
                 {Object.keys(metadata.fields).length > 5 && (
                   <span className="text-gray-500">...and more</span>
                 )}

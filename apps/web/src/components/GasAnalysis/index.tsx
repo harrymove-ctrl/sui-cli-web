@@ -28,10 +28,10 @@ import {
   Zap,
 } from 'lucide-react';
 import React, { useCallback, useState } from 'react';
-import toast from 'react-hot-toast';
 import { apiClient } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
+import { useCopyToClipboard } from '@/hooks';
 
 interface GasBreakdown {
   computationCost: string;
@@ -226,15 +226,7 @@ export function GasAnalysis() {
     if (e.key === 'Enter') analyzeTransaction();
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success('Copied!');
-  };
-
-  const copyForAi = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied`);
-  };
+  const copyToClipboard = useCopyToClipboard();
 
   const getEfficiencyInfo = (eff: number) => {
     if (eff >= 70)
@@ -301,7 +293,7 @@ export function GasAnalysis() {
               <HelpCircle className="w-4 h-4 text-muted-foreground" />
             </Tooltip>
           </div>
-          {breakdown && <CopyForAiMenu prompt={aiPrompt} json={aiJson} onCopy={copyForAi} />}
+          {breakdown && <CopyForAiMenu prompt={aiPrompt} json={aiJson} onCopy={copyToClipboard} />}
         </div>
 
         <div className="flex gap-2">
@@ -349,7 +341,7 @@ export function GasAnalysis() {
                   </div>
                 </div>
                 <button
-                  onClick={() => copyToClipboard(digest)}
+                  onClick={() => copyToClipboard(digest, 'Digest')}
                   className="p-1.5 hover:bg-accent rounded-md text-muted-foreground hover:text-foreground"
                   title="Copy digest"
                 >

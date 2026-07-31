@@ -28,6 +28,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useCopyToClipboard } from '@/hooks';
 
 // Simplified warning for user-friendly display
 interface SimplifiedWarning {
@@ -322,11 +323,7 @@ export function SecurityTools() {
     }
   };
 
-  // Copy to clipboard
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied to clipboard`);
-  };
+  const copyToClipboard = useCopyToClipboard();
 
   // Non-sensitive snapshot for AI export: tool config + verification/decode
   // results only. No transaction bytes, signatures, or other raw inputs.
