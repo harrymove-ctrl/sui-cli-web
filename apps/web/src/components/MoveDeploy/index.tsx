@@ -36,11 +36,14 @@ import {
   upgradePackage,
 } from '@/api/client';
 import { explorePackage, type MoveFunction } from '@/api/services/packages';
-import {
-  AnimatedToastStack,
-  useAnimatedToastStack,
-} from '@/components/ui/animated-toast-stack';
-import { CommandPalette, type CommandItem } from '@/components/ui/command-palette';
+import { ParameterInputField } from '@/components/ParameterInputField';
+import { AnimatedToastStack, useAnimatedToastStack } from '@/components/ui/animated-toast-stack';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { type CommandItem, CommandPalette } from '@/components/ui/command-palette';
+import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
+import { Label } from '@/components/ui/label';
 import { Loader } from '@/components/ui/loader';
 import { Checkbox } from '@/components/ui/motion-checkbox';
 import {
@@ -50,23 +53,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/motion-select';
-import { ParameterInputField } from '@/components/ParameterInputField';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
-import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { WorkflowPipelineIndicator } from '@/components/ui/workflow-pipeline';
-import { useAppStore } from '@/stores/useAppStore';
+import { useCopyToClipboard } from '@/hooks';
 import { buildAiContext } from '@/lib/ai-context';
 import { cn } from '@/lib/utils';
+import { useAppStore } from '@/stores/useAppStore';
 import { FileBrowser } from './FileBrowser';
+import { MoveStudioFlow, type StudioStage } from './MoveStudioFlow';
 import { TerminalBuildOutput } from './TerminalBuildOutput';
 import { splitCliOutput, TerminalErrorDisplay } from './TerminalErrorDisplay';
-import { MoveStudioFlow, type StudioStage } from './MoveStudioFlow';
 import { TerminalSuccessDisplay } from './TerminalSuccessDisplay';
 import { TerminalTestOutput } from './TerminalTestOutput';
 
@@ -568,8 +566,7 @@ export function MoveDeploy() {
         // functions only, so the count badge reflects what you can actually click.
         if (m.name.toLowerCase().includes(q)) return m;
         const functions = m.functions.filter(
-          (f) =>
-            f.name.toLowerCase().includes(q) || (f.signature ?? '').toLowerCase().includes(q)
+          (f) => f.name.toLowerCase().includes(q) || (f.signature ?? '').toLowerCase().includes(q)
         );
         return functions.length ? { ...m, functions } : null;
       })
@@ -702,10 +699,7 @@ export function MoveDeploy() {
   const isAnyLoading = building || testing || publishing || upgrading || isOneClickRunning;
 
   // Copy-for-AI: assemble the current deployment state into shareable context
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied`);
-  };
+  const copyToClipboard = useCopyToClipboard();
 
   const packageName = packagePath.trim()
     ? packagePath.trim().split('/').pop() || packagePath.trim()
@@ -919,14 +913,9 @@ export function MoveDeploy() {
     })),
   ];
 
-
   return (
     <>
-      <CommandPalette
-        items={paletteItems}
-        shortcut="j"
-        placeholder="Search Move Studio actions…"
-      />
+      <CommandPalette items={paletteItems} shortcut="j" placeholder="Search Move Studio actions…" />
       <AnimatedToastStack
         toasts={opToasts}
         onDismiss={dismissOpToast}
@@ -1079,7 +1068,6 @@ export function MoveDeploy() {
                   )}
                 </CardContent>
               </Card>
-
             </motion.div>
 
             {/* Right Column: Main Content */}
@@ -1124,151 +1112,154 @@ export function MoveDeploy() {
                     block drops away there. */}
                 {activeTab !== 'interact' && (
                   <div className="space-y-2 mt-2">
-                  {/* Package Configuration - Compact */}
-                  <Card className="bg-card backdrop-blur-md border-border transition-colors shadow-md relative overflow-hidden">
-                    <div className="absolute top-0 left-0 right-0 h-0.5 bg-border" />
-                    <CardHeader className="py-2 px-3">
-                      <CardTitle className="text-sm flex items-center gap-1.5 text-foreground">
-                        <FileCode className="w-3.5 h-3.5 text-muted-foreground" />
-                        Package Configuration
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-3 pb-3 space-y-2">
-                      {/* Package Path - Compact */}
-                      <div className="space-y-1">
-                        <Label
-                          htmlFor="package-path"
-                          className="text-xs font-medium flex items-center gap-1 text-foreground"
-                        >
-                          Package Path <span className="text-error">*</span>
-                        </Label>
-                        <div className="flex gap-1.5">
-                          <input
-                            id="package-path"
-                            type="text"
-                            value={packagePath}
-                            onChange={(e) => setPackagePath(e.target.value)}
-                            placeholder="/path/to/your/move/package"
-                            className="flex-1 px-2.5 py-1.5 bg-card border border-border rounded text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-ring focus:border-primary transition-all text-xs font-mono"
-                            disabled={isAnyLoading}
-                          />
-                          <button
-                            onClick={() => setShowBrowser(true)}
-                            disabled={isAnyLoading}
-                            className="px-2.5 py-1.5 bg-secondary border border-border text-foreground rounded hover:bg-accent transition-colors disabled:opacity-50"
-                            title="Browse"
-                          >
-                            <FolderOpen className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <AlertCircle className="w-2.5 h-2.5" />
-                          Absolute path to your Move package directory (containing Move.toml)
-                        </p>
-                      </div>
-
-                      <Separator className="bg-muted my-1" />
-
-                      {/* Gas & Options. Single column until `sm`: side by side in a
-                          narrow card the two checkbox labels collide. */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Package Configuration - Compact */}
+                    <Card className="bg-card backdrop-blur-md border-border transition-colors shadow-md relative overflow-hidden">
+                      <div className="absolute top-0 left-0 right-0 h-0.5 bg-border" />
+                      <CardHeader className="py-2 px-3">
+                        <CardTitle className="text-sm flex items-center gap-1.5 text-foreground">
+                          <FileCode className="w-3.5 h-3.5 text-muted-foreground" />
+                          Package Configuration
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="px-3 pb-3 space-y-2">
+                        {/* Package Path - Compact */}
                         <div className="space-y-1">
-                          <Label htmlFor="gas-budget" className="text-xs font-medium text-foreground">
-                            Gas Budget
-                          </Label>
-                          <Select
-                            value={gasPreset}
-                            onValueChange={(v) => {
-                              setGasPreset(v);
-                              if (v !== 'custom') setGasBudget(v);
-                            }}
-                            disabled={isAnyLoading}
+                          <Label
+                            htmlFor="package-path"
+                            className="text-xs font-medium flex items-center gap-1 text-foreground"
                           >
-                            <SelectTrigger className="py-1.5 text-xs">
-                              <SelectValue placeholder="Choose a budget" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {GAS_PRESETS.map((preset) => (
-                                <SelectItem key={preset.value} value={preset.value}>
-                                  {preset.label}
-                                </SelectItem>
-                              ))}
-                              <SelectItem value="custom">Custom…</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          {gasPreset === 'custom' && (
+                            Package Path <span className="text-error">*</span>
+                          </Label>
+                          <div className="flex gap-1.5">
                             <input
-                              id="gas-budget"
+                              id="package-path"
                               type="text"
-                              value={gasBudget}
-                              onChange={(e) => setGasBudget(e.target.value)}
-                              placeholder="100000000"
-                              className="w-full px-2.5 py-1.5 bg-card border border-border rounded text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-ring transition-all text-xs font-mono"
+                              value={packagePath}
+                              onChange={(e) => setPackagePath(e.target.value)}
+                              placeholder="/path/to/your/move/package"
+                              className="flex-1 px-2.5 py-1.5 bg-card border border-border rounded text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-ring focus:border-primary transition-all text-xs font-mono"
                               disabled={isAnyLoading}
                             />
-                          )}
-                          <p className="text-xs text-muted-foreground/60">
-                            {gasBudget} MIST (0.1 SUI = 100000000 MIST)
+                            <button
+                              onClick={() => setShowBrowser(true)}
+                              disabled={isAnyLoading}
+                              className="px-2.5 py-1.5 bg-secondary border border-border text-foreground rounded hover:bg-accent transition-colors disabled:opacity-50"
+                              title="Browse"
+                            >
+                              <FolderOpen className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <AlertCircle className="w-2.5 h-2.5" />
+                            Absolute path to your Move package directory (containing Move.toml)
                           </p>
                         </div>
 
-                        <div className="space-y-1">
-                          <Label className="text-xs font-medium text-foreground">Options</Label>
-                          <div className="flex flex-col gap-2 pt-1">
-                            <Checkbox
-                              checked={saveUpgradeCap}
-                              onCheckedChange={setSaveUpgradeCap}
+                        <Separator className="bg-muted my-1" />
+
+                        {/* Gas & Options. Single column until `sm`: side by side in a
+                          narrow card the two checkbox labels collide. */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label
+                              htmlFor="gas-budget"
+                              className="text-xs font-medium text-foreground"
+                            >
+                              Gas Budget
+                            </Label>
+                            <Select
+                              value={gasPreset}
+                              onValueChange={(v) => {
+                                setGasPreset(v);
+                                if (v !== 'custom') setGasBudget(v);
+                              }}
                               disabled={isAnyLoading}
-                              label="Auto-save UpgradeCap"
-                            />
-                            <Checkbox
-                              checked={skipDeps}
-                              onCheckedChange={setSkipDeps}
-                              disabled={isAnyLoading}
-                              label="Skip dependency verification"
-                            />
+                            >
+                              <SelectTrigger className="py-1.5 text-xs">
+                                <SelectValue placeholder="Choose a budget" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {GAS_PRESETS.map((preset) => (
+                                  <SelectItem key={preset.value} value={preset.value}>
+                                    {preset.label}
+                                  </SelectItem>
+                                ))}
+                                <SelectItem value="custom">Custom…</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            {gasPreset === 'custom' && (
+                              <input
+                                id="gas-budget"
+                                type="text"
+                                value={gasBudget}
+                                onChange={(e) => setGasBudget(e.target.value)}
+                                placeholder="100000000"
+                                className="w-full px-2.5 py-1.5 bg-card border border-border rounded text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-ring transition-all text-xs font-mono"
+                                disabled={isAnyLoading}
+                              />
+                            )}
+                            <p className="text-xs text-muted-foreground/60">
+                              {gasBudget} MIST (0.1 SUI = 100000000 MIST)
+                            </p>
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label className="text-xs font-medium text-foreground">Options</Label>
+                            <div className="flex flex-col gap-2 pt-1">
+                              <Checkbox
+                                checked={saveUpgradeCap}
+                                onCheckedChange={setSaveUpgradeCap}
+                                disabled={isAnyLoading}
+                                label="Auto-save UpgradeCap"
+                              />
+                              <Checkbox
+                                checked={skipDeps}
+                                onCheckedChange={setSkipDeps}
+                                disabled={isAnyLoading}
+                                label="Skip dependency verification"
+                              />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
 
-                  {/* One-Click Workflow - Compact */}
-                  <Card className="bg-card backdrop-blur-md border-primary/40 shadow-md relative overflow-hidden">
-                    <CardHeader className="py-2 px-3 relative z-10">
-                      <CardTitle className="text-sm flex items-center gap-1.5 text-foreground">
-                        <PlayCircle className="w-3.5 h-3.5 text-muted-foreground" />
-                        One-Click Workflow
-                        <span className="text-xs text-muted-foreground ml-auto font-normal">
-                          Automatically build, test, and publish
-                        </span>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-3 pb-3 relative z-10">
-                      <Button
-                        onClick={handleOneClickWorkflow}
-                        disabled={!isValidPath || isAnyLoading}
-                        className="w-full bg-primary border border-primary text-primary-foreground hover:bg-primary/90"
-                      >
-                        {isOneClickRunning ? (
-                          <>
-                            <Loader variant="dither" size={16} label="Working" />
-                            Running...
-                          </>
-                        ) : (
-                          <>
-                            <Rocket className="w-4 h-4" />
-                            Build → Test → Publish
-                            <ChevronRight className="w-3 h-3" />
-                          </>
-                        )}
-                      </Button>
-                      <p className="text-xs text-muted-foreground text-center mt-1.5 flex items-center justify-center gap-1">
-                        <Zap className="w-2.5 h-2.5 text-muted-foreground" />
-                        Recommended for production deployment
-                      </p>
-                    </CardContent>
-                  </Card>
+                    {/* One-Click Workflow - Compact */}
+                    <Card className="bg-card backdrop-blur-md border-primary/40 shadow-md relative overflow-hidden">
+                      <CardHeader className="py-2 px-3 relative z-10">
+                        <CardTitle className="text-sm flex items-center gap-1.5 text-foreground">
+                          <PlayCircle className="w-3.5 h-3.5 text-muted-foreground" />
+                          One-Click Workflow
+                          <span className="text-xs text-muted-foreground ml-auto font-normal">
+                            Automatically build, test, and publish
+                          </span>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="px-3 pb-3 relative z-10">
+                        <Button
+                          onClick={handleOneClickWorkflow}
+                          disabled={!isValidPath || isAnyLoading}
+                          className="w-full bg-primary border border-primary text-primary-foreground hover:bg-primary/90"
+                        >
+                          {isOneClickRunning ? (
+                            <>
+                              <Loader variant="dither" size={16} label="Working" />
+                              Running...
+                            </>
+                          ) : (
+                            <>
+                              <Rocket className="w-4 h-4" />
+                              Build → Test → Publish
+                              <ChevronRight className="w-3 h-3" />
+                            </>
+                          )}
+                        </Button>
+                        <p className="text-xs text-muted-foreground text-center mt-1.5 flex items-center justify-center gap-1">
+                          <Zap className="w-2.5 h-2.5 text-muted-foreground" />
+                          Recommended for production deployment
+                        </p>
+                      </CardContent>
+                    </Card>
                   </div>
                 )}
 
@@ -1411,7 +1402,12 @@ export function MoveDeploy() {
                                   className="space-y-1.5 p-2 bg-muted/50 border border-border rounded"
                                 >
                                   <div className="flex items-center gap-1.5">
-                                    <Loader variant="dither" size={12} label="Working" className="text-foreground" />
+                                    <Loader
+                                      variant="dither"
+                                      size={12}
+                                      label="Working"
+                                      className="text-foreground"
+                                    />
                                     <span className="text-xs text-foreground">Compiling...</span>
                                   </div>
                                   <Skeleton className="h-2 w-full bg-muted" />
@@ -1449,7 +1445,12 @@ export function MoveDeploy() {
                                   className="space-y-1.5 p-2 bg-muted/50 border border-border rounded"
                                 >
                                   <div className="flex items-center gap-1.5">
-                                    <Loader variant="dither" size={12} label="Working" className="text-foreground" />
+                                    <Loader
+                                      variant="dither"
+                                      size={12}
+                                      label="Working"
+                                      className="text-foreground"
+                                    />
                                     <span className="text-xs text-foreground">
                                       Running tests...
                                     </span>
@@ -1520,7 +1521,12 @@ export function MoveDeploy() {
                             className="p-2 bg-muted/50 border border-border rounded space-y-1"
                           >
                             <div className="flex items-center gap-1.5">
-                              <Loader variant="dither" size={12} label="Working" className="text-foreground" />
+                              <Loader
+                                variant="dither"
+                                size={12}
+                                label="Working"
+                                className="text-foreground"
+                              />
                               <span className="text-xs text-foreground">Publishing...</span>
                             </div>
                             <div className="space-y-1 pl-4">
@@ -1529,7 +1535,12 @@ export function MoveDeploy() {
                                 <span className="text-xs text-muted-foreground">Compiling...</span>
                               </div>
                               <div className="flex items-center gap-1">
-                                <Loader variant="dither" size={10} label="Working" className="text-foreground" />
+                                <Loader
+                                  variant="dither"
+                                  size={10}
+                                  label="Working"
+                                  className="text-foreground"
+                                />
                                 <span className="text-xs text-foreground">Generating tx...</span>
                               </div>
                               <div className="flex items-center gap-1">
@@ -1674,7 +1685,12 @@ export function MoveDeploy() {
                             className="p-2 bg-muted/50 border border-border rounded space-y-1"
                           >
                             <div className="flex items-center gap-1.5">
-                              <Loader variant="dither" size={12} label="Working" className="text-foreground" />
+                              <Loader
+                                variant="dither"
+                                size={12}
+                                label="Working"
+                                className="text-foreground"
+                              />
                               <span className="text-xs text-foreground">Upgrading...</span>
                             </div>
                             <Skeleton className="h-2 w-full bg-muted" />

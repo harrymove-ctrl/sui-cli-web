@@ -30,6 +30,9 @@ import toast from 'react-hot-toast';
 import { apiClient } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
+import { useCopyToClipboard } from '@/hooks';
+import { buildExplorerUrl, detectNetwork, getDefaultExplorer } from '@/lib/explorer';
+import { useAppStore } from '@/stores/useAppStore';
 
 interface ParsedEvent {
   id: string;
@@ -159,10 +162,10 @@ function EventCard({
   const description = getEventDescription(event.eventName);
   const icon = getEventIcon(event.eventName);
 
+  const copyToClipboardBase = useCopyToClipboard();
   const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
+    copyToClipboardBase(text, label);
     setCopied(label);
-    toast.success('Copied!');
     setTimeout(() => setCopied(null), 2000);
   };
 
@@ -302,6 +305,9 @@ function EventCard({
 }
 
 export function EventExplorer() {
+  const { environments } = useAppStore();
+  const activeEnv = environments.find((e) => e.isActive);
+  const currentNetwork = detectNetwork(activeEnv?.alias, activeEnv?.rpc);
   const [digest, setDigest] = useState('');
   const [events, setEvents] = useState<ParsedEvent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -499,7 +505,7 @@ export function EventExplorer() {
                 <span className="text-sm font-medium text-foreground">Transaction Summary</span>
               </div>
               <a
-                href={`https://suiscan.xyz/testnet/tx/${digest}`}
+                href={buildExplorerUrl(getDefaultExplorer(), currentNetwork, 'tx', digest)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"

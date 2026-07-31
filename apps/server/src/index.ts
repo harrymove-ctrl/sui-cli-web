@@ -32,6 +32,7 @@ import { replayRoutes } from './routes/replay';
 import { securityRoutes } from './routes/security';
 import { transferRoutes } from './routes/transfer';
 import { walrusMemoryRoutes } from './routes/walrusMemory';
+import { getOrCreateAuthToken } from './utils/authToken';
 import { createRateLimitHook } from './utils/rateLimiter';
 
 const require = createRequire(import.meta.url);
@@ -40,13 +41,36 @@ const CURRENT_VERSION = pkg.version;
 const PACKAGE_NAME = pkg.name;
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
-// Automatically bind to 0.0.0.0 in Railway/Cloud platforms or when HOST is set
-const isCloud = !!(
-  process.env.RAILWAY_STATIC_URL ||
-  process.env.RAILWAY_SERVICE_ID ||
-  process.env.PORT
-);
+// Only a real Railway/cloud signal implies 0.0.0.0 - a user picking a
+// non-default PORT for their own local install is not a cloud deployment,
+// and treating it as one used to bind the wallet-management API to every
+// network interface on their machine.
+const isCloud = !!(process.env.RAILWAY_STATIC_URL || process.env.RAILWAY_SERVICE_ID);
 const HOST = process.env.HOST || (isCloud ? '0.0.0.0' : '127.0.0.1');
+
+/**
+ * True when the Host header names this server's own loopback address (or, on a
+ * hosted deployment, its own public domain).
+ *
+ * CORS alone is not enough: a page on any domain can point a DNS record at
+ * 127.0.0.1 with a short TTL, and once the browser resolves it the request is
+ * same-origin as far as the browser's Origin header goes, bypassing the CORS
+ * check entirely. Validating Host closes that gap.
+ */
+function isAllowedHost(hostHeader: string | undefined): boolean {
+  if (!hostHeader) return false;
+  const hostname = hostHeader.startsWith('[')
+    ? hostHeader.slice(0, hostHeader.indexOf(']') + 1)
+    : hostHeader.split(':')[0];
+
+  const allowedHostnames = new Set(['localhost', '127.0.0.1', '[::1]']);
+  if (isCloud) {
+    for (const domain of [process.env.RAILWAY_PUBLIC_DOMAIN, process.env.RAILWAY_STATIC_URL]) {
+      if (domain) allowedHostnames.add(domain.replace(/^https?:\/\//, ''));
+    }
+  }
+  return allowedHostnames.has(hostname);
+}
 
 // Check for updates from npm registry
 async function checkForUpdates(): Promise<{ hasUpdate: boolean; latestVersion: string | null }> {
@@ -147,6 +171,15 @@ export async function buildServer() {
     },
   });
 
+  // Reject requests aimed at a Host other than this server's own address,
+  // before CORS or any route runs - see isAllowedHost() for why this exists.
+  fastify.addHook('onRequest', async (request, reply) => {
+    if (!isAllowedHost(request.headers.host)) {
+      reply.status(421);
+      return reply.send({ error: 'Invalid Host header' });
+    }
+  });
+
   // Register CORS - allow localhost and the one hosted UI origin
   await fastify.register(cors, {
     origin: (origin, cb) => {
@@ -190,11 +223,17 @@ export async function buildServer() {
         ...envOrigins,
       ];
 
-      // Regex patterns for dynamic origins
+      // Regex patterns for dynamic origins. Scoped to this server's own PORT
+      // (it needs to allow its own served UI) plus the web workspace's Vite
+      // dev port - not "any localhost port", which would let any other local
+      // process or page (an unrelated dev server, a malicious postinstall
+      // script) drive key export and transaction signing just by running on
+      // the same machine.
       const allowedPatterns = [
-        // Local development (allow any localhost port)
-        /^http:\/\/localhost(:\d+)?$/,
-        /^http:\/\/127\.0\.0\.1(:\d+)?$/,
+        new RegExp(`^http://localhost:${PORT}$`),
+        new RegExp(`^http://127\\.0\\.0\\.1:${PORT}$`),
+        /^http:\/\/localhost:5174$/,
+        /^http:\/\/127\.0\.0\.1:5174$/,
       ];
 
       // Check exact match
@@ -690,6 +729,13 @@ async function main() {
 ║   Keep this terminal open while using the app.                ║
 ║                                                               ║
 ╚═══════════════════════════════════════════════════════════════╝
+
+  🔑 Pairing token (required to export keys, sign, transfer, or pay):
+
+     ${getOrCreateAuthToken()}
+
+  Paste this into the web UI when prompted. It is never sent anywhere
+  except this browser tab, and is only ever shown here in this terminal.
     `);
   } catch (err: any) {
     if (err.code === 'EADDRINUSE') {

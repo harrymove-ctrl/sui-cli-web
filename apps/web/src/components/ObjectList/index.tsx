@@ -45,6 +45,7 @@ import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip } from '@/components/ui/tooltip';
 import { ShimmerSkeleton } from '@/components/unlumen-ui/shimmer-skeleton';
+import { useCopyToClipboard } from '@/hooks';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { buildAiContext } from '@/lib/ai-context';
 import { useAppStore } from '@/stores/useAppStore';
@@ -676,10 +677,7 @@ export function ObjectList() {
     }
   };
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied`);
-  };
+  const copyToClipboard = useCopyToClipboard();
 
   const getTypeDisplay = (type: string) => {
     if (!type) return 'Unknown';
@@ -1379,312 +1377,309 @@ export function ObjectList() {
         </TabsList>
         <TabsContent value={activeCategory}>
           <>
-              {/* Concrete-type filter. The category tabs are heuristic buckets
+            {/* Concrete-type filter. The category tabs are heuristic buckets
                   ("anything with 'cap' in the type"); this narrows to one exact
                   Move type, which is what you want once a bucket has hundreds. */}
-              {typeOptions.length > 1 && (
-                <div className="mb-3 flex flex-wrap items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setTypeFilter(new Set())}
-                    aria-pressed={typeFilter.size === 0}
-                    className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                      typeFilter.size === 0
-                        ? 'border-[#4da2ff]/40 bg-[#4da2ff]/10 text-[#4da2ff]'
-                        : 'border-border bg-secondary text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    All types
-                  </button>
-                  {typeOptions.slice(0, TYPE_CHIP_CAP).map((opt) => {
-                    const on = typeFilter.has(opt.type);
-                    return (
-                      <button
-                        key={opt.type}
-                        type="button"
-                        onClick={() => toggleTypeFilter(opt.type)}
-                        aria-pressed={on}
-                        title={opt.type}
-                        className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                          on
-                            ? 'border-[#4da2ff]/40 bg-[#4da2ff]/10 text-[#4da2ff]'
-                            : 'border-border bg-secondary text-muted-foreground hover:text-foreground'
-                        }`}
-                      >
-                        <span className="font-mono">{opt.label}</span>
-                        <span className="ml-1 text-tertiary">{opt.count}</span>
-                      </button>
-                    );
-                  })}
-                  {typeOptions.length > TYPE_CHIP_CAP && (
-                    <span className="text-[11px] text-tertiary">
-                      +{typeOptions.length - TYPE_CHIP_CAP} more type
-                      {typeOptions.length - TYPE_CHIP_CAP !== 1 ? 's' : ''}
-                    </span>
-                  )}
-                </div>
-              )}
-              {/* Direct Object Lookup Result - when user searches for a full Object ID */}
-              {isFullObjectId(searchQuery) && (
-                <div className="mb-3">
-                  <div className="text-xs text-muted-foreground mb-2 flex items-center gap-2">
-                    <Search className="w-3 h-3" />
-                    Direct Object Lookup
-                  </div>
-                  {isLookingUp ? (
-                    <div className="flex items-center gap-2 px-3 py-4 bg-muted/30 rounded-lg">
-                      <Spinner />
-                      <span className="text-sm text-muted-foreground">Looking up object...</span>
-                    </div>
-                  ) : directLookupObject ? (
-                    <div
-                      className="flex items-center gap-3 px-3 py-3 rounded-lg bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 transition-colors cursor-pointer"
-                      onClick={() => setSelectedObject(directLookupObject)}
+            {typeOptions.length > 1 && (
+              <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setTypeFilter(new Set())}
+                  aria-pressed={typeFilter.size === 0}
+                  className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                    typeFilter.size === 0
+                      ? 'border-[#4da2ff]/40 bg-[#4da2ff]/10 text-[#4da2ff]'
+                      : 'border-border bg-secondary text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  All types
+                </button>
+                {typeOptions.slice(0, TYPE_CHIP_CAP).map((opt) => {
+                  const on = typeFilter.has(opt.type);
+                  return (
+                    <button
+                      key={opt.type}
+                      type="button"
+                      onClick={() => toggleTypeFilter(opt.type)}
+                      aria-pressed={on}
+                      title={opt.type}
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                        on
+                          ? 'border-[#4da2ff]/40 bg-[#4da2ff]/10 text-[#4da2ff]'
+                          : 'border-border bg-secondary text-muted-foreground hover:text-foreground'
+                      }`}
                     >
-                      <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center text-lg">
-                        {getTypeIcon(
-                          (directLookupObject as any).data?.type ||
-                            (directLookupObject as any).type ||
-                            ''
-                        )}
+                      <span className="font-mono">{opt.label}</span>
+                      <span className="ml-1 text-tertiary">{opt.count}</span>
+                    </button>
+                  );
+                })}
+                {typeOptions.length > TYPE_CHIP_CAP && (
+                  <span className="text-[11px] text-tertiary">
+                    +{typeOptions.length - TYPE_CHIP_CAP} more type
+                    {typeOptions.length - TYPE_CHIP_CAP !== 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+            )}
+            {/* Direct Object Lookup Result - when user searches for a full Object ID */}
+            {isFullObjectId(searchQuery) && (
+              <div className="mb-3">
+                <div className="text-xs text-muted-foreground mb-2 flex items-center gap-2">
+                  <Search className="w-3 h-3" />
+                  Direct Object Lookup
+                </div>
+                {isLookingUp ? (
+                  <div className="flex items-center gap-2 px-3 py-4 bg-muted/30 rounded-lg">
+                    <Spinner />
+                    <span className="text-sm text-muted-foreground">Looking up object...</span>
+                  </div>
+                ) : directLookupObject ? (
+                  <div
+                    className="flex items-center gap-3 px-3 py-3 rounded-lg bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 transition-colors cursor-pointer"
+                    onClick={() => setSelectedObject(directLookupObject)}
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center text-lg">
+                      {getTypeIcon(
+                        (directLookupObject as any).data?.type ||
+                          (directLookupObject as any).type ||
+                          ''
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-green-400">Found Object</span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getTypeColor((directLookupObject as any).data?.type || (directLookupObject as any).type || '')}`}
+                        >
+                          {getTypeDisplay(
+                            (directLookupObject as any).data?.type ||
+                              (directLookupObject as any).type ||
+                              ''
+                          )}
+                        </span>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-green-400">Found Object</span>
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getTypeColor((directLookupObject as any).data?.type || (directLookupObject as any).type || '')}`}
-                          >
-                            {getTypeDisplay(
-                              (directLookupObject as any).data?.type ||
-                                (directLookupObject as any).type ||
-                                ''
-                            )}
-                          </span>
-                        </div>
-                        <div className="text-xs text-muted-foreground font-mono truncate mt-1">
-                          {searchQuery}
-                        </div>
+                      <div className="text-xs text-muted-foreground font-mono truncate mt-1">
+                        {searchQuery}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        v
+                        {(directLookupObject as any).data?.version ||
+                          (directLookupObject as any).version ||
+                          '?'}
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-green-400" />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 px-3 py-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                    <span className="text-red-400">❌</span>
+                    <span className="text-sm text-red-400">Object not found or deleted</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {visibleObjects.length === 0 && !isFullObjectId(searchQuery) ? (
+              <div className="px-3 py-8 text-center text-muted-foreground">
+                <div className="text-4xl mb-2">{objects.length === 0 ? '📭' : '🔍'}</div>
+                <div className="mb-2">
+                  {objects.length === 0
+                    ? 'This address has no objects yet'
+                    : 'No objects match your filter'}
+                </div>
+
+                {objects.length === 0 && (
+                  <div className="mt-4 p-4 bg-muted/30 rounded-lg text-left max-w-sm mx-auto">
+                    <p className="text-xs text-muted-foreground mb-3">
+                      {isExternalAddress
+                        ? 'This might be a new multi-sig address. To start using it:'
+                        : 'To add objects to this address:'}
+                    </p>
+                    <div className="space-y-2 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-bold">
+                          1
+                        </span>
+                        <span>Get test SUI from faucet</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">
-                          v
-                          {(directLookupObject as any).data?.version ||
-                            (directLookupObject as any).version ||
-                            '?'}
+                        <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-bold">
+                          2
                         </span>
-                        <ChevronRight className="w-4 h-4 text-green-400" />
+                        <span>Transfer assets to this address</span>
                       </div>
                     </div>
-                  ) : (
-                    <div className="flex items-center gap-2 px-3 py-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-                      <span className="text-red-400">❌</span>
-                      <span className="text-sm text-red-400">Object not found or deleted</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {visibleObjects.length === 0 && !isFullObjectId(searchQuery) ? (
-                <div className="px-3 py-8 text-center text-muted-foreground">
-                  <div className="text-4xl mb-2">{objects.length === 0 ? '📭' : '🔍'}</div>
-                  <div className="mb-2">
-                    {objects.length === 0
-                      ? 'This address has no objects yet'
-                      : 'No objects match your filter'}
+                    <Button variant="outline" size="sm" className="mt-3" asChild>
+                      <a href={`/app/faucet?address=${targetAddress}`}>
+                        <Droplet className="w-3.5 h-3.5" />
+                        Request from Faucet
+                      </a>
+                    </Button>
                   </div>
+                )}
 
-                  {objects.length === 0 && (
-                    <div className="mt-4 p-4 bg-muted/30 rounded-lg text-left max-w-sm mx-auto">
-                      <p className="text-xs text-muted-foreground mb-3">
-                        {isExternalAddress
-                          ? 'This might be a new multi-sig address. To start using it:'
-                          : 'To add objects to this address:'}
-                      </p>
-                      <div className="space-y-2 text-xs">
-                        <div className="flex items-center gap-2">
-                          <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-bold">
-                            1
-                          </span>
-                          <span>Get test SUI from faucet</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-bold">
-                            2
-                          </span>
-                          <span>Transfer assets to this address</span>
-                        </div>
-                      </div>
-                      <Button variant="outline" size="sm" className="mt-3" asChild>
-                        <a href={`/app/faucet?address=${targetAddress}`}>
-                          <Droplet className="w-3.5 h-3.5" />
-                          Request from Faucet
-                        </a>
-                      </Button>
-                    </div>
-                  )}
-
-                  {activeCategory !== 'all' && objects.length > 0 && (
-                    <button
-                      onClick={() => setActiveCategory('all')}
-                      className="mt-2 text-xs text-primary hover:underline"
-                    >
-                      Show all objects
-                    </button>
-                  )}
-                </div>
-              ) : visibleObjects.length === 0 &&
-                isFullObjectId(searchQuery) ? /* Only direct lookup result shown */
-              null : (
-                /* Virtualized table - smooth at 10k+ rows, sortable/resizable/reorderable
+                {activeCategory !== 'all' && objects.length > 0 && (
+                  <button
+                    onClick={() => setActiveCategory('all')}
+                    className="mt-2 text-xs text-primary hover:underline"
+                  >
+                    Show all objects
+                  </button>
+                )}
+              </div>
+            ) : visibleObjects.length === 0 &&
+              isFullObjectId(searchQuery) ? /* Only direct lookup result shown */
+            null : (
+              /* Virtualized table - smooth at 10k+ rows, sortable/resizable/reorderable
            headers, sticky header, row selection. */
-                <div className="rounded-lg border border-border overflow-hidden">
-                  {selectedIds.size > 0 && (
-                    <div className="border-b border-border bg-accent">
-                      <div className="flex items-center justify-between px-3 py-2 text-xs">
-                        <span className="text-foreground">{selectedIds.size} selected</span>
-                        <div className="flex items-center gap-3">
-                          {commonCoinType && (
-                            <button
-                              className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
-                              onClick={() =>
-                                navigate(
-                                  `/app/coins/merge?type=${encodeURIComponent(commonCoinType)}`
-                                )
-                              }
-                            >
-                              <Combine className="w-3.5 h-3.5" />
-                              Merge
-                            </button>
-                          )}
+              <div className="rounded-lg border border-border overflow-hidden">
+                {selectedIds.size > 0 && (
+                  <div className="border-b border-border bg-accent">
+                    <div className="flex items-center justify-between px-3 py-2 text-xs">
+                      <span className="text-foreground">{selectedIds.size} selected</span>
+                      <div className="flex items-center gap-3">
+                        {commonCoinType && (
                           <button
                             className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
-                            onClick={handleCopySelected}
-                            title="Copy selected objects as JSON (for pasting into an AI agent)"
+                            onClick={() =>
+                              navigate(
+                                `/app/coins/merge?type=${encodeURIComponent(commonCoinType)}`
+                              )
+                            }
                           >
-                            <ClipboardCopy className="w-3.5 h-3.5" />
-                            Copy
+                            <Combine className="w-3.5 h-3.5" />
+                            Merge
                           </button>
-                          <button
-                            className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
-                            onClick={() => setBulkTransferOpen((o) => !o)}
-                          >
-                            <Send className="w-3.5 h-3.5" />
-                            Transfer
-                          </button>
-                          <button
-                            className="text-muted-foreground hover:text-foreground"
-                            onClick={() => {
-                              setSelectedIds(new Set());
-                              setBulkTransferOpen(false);
-                            }}
-                          >
-                            Clear
-                          </button>
-                        </div>
+                        )}
+                        <button
+                          className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
+                          onClick={handleCopySelected}
+                          title="Copy selected objects as JSON (for pasting into an AI agent)"
+                        >
+                          <ClipboardCopy className="w-3.5 h-3.5" />
+                          Copy
+                        </button>
+                        <button
+                          className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
+                          onClick={() => setBulkTransferOpen((o) => !o)}
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          Transfer
+                        </button>
+                        <button
+                          className="text-muted-foreground hover:text-foreground"
+                          onClick={() => {
+                            setSelectedIds(new Set());
+                            setBulkTransferOpen(false);
+                          }}
+                        >
+                          Clear
+                        </button>
                       </div>
-                      {bulkTransferOpen && (
-                        <div className="flex items-center gap-2 px-3 pb-2">
-                          <input
-                            type="text"
-                            value={bulkTransferAddress}
-                            onChange={(e) => setBulkTransferAddress(e.target.value)}
-                            placeholder="0x... recipient address"
-                            className="flex-1 text-xs font-mono px-2 py-1.5 rounded border border-border bg-background text-foreground placeholder:text-tertiary"
-                            disabled={isBulkTransferring}
-                          />
-                          <Button
-                            size="sm"
-                            disabled={!bulkTransferAddress.trim() || isBulkTransferring}
-                            onClick={handleBulkTransfer}
-                          >
-                            {isBulkTransferring ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              `Send ${selectedIds.size}`
-                            )}
-                          </Button>
-                          <button
-                            className="text-muted-foreground hover:text-foreground"
-                            onClick={() => setBulkTransferOpen(false)}
-                            disabled={isBulkTransferring}
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
                     </div>
-                  )}
-                  {isMobile ? (
-                    // Narrow screens: the multi-column resizable table can't fit, so fall
-                    // back to a compact single-line-per-object list (icon + type + id).
-                    <div className="max-h-[min(70vh,720px)] overflow-y-auto divide-y divide-border/50">
-                      {plainObjectRows}
-                    </div>
-                  ) : (
-                    <DataTable
-                      // Distinct column set (and therefore distinct column ids) for the
-                      // Walrus Memory tab - remount rather than reuse so DataTable's
-                      // internal column order/sizing state doesn't carry over stale ids.
-                      key={
-                        activeCategory === 'memory'
-                          ? 'memory-columns'
-                          : activeCategory === 'nft'
-                            ? 'nft-columns'
-                            : 'default-columns'
-                      }
-                      columns={
-                        activeCategory === 'memory'
-                          ? memoryTableColumns
-                          : activeCategory === 'nft'
-                            ? nftTableColumns
-                            : tableColumns
-                      }
-                      data={visibleObjects}
-                      getRowId={getObjectRowId}
-                      selectedIds={selectedIds}
-                      onSelectionChange={setSelectedIds}
-                      onRowClick={(obj) => {
-                        setSelectedObject(obj);
-                        const clickedId =
-                          (obj.objectId as string) || (obj.data as { objectId?: string })?.objectId;
-                        if (clickedId) {
-                          navigate(`/app/objects/${clickedId}`);
-                        }
-                      }}
-                      rowHeight={56}
-                      // Click a row (or its chevron) to expand a richer attributes panel -
-                      // owner, digest, previous tx, storage rebate, transferable, Display -
-                      // fetched lazily per row. "View full details" inside opens the object page.
-                      renderExpanded={(obj) => (
-                        <ObjectAttributePanel
-                          objectId={
-                            (obj.objectId as string) ||
-                            (obj.data as { objectId?: string })?.objectId ||
-                            ''
-                          }
-                          baseType={
-                            (obj.type as string) || (obj.data as { type?: string })?.type
-                          }
-                          baseVersion={
-                            (obj.version as string) ||
-                            (obj.data as { version?: string })?.version
-                          }
-                          baseOwner={
-                            (obj.owner as unknown) ?? (obj.data as { owner?: unknown })?.owner
-                          }
+                    {bulkTransferOpen && (
+                      <div className="flex items-center gap-2 px-3 pb-2">
+                        <input
+                          type="text"
+                          value={bulkTransferAddress}
+                          onChange={(e) => setBulkTransferAddress(e.target.value)}
+                          placeholder="0x... recipient address"
+                          className="flex-1 text-xs font-mono px-2 py-1.5 rounded border border-border bg-background text-foreground placeholder:text-tertiary"
+                          disabled={isBulkTransferring}
                         />
-                      )}
-                      expandedRowHeight={300}
-                      // Fixed 560px used to leave a lot of dead space below the scrollable box on
-                      // tall viewports - the visible table card looked taller than the actual
-                      // wheel-scrollable region, so scrolling only worked in a narrow strip instead
-                      // of anywhere over the table (bad UX - had to hunt for the real scrollbar).
-                      // Scales with the viewport instead, bounded so it never gets unreasonably short.
-                      className="h-[min(70vh,720px)] min-h-[320px]"
-                    />
-                  )}
-                </div>
-              )}
+                        <Button
+                          size="sm"
+                          disabled={!bulkTransferAddress.trim() || isBulkTransferring}
+                          onClick={handleBulkTransfer}
+                        >
+                          {isBulkTransferring ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            `Send ${selectedIds.size}`
+                          )}
+                        </Button>
+                        <button
+                          className="text-muted-foreground hover:text-foreground"
+                          onClick={() => setBulkTransferOpen(false)}
+                          disabled={isBulkTransferring}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {isMobile ? (
+                  // Narrow screens: the multi-column resizable table can't fit, so fall
+                  // back to a compact single-line-per-object list (icon + type + id).
+                  <div className="max-h-[min(70vh,720px)] overflow-y-auto divide-y divide-border/50">
+                    {plainObjectRows}
+                  </div>
+                ) : (
+                  <DataTable
+                    // Distinct column set (and therefore distinct column ids) for the
+                    // Walrus Memory tab - remount rather than reuse so DataTable's
+                    // internal column order/sizing state doesn't carry over stale ids.
+                    key={
+                      activeCategory === 'memory'
+                        ? 'memory-columns'
+                        : activeCategory === 'nft'
+                          ? 'nft-columns'
+                          : 'default-columns'
+                    }
+                    columns={
+                      activeCategory === 'memory'
+                        ? memoryTableColumns
+                        : activeCategory === 'nft'
+                          ? nftTableColumns
+                          : tableColumns
+                    }
+                    data={visibleObjects}
+                    getRowId={getObjectRowId}
+                    selectedIds={selectedIds}
+                    onSelectionChange={setSelectedIds}
+                    onRowClick={(obj) => {
+                      setSelectedObject(obj);
+                      const clickedId =
+                        (obj.objectId as string) || (obj.data as { objectId?: string })?.objectId;
+                      if (clickedId) {
+                        navigate(`/app/objects/${clickedId}`);
+                      }
+                    }}
+                    rowHeight={56}
+                    // Click a row (or its chevron) to expand a richer attributes panel -
+                    // owner, digest, previous tx, storage rebate, transferable, Display -
+                    // fetched lazily per row. "View full details" inside opens the object page.
+                    renderExpanded={(obj) => (
+                      <ObjectAttributePanel
+                        objectId={
+                          (obj.objectId as string) ||
+                          (obj.data as { objectId?: string })?.objectId ||
+                          ''
+                        }
+                        baseType={(obj.type as string) || (obj.data as { type?: string })?.type}
+                        baseVersion={
+                          (obj.version as string) || (obj.data as { version?: string })?.version
+                        }
+                        baseOwner={
+                          (obj.owner as unknown) ?? (obj.data as { owner?: unknown })?.owner
+                        }
+                      />
+                    )}
+                    expandedRowHeight={300}
+                    // Fixed 560px used to leave a lot of dead space below the scrollable box on
+                    // tall viewports - the visible table card looked taller than the actual
+                    // wheel-scrollable region, so scrolling only worked in a narrow strip instead
+                    // of anywhere over the table (bad UX - had to hunt for the real scrollbar).
+                    // Scales with the viewport instead, bounded so it never gets unreasonably short.
+                    className="h-[min(70vh,720px)] min-h-[320px]"
+                  />
+                )}
+              </div>
+            )}
           </>
         </TabsContent>
       </Tabs>

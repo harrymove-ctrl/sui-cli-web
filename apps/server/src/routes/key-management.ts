@@ -1,12 +1,9 @@
-import { FastifyInstance } from 'fastify';
-import { KeyManagementService, EXPORT_WARNING } from '../services/KeyManagementService';
 import type { ApiResponse } from '@sui-cli-web/shared';
-import {
-  validateAddress,
-  validateOptionalAlias,
-  validateKeyScheme,
-} from '../utils/validation';
+import { FastifyInstance } from 'fastify';
+import { EXPORT_WARNING, KeyManagementService } from '../services/KeyManagementService';
+import { requireAuthToken } from '../utils/authToken';
 import { handleRouteError } from '../utils/errorHandler';
+import { validateAddress, validateKeyScheme, validateOptionalAlias } from '../utils/validation';
 
 const keyManagementService = new KeyManagementService();
 
@@ -34,7 +31,7 @@ export async function keyManagementRoutes(fastify: FastifyInstance) {
       publicKey: string;
       warning: string;
     }>;
-  }>('/keys/export', async (request, reply) => {
+  }>('/keys/export', { preHandler: requireAuthToken }, async (request, reply) => {
     try {
       // Validate address (can be address or alias)
       const address = request.body?.address;
@@ -80,7 +77,7 @@ export async function keyManagementRoutes(fastify: FastifyInstance) {
       alias?: string;
     };
     Reply: ApiResponse<{ address: string; alias?: string }>;
-  }>('/keys/import', async (request, reply) => {
+  }>('/keys/import', { preHandler: requireAuthToken }, async (request, reply) => {
     try {
       const { type, input, keyScheme, alias } = request.body || {};
 
@@ -100,7 +97,10 @@ export async function keyManagementRoutes(fastify: FastifyInstance) {
       const validatedKeyScheme = validateKeyScheme(keyScheme);
       if (!validatedKeyScheme) {
         reply.status(400);
-        return { success: false, error: 'Valid key scheme is required (ed25519, secp256k1, secp256r1)' };
+        return {
+          success: false,
+          error: 'Valid key scheme is required (ed25519, secp256k1, secp256r1)',
+        };
       }
 
       // Validate alias (optional)

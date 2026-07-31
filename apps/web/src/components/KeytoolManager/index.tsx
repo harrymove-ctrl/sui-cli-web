@@ -17,6 +17,9 @@ import {
 } from '@/api/client';
 import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useCopyToClipboard } from '@/hooks';
+import { buildExplorerUrl, detectNetwork, getDefaultExplorer } from '@/lib/explorer';
+import { useAppStore } from '@/stores/useAppStore';
 import { Spinner } from '../shared/Spinner';
 
 type Tab = 'keys' | 'generate' | 'sign' | 'multisig' | 'execute' | 'decode';
@@ -126,6 +129,9 @@ const SAMPLE_TX_TYPES: { type: SampleTxType; label: string; icon: string; descri
   ];
 
 export function KeytoolManager() {
+  const { environments } = useAppStore();
+  const activeEnv = environments.find((e) => e.isActive);
+  const currentNetwork = detectNetwork(activeEnv?.alias, activeEnv?.rpc);
   // URL params for tab switching
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab') as Tab | null;
@@ -885,10 +891,7 @@ export function KeytoolManager() {
     { id: 'decode' as Tab, label: 'Decode', icon: '🔍' },
   ];
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied`);
-  };
+  const copyToClipboard = useCopyToClipboard();
 
   // Non-sensitive snapshot for AI export. Only PUBLIC key material is included:
   // addresses, public keys, schemes/aliases, multisig threshold + participant
@@ -1985,7 +1988,12 @@ export function KeytoolManager() {
                     📦 Objects
                   </a>
                   <a
-                    href={`https://suiscan.xyz/testnet/account/${multiSigAddress}`}
+                    href={buildExplorerUrl(
+                      getDefaultExplorer(),
+                      currentNetwork,
+                      'address',
+                      multiSigAddress
+                    )}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-2 py-1 bg-card/50 hover:bg-card/70 text-muted-foreground rounded text-xs transition-colors flex items-center gap-1"
@@ -2198,7 +2206,12 @@ export function KeytoolManager() {
                               📦 View Objects
                             </a>
                             <a
-                              href={`https://suiscan.xyz/testnet/account/${item.address}`}
+                              href={buildExplorerUrl(
+                                getDefaultExplorer(),
+                                currentNetwork,
+                                'address',
+                                item.address
+                              )}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="px-2.5 py-1 bg-card/50 hover:bg-card/70 text-muted-foreground rounded text-xs transition-colors flex items-center gap-1"
@@ -3119,7 +3132,12 @@ export function KeytoolManager() {
 
                     <div className="mt-3 flex gap-2">
                       <a
-                        href={`https://suiscan.xyz/testnet/tx/${executionResult.digest}`}
+                        href={buildExplorerUrl(
+                          getDefaultExplorer(),
+                          currentNetwork,
+                          'tx',
+                          executionResult.digest
+                        )}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex-1 px-4 py-2 bg-card/50 hover:bg-card/70 text-foreground rounded-lg text-sm font-medium transition-colors text-center"

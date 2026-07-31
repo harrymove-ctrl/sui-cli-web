@@ -17,6 +17,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as api from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
+import { buildExplorerUrl, detectNetwork, getDefaultExplorer } from '@/lib/explorer';
 import { showErrorToast, showSuccessToast } from '@/lib/toast';
 import { useAppStore } from '@/stores/useAppStore';
 
@@ -39,7 +40,9 @@ function formatBalance(balance: string, decimals: number): string {
 export function CoinMerge() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { addresses } = useAppStore();
+  const { addresses, environments } = useAppStore();
+  const activeEnv = environments.find((e) => e.isActive);
+  const currentNetwork = detectNetwork(activeEnv?.alias, activeEnv?.rpc);
   const activeAddress = addresses.find((a) => a.isActive);
 
   // URL params
@@ -608,7 +611,12 @@ export function CoinMerge() {
                         {/* Explorer Link */}
                         <Button asChild className="w-full">
                           <a
-                            href={`https://testnet.suivision.xyz/txblock/${mergeResult.digest}`}
+                            href={buildExplorerUrl(
+                              getDefaultExplorer(),
+                              currentNetwork,
+                              'tx',
+                              mergeResult.digest
+                            )}
                             target="_blank"
                             rel="noopener noreferrer"
                           >

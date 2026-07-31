@@ -16,10 +16,10 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import React, { useState } from 'react';
-import toast from 'react-hot-toast';
 import { apiClient } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
+import { useCopyToClipboard } from '@/hooks';
 
 interface MigrationChange {
   file: string;
@@ -108,10 +108,7 @@ export function MoveMigrate() {
     }
   };
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied`);
-  };
+  const copyToClipboard = useCopyToClipboard();
 
   // Copy-for-AI: assemble the current migration state into shareable context
   const packageName = packagePath.trim()

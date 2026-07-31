@@ -1,7 +1,7 @@
 import fs from 'fs';
-import path from 'path';
-import os from 'os';
 import yaml from 'js-yaml';
+import os from 'os';
+import path from 'path';
 
 export interface SuiConfigEnv {
   alias: string;
@@ -55,6 +55,20 @@ export class ConfigParser {
       console.error('Failed to parse Sui config:', error);
       return null;
     }
+  }
+
+  /** The active environment's fullnode RPC URL, or null if there's no config or no match. */
+  public async getActiveRpcUrl(): Promise<string | null> {
+    try {
+      const config = await this.getConfig();
+      if (config) {
+        const activeEnv = config.envs.find((e) => e.alias === config.active_env);
+        return activeEnv?.rpc || null;
+      }
+    } catch {
+      // Ignore
+    }
+    return null;
   }
 
   public async saveConfig(updates: Partial<SuiConfig>): Promise<void> {

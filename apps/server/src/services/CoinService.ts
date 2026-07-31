@@ -1,13 +1,13 @@
-import { SuiCliExecutor } from '../cli/SuiCliExecutor';
-import { ConfigParser } from '../cli/ConfigParser';
 import type {
-  CoinInfo,
   CoinGroup,
   CoinGroupedResponse,
+  CoinInfo,
   CoinMetadata,
   CoinOperationResult,
 } from '@sui-cli-web/shared';
 import { getShortSymbol } from '@sui-cli-web/shared';
+import { ConfigParser } from '../cli/ConfigParser';
+import { SuiCliExecutor } from '../cli/SuiCliExecutor';
 import { getKnownToken, getTokenPriority, isVerifiedToken } from '../utils/knownTokens';
 import { getAllBalancesViaGrpc, getOwnedCoinsViaGrpc } from '../utils/suiGrpcClient';
 import { getCoinMetadataViaGraphQL } from './GraphQLService';
@@ -74,16 +74,7 @@ export class CoinService {
   }
 
   private async getActiveRpcUrl(): Promise<string | null> {
-    try {
-      const config = await this.configParser.getConfig();
-      if (config) {
-        const activeEnv = config.envs.find((e) => e.alias === config.active_env);
-        return activeEnv?.rpc || null;
-      }
-    } catch {
-      // Ignore
-    }
-    return null;
+    return this.configParser.getActiveRpcUrl();
   }
 
   private async getActiveAddress(): Promise<string> {

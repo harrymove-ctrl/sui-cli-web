@@ -1,26 +1,26 @@
-import { SuiCliExecutor } from '../cli/SuiCliExecutor';
 import { ConfigParser } from '../cli/ConfigParser';
-import { InspectorService, FunctionInfo, ParameterInfo } from './dev/InspectorService';
-import { getObjectFullViaGrpc, getOwnedObjectsViaGrpc } from '../utils/suiGrpcClient';
+import { SuiCliExecutor } from '../cli/SuiCliExecutor';
 import { normalizeCliObjectShape } from '../utils/normalizeSuiObject';
+import { getObjectFullViaGrpc, getOwnedObjectsViaGrpc } from '../utils/suiGrpcClient';
+import { FunctionInfo, InspectorService, ParameterInfo } from './dev/InspectorService';
 
 // Type categories for parameter classification
 export type ParameterCategory =
-  | 'reference_mut'   // &mut T - mutable reference, needs owned object
-  | 'reference'       // &T - immutable reference
-  | 'owned'           // T (struct) - owned object
-  | 'primitive_u8'    // u8
-  | 'primitive_u16'   // u16
-  | 'primitive_u32'   // u32
-  | 'primitive_u64'   // u64
-  | 'primitive_u128'  // u128
-  | 'primitive_u256'  // u256
-  | 'primitive_bool'  // bool
+  | 'reference_mut' // &mut T - mutable reference, needs owned object
+  | 'reference' // &T - immutable reference
+  | 'owned' // T (struct) - owned object
+  | 'primitive_u8' // u8
+  | 'primitive_u16' // u16
+  | 'primitive_u32' // u32
+  | 'primitive_u64' // u64
+  | 'primitive_u128' // u128
+  | 'primitive_u256' // u256
+  | 'primitive_bool' // bool
   | 'primitive_address' // address
-  | 'vector_u8'       // vector<u8> - commonly used for strings
-  | 'vector'          // vector<T> (other types)
-  | 'option'          // Option<T>
-  | 'type_param'      // Generic T
+  | 'vector_u8' // vector<u8> - commonly used for strings
+  | 'vector' // vector<T> (other types)
+  | 'option' // Option<T>
+  | 'type_param' // Generic T
   | 'unknown';
 
 export interface ParsedType {
@@ -84,7 +84,10 @@ const TYPE_BOUNDS = {
   u32: { min: '0', max: '4294967295' },
   u64: { min: '0', max: '18446744073709551615' },
   u128: { min: '0', max: '340282366920938463463374607431768211455' },
-  u256: { min: '0', max: '115792089237316195423570985008687907853269984665640564039457584007913129639935' },
+  u256: {
+    min: '0',
+    max: '115792089237316195423570985008687907853269984665640564039457584007913129639935',
+  },
 };
 
 // Common Sui types
@@ -147,7 +150,7 @@ export class ParameterHelperService {
       }
 
       // Find the module
-      const module = packageResult.modules.find(m => m.name === moduleName);
+      const module = packageResult.modules.find((m) => m.name === moduleName);
       if (!module) {
         return {
           success: false,
@@ -156,7 +159,7 @@ export class ParameterHelperService {
       }
 
       // Find the function
-      const func = module.functions.find(f => f.name === functionName);
+      const func = module.functions.find((f) => f.name === functionName);
       if (!func) {
         return {
           success: false,
@@ -231,7 +234,15 @@ export class ParameterHelperService {
     const baseType = baseTypeStr.replace(/<.+>$/, '').trim();
 
     // Determine category
-    const category = this.categorizeType(trimmed, baseType, isReference, isMutable, isVector, isOption, genericParams);
+    const category = this.categorizeType(
+      trimmed,
+      baseType,
+      isReference,
+      isMutable,
+      isVector,
+      isOption,
+      genericParams
+    );
 
     return {
       category,
@@ -310,14 +321,22 @@ export class ParameterHelperService {
 
     // Handle primitive types
     switch (baseType) {
-      case 'u8': return 'primitive_u8';
-      case 'u16': return 'primitive_u16';
-      case 'u32': return 'primitive_u32';
-      case 'u64': return 'primitive_u64';
-      case 'u128': return 'primitive_u128';
-      case 'u256': return 'primitive_u256';
-      case 'bool': return 'primitive_bool';
-      case 'address': return 'primitive_address';
+      case 'u8':
+        return 'primitive_u8';
+      case 'u16':
+        return 'primitive_u16';
+      case 'u32':
+        return 'primitive_u32';
+      case 'u64':
+        return 'primitive_u64';
+      case 'u128':
+        return 'primitive_u128';
+      case 'u256':
+        return 'primitive_u256';
+      case 'bool':
+        return 'primitive_bool';
+      case 'address':
+        return 'primitive_address';
     }
 
     // Check for generic type parameter (single uppercase letter)
@@ -417,7 +436,8 @@ export class ParameterHelperService {
         // Special case for u64 often used for amounts (SUI in MIST)
         if (parsedType.category === 'primitive_u64') {
           examples.push('1000000000 (1 SUI in MIST)');
-          helpText = 'Enter an unsigned 64-bit integer. For SUI amounts, use MIST (1 SUI = 1,000,000,000 MIST).';
+          helpText =
+            'Enter an unsigned 64-bit integer. For SUI amounts, use MIST (1 SUI = 1,000,000,000 MIST).';
         } else {
           helpText = `Enter an unsigned ${parsedType.baseType.substring(1)}-bit integer.`;
         }
@@ -458,7 +478,8 @@ export class ParameterHelperService {
           '0x68656c6c6f (as hex)',
           '[104, 101, 108, 108, 111] (as bytes)'
         );
-        helpText = 'Enter a string (will be converted to bytes), hex string (0x...), or byte array.';
+        helpText =
+          'Enter a string (will be converted to bytes), hex string (0x...), or byte array.';
         break;
       }
 
@@ -508,7 +529,7 @@ export class ParameterHelperService {
    * Filter user's objects by type
    */
   private filterObjectsByType(objects: any[], parsedType: ParsedType): any[] {
-    return objects.filter(obj => {
+    return objects.filter((obj) => {
       const objType = obj.type || obj.data?.type || '';
 
       // For reference types, extract the referenced type
@@ -641,7 +662,7 @@ export class ParameterHelperService {
       throw new Error(response.statusText);
     }
 
-    const result = await response.json() as { result?: { data?: any[] } };
+    const result = (await response.json()) as { result?: { data?: any[] } };
     return result.result?.data || [];
   }
 
@@ -651,7 +672,7 @@ export class ParameterHelperService {
   public async getObjectsByType(address: string, typePattern: string): Promise<any[]> {
     const allObjects = await this.getUserObjects(address);
 
-    return allObjects.filter(obj => {
+    return allObjects.filter((obj) => {
       const objType = obj.type || obj.data?.type || '';
 
       // Exact match
@@ -707,7 +728,7 @@ export class ParameterHelperService {
           });
 
           if (response.ok) {
-            const result = await response.json() as { result?: { data?: any } };
+            const result = (await response.json()) as { result?: { data?: any } };
             return result.result?.data;
           }
         } catch {
@@ -742,16 +763,7 @@ export class ParameterHelperService {
    * Get the active RPC URL from config
    */
   private async getActiveRpcUrl(): Promise<string | null> {
-    try {
-      const config = await this.configParser.getConfig();
-      if (config) {
-        const activeEnv = config.envs.find(e => e.alias === config.active_env);
-        return activeEnv?.rpc || null;
-      }
-    } catch {
-      // Ignore
-    }
-    return null;
+    return this.configParser.getActiveRpcUrl();
   }
 
   /**
@@ -798,8 +810,10 @@ export class ParameterHelperService {
       }
 
       // Quoted string
-      if ((value.startsWith('"') && value.endsWith('"')) ||
-          (value.startsWith("'") && value.endsWith("'"))) {
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
         return this.stringToVectorU8(value.slice(1, -1));
       }
 

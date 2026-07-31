@@ -33,9 +33,7 @@ export function isValidObjectId(objectId: string): boolean {
   return typeof objectId === 'string' && OBJECT_ID_REGEX.test(objectId);
 }
 
-export function isValidKeyScheme(
-  scheme: string
-): scheme is 'ed25519' | 'secp256k1' | 'secp256r1' {
+export function isValidKeyScheme(scheme: string): scheme is 'ed25519' | 'secp256k1' | 'secp256r1' {
   return VALID_KEY_SCHEMES.includes(scheme as any);
 }
 
@@ -43,9 +41,7 @@ export function isValidAlias(alias: string): boolean {
   return typeof alias === 'string' && ALIAS_REGEX.test(alias);
 }
 
-export function isValidNetwork(
-  network: string
-): network is 'testnet' | 'devnet' | 'localnet' {
+export function isValidNetwork(network: string): network is 'testnet' | 'devnet' | 'localnet' {
   return VALID_NETWORKS.includes(network as any);
 }
 
@@ -127,7 +123,10 @@ export function validateKeyScheme(
   }
   if (typeof scheme !== 'string' || !isValidKeyScheme(scheme)) {
     throw new ValidationException([
-      { field: 'keyScheme', message: 'Invalid key scheme (expected ed25519, secp256k1, or secp256r1)' },
+      {
+        field: 'keyScheme',
+        message: 'Invalid key scheme (expected ed25519, secp256k1, or secp256r1)',
+      },
     ]);
   }
   return scheme;
@@ -226,7 +225,10 @@ export function isValidTypeArg(arg: string): boolean {
 }
 
 export function isValidTxDigest(digest: string): boolean {
-  return typeof digest === 'string' && (TX_DIGEST_BASE58_REGEX.test(digest) || TX_DIGEST_HEX_REGEX.test(digest));
+  return (
+    typeof digest === 'string' &&
+    (TX_DIGEST_BASE58_REGEX.test(digest) || TX_DIGEST_HEX_REGEX.test(digest))
+  );
 }
 
 export function isSafeArg(arg: string): boolean {
@@ -236,7 +238,11 @@ export function isSafeArg(arg: string): boolean {
 export function validateModuleName(module: unknown, fieldName = 'module'): string {
   if (typeof module !== 'string' || !isValidModuleName(module)) {
     throw new ValidationException([
-      { field: fieldName, message: 'Invalid module name (alphanumeric/underscore, starts with letter/underscore, max 128 chars)' },
+      {
+        field: fieldName,
+        message:
+          'Invalid module name (alphanumeric/underscore, starts with letter/underscore, max 128 chars)',
+      },
     ]);
   }
   return module;
@@ -245,7 +251,11 @@ export function validateModuleName(module: unknown, fieldName = 'module'): strin
 export function validateFunctionName(functionName: unknown, fieldName = 'function'): string {
   if (typeof functionName !== 'string' || !isValidFunctionName(functionName)) {
     throw new ValidationException([
-      { field: fieldName, message: 'Invalid function name (alphanumeric/underscore, starts with letter/underscore, max 128 chars)' },
+      {
+        field: fieldName,
+        message:
+          'Invalid function name (alphanumeric/underscore, starts with letter/underscore, max 128 chars)',
+      },
     ]);
   }
   return functionName;
@@ -275,14 +285,15 @@ export function validateMoveArgs(args: unknown): string[] {
     return [];
   }
   if (!Array.isArray(args)) {
-    throw new ValidationException([
-      { field: 'args', message: 'Arguments must be an array' },
-    ]);
+    throw new ValidationException([{ field: 'args', message: 'Arguments must be an array' }]);
   }
   for (let i = 0; i < args.length; i++) {
     if (!isSafeArg(args[i])) {
       throw new ValidationException([
-        { field: `args[${i}]`, message: 'Invalid argument (contains forbidden characters or too long)' },
+        {
+          field: `args[${i}]`,
+          message: 'Invalid argument (contains forbidden characters or too long)',
+        },
       ]);
     }
   }
@@ -292,20 +303,34 @@ export function validateMoveArgs(args: unknown): string[] {
 export function validateTxDigest(digest: unknown, fieldName = 'digest'): string {
   if (typeof digest !== 'string' || !isValidTxDigest(digest)) {
     throw new ValidationException([
-      { field: fieldName, message: 'Invalid transaction digest format (expected base58 43-44 chars OR hex 0x + 64 chars)' },
+      {
+        field: fieldName,
+        message:
+          'Invalid transaction digest format (expected base58 43-44 chars OR hex 0x + 64 chars)',
+      },
     ]);
   }
   return digest;
 }
 
+// Output IDs are always generated server-side via crypto.randomUUID() - a
+// caller-supplied value that isn't a UUID has no legitimate use and, if
+// interpolated into a file path, is how `../../..` traversal happens.
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function validateOutputId(id: unknown, fieldName = 'id'): string {
+  if (typeof id !== 'string' || !UUID_REGEX.test(id)) {
+    throw new ValidationException([{ field: fieldName, message: 'Invalid output ID format' }]);
+  }
+  return id;
+}
+
 // Package path validation - prevent path traversal attacks
-const PACKAGE_PATH_REGEX = /^[a-zA-Z0-9\/_-]+$/;
+const PACKAGE_PATH_REGEX = /^[a-zA-Z0-9/_-]+$/;
 
 export function validatePackagePath(packagePath: unknown): string {
   if (typeof packagePath !== 'string' || !packagePath.trim()) {
-    throw new ValidationException([
-      { field: 'packagePath', message: 'Package path is required' },
-    ]);
+    throw new ValidationException([{ field: 'packagePath', message: 'Package path is required' }]);
   }
 
   const trimmed = packagePath.trim();
@@ -377,7 +402,10 @@ export function validateTransferAmount(amount: unknown, fieldName = 'amount'): s
 export function validatePrivateKey(privateKey: unknown, fieldName = 'privateKey'): string {
   if (typeof privateKey !== 'string' || !isValidPrivateKey(privateKey)) {
     throw new ValidationException([
-      { field: fieldName, message: 'Invalid private key format (expected Bech32 starting with "suiprivkey")' },
+      {
+        field: fieldName,
+        message: 'Invalid private key format (expected Bech32 starting with "suiprivkey")',
+      },
     ]);
   }
   return privateKey;
@@ -403,9 +431,7 @@ export function isValidBase64(str: string): boolean {
 
 export function validateBase64(data: unknown, fieldName = 'data'): string {
   if (typeof data !== 'string' || !isValidBase64(data)) {
-    throw new ValidationException([
-      { field: fieldName, message: 'Invalid base64 string' },
-    ]);
+    throw new ValidationException([{ field: fieldName, message: 'Invalid base64 string' }]);
   }
   return data;
 }
@@ -421,7 +447,10 @@ export function isValidHexString(str: string): boolean {
 export function validateHexString(data: unknown, fieldName = 'data'): string {
   if (typeof data !== 'string' || !isValidHexString(data)) {
     throw new ValidationException([
-      { field: fieldName, message: 'Invalid hex string (expected hex digits with optional 0x prefix)' },
+      {
+        field: fieldName,
+        message: 'Invalid hex string (expected hex digits with optional 0x prefix)',
+      },
     ]);
   }
   return data;
@@ -430,9 +459,7 @@ export function validateHexString(data: unknown, fieldName = 'data'): string {
 // Public key validation (Base64 or hex)
 export function validatePublicKey(publicKey: unknown, fieldName = 'publicKey'): string {
   if (typeof publicKey !== 'string' || publicKey.length === 0) {
-    throw new ValidationException([
-      { field: fieldName, message: 'Public key is required' },
-    ]);
+    throw new ValidationException([{ field: fieldName, message: 'Public key is required' }]);
   }
 
   // Accept either base64 or hex format
@@ -448,9 +475,7 @@ export function validatePublicKey(publicKey: unknown, fieldName = 'publicKey'): 
 // Signature validation (Base64 or hex)
 export function validateSignature(signature: unknown, fieldName = 'signature'): string {
   if (typeof signature !== 'string' || signature.length === 0) {
-    throw new ValidationException([
-      { field: fieldName, message: 'Signature is required' },
-    ]);
+    throw new ValidationException([{ field: fieldName, message: 'Signature is required' }]);
   }
 
   // Accept either base64 or hex format

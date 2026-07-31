@@ -19,15 +19,17 @@ import {
   Zap,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import toast from 'react-hot-toast';
 import { useSearchParams } from 'react-router-dom';
 import { getApiBaseUrl } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ClarityEvents, trackEvent } from '@/lib/clarity';
-import { showErrorToast, showInfoToast, showSuccessToast } from '@/lib/toast';
+import { useCopyToClipboard } from '@/hooks';
 import { buildAiContext } from '@/lib/ai-context';
+import { pairingHeader } from '@/lib/authToken';
+import { ClarityEvents, trackEvent } from '@/lib/clarity';
+import { buildExplorerUrl, detectNetwork, getDefaultExplorer } from '@/lib/explorer';
+import { showErrorToast, showInfoToast, showSuccessToast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/stores/useAppStore';
 
@@ -53,7 +55,9 @@ type TransferMode = 'external' | 'internal' | 'batch';
 
 export function TransferSui() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { addresses, fetchAddresses } = useAppStore();
+  const { addresses, fetchAddresses, environments } = useAppStore();
+  const activeEnv = environments.find((e) => e.isActive);
+  const currentNetwork = detectNetwork(activeEnv?.alias, activeEnv?.rpc);
   const activeAddress = addresses.find((a) => a.isActive);
   const internalAddresses = addresses.filter((a) => !a.isActive);
 
@@ -256,7 +260,7 @@ export function TransferSui() {
     try {
       const response = await fetch(`${getApiBaseUrl()}/transfers/sui`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...pairingHeader() },
         body: JSON.stringify({ to: finalToAddress, amount, coinId: selectedCoin }),
       });
       const data = await response.json();
@@ -309,10 +313,7 @@ export function TransferSui() {
 
   const isAnyLoading = isLoadingCoins || isEstimating || isTransferring;
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied`);
-  };
+  const copyToClipboard = useCopyToClipboard();
 
   const destination = transferMode === 'internal' ? selectedInternalAddress : toAddress;
   const totalAmount = getTotalAmount();
@@ -369,10 +370,7 @@ export function TransferSui() {
 
   const aiPrompt = buildAiContext({
     title: 'Sui transfer',
-    intro: [
-      'A transfer being composed in sui-cli-web. Nothing has been signed or',
-      'submitted.',
-    ],
+    intro: ['A transfer being composed in sui-cli-web. Nothing has been signed or', 'submitted.'],
     stateJson: aiJson,
     endpoints: [
       {
@@ -471,9 +469,7 @@ export function TransferSui() {
         <div
           className={cn(
             'gap-4',
-            transferMode === 'batch'
-              ? 'grid grid-cols-1 lg:grid-cols-3'
-              : 'flex flex-col'
+            transferMode === 'batch' ? 'grid grid-cols-1 lg:grid-cols-3' : 'flex flex-col'
           )}
         >
           {/* Address Book */}
@@ -615,7 +611,8 @@ export function TransferSui() {
                   </div>
                   <div className="text-right">
                     <div className="text-base font-semibold tabular-nums text-foreground">
-                      {activeAddress?.balance || '0'} <span className="text-xs font-normal text-muted-foreground">SUI</span>
+                      {activeAddress?.balance || '0'}{' '}
+                      <span className="text-xs font-normal text-muted-foreground">SUI</span>
                     </div>
                   </div>
                 </div>
@@ -737,9 +734,7 @@ export function TransferSui() {
                     <div className="flex items-center gap-1.5 text-xs">
                       <span className="text-muted-foreground">
                         Balance{' '}
-                        <span className="font-mono text-foreground">
-                          {spendableSui.toFixed(4)}
-                        </span>{' '}
+                        <span className="font-mono text-foreground">{spendableSui.toFixed(4)}</span>{' '}
                         SUI
                       </span>
                       <button
@@ -793,9 +788,7 @@ export function TransferSui() {
                   </div>
 
                   {overBalance && (
-                    <p className="text-xs text-destructive">
-                      Exceeds the selected coin's balance.
-                    </p>
+                    <p className="text-xs text-destructive">Exceeds the selected coin's balance.</p>
                   )}
                 </div>
               )}
@@ -982,7 +975,12 @@ export function TransferSui() {
                         </div>
                         {/* Explorer Link */}
                         <a
-                          href={`https://testnet.suivision.xyz/txblock/${transferResult.digest}`}
+                          href={buildExplorerUrl(
+                            getDefaultExplorer(),
+                            currentNetwork,
+                            'tx',
+                            transferResult.digest
+                          )}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-[#4da2ff]/10 border border-[#4da2ff]/30 text-[#4da2ff] rounded-full hover:bg-[#4da2ff]/20 transition-all text-xs font-medium"

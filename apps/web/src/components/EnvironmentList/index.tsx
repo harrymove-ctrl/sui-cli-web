@@ -6,6 +6,7 @@ import { getChainIdentifier } from '@/api/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
+import { useCopyToClipboard } from '@/hooks';
 import { useAppStore } from '@/stores/useAppStore';
 import { Spinner } from '../shared/Spinner';
 
@@ -60,10 +61,7 @@ export function EnvironmentList() {
     return env.alias.toLowerCase().includes(query) || env.rpc.toLowerCase().includes(query);
   });
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied`);
-  };
+  const copyToClipboard = useCopyToClipboard();
 
   // Copy-for-AI export. Public only: env name, rpc url, active flag - all of
   // which are plain network config, no secrets.

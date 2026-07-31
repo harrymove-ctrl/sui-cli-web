@@ -20,6 +20,9 @@ import toast from 'react-hot-toast';
 import { apiClient } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
+import { useCopyToClipboard } from '@/hooks';
+import { buildExplorerUrl, detectNetwork, getDefaultExplorer } from '@/lib/explorer';
+import { useAppStore } from '@/stores/useAppStore';
 
 interface Recipient {
   id: string;
@@ -34,6 +37,9 @@ interface PayResult {
 }
 
 export function MultiPay() {
+  const { environments } = useAppStore();
+  const activeEnv = environments.find((e) => e.isActive);
+  const currentNetwork = detectNetwork(activeEnv?.alias, activeEnv?.rpc);
   const [recipients, setRecipients] = useState<Recipient[]>([{ id: '1', address: '', amount: '' }]);
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<PayResult | null>(null);
@@ -100,10 +106,7 @@ export function MultiPay() {
     }
   };
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied`);
-  };
+  const copyToClipboard = useCopyToClipboard();
 
   const filledRecipients = recipients.filter((r) => r.address || r.amount);
   const totalAmount = getTotalAmount();
@@ -282,7 +285,7 @@ export function MultiPay() {
                   <Copy className="w-3.5 h-3.5" />
                 </button>
                 <a
-                  href={`https://suiscan.xyz/testnet/tx/${result.digest}`}
+                  href={buildExplorerUrl(getDefaultExplorer(), currentNetwork, 'tx', result.digest)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-1.5 hover:bg-accent rounded-md text-muted-foreground hover:text-foreground transition-all"

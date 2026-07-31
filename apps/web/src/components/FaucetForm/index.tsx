@@ -14,6 +14,7 @@ import toast from 'react-hot-toast';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { CopyForAiMenu } from '@/components/ui/copy-for-ai';
+import { useCopyToClipboard } from '@/hooks';
 import { useAppStore } from '@/stores/useAppStore';
 import { Spinner } from '../shared/Spinner';
 
@@ -213,10 +214,7 @@ export function FaucetForm() {
     setCustomAddress('');
   };
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied`);
-  };
+  const copyToClipboard = useCopyToClipboard();
 
   const aiJson = JSON.stringify(
     {

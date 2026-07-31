@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useCopyToClipboard } from '@/hooks';
 
 const KEY_TYPES: { value: DerivedObjectKeyType; label: string; placeholder: string }[] = [
   { value: 'address', label: 'address', placeholder: '0x...' },
@@ -56,10 +57,7 @@ export function DerivedObjectCalculator() {
 
   const canCompute = parentId.trim().startsWith('0x') && keyValue.trim().length > 0 && !isComputing;
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied`);
-  };
+  const copyToClipboard = useCopyToClipboard();
 
   // Copy-for-AI export of the derivation inputs and computed result.
   const aiExport = address
